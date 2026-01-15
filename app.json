@@ -1,0 +1,46 @@
+{
+    "name": "wasi-md-v7",
+    "template": "https://github.com/Itxxwasi/WASI-MD-V7",
+    "description": "WASI-MD WhatsApp Bot - A powerful modular WhatsApp bot",
+    "repository": "https://github.com/Itxxwasi/WASI-MD-V7",
+    "logo": "https://graph.org/file/7c6999908a8df07400d41.jpg",
+    "keywords": [
+        "whatsapp",
+        "bot",
+        "baileys",
+        "nodejs"
+    ],
+    "env": {
+        "PORT": {
+            "description": "Server port",
+            "value": "3000"
+        },
+        "BOT_NAME": {
+            "description": "Bot display name",
+            "value": "WASI BOT"
+        },
+        "MODE": {
+            "description": "Bot mode (public/private)",
+            "value": "public"
+        },
+        "OWNER_NUMBER": {
+            "description": "Owner WhatsApp number (without + or spaces)",
+            "required": true
+        },
+        "MONGODB_URI": {
+            "description": "MongoDB connection string (optional)",
+            "required": false
+        },
+        "BOT_MENU_IMAGE_URL": {
+            "description": "Menu image URL",
+            "required": false
+        }
+    },
+    "formation": {
+        "web": {
+            "quantity": 1,
+            "size": "eco"
+        }
+    },
+    "stack": "container"
+}

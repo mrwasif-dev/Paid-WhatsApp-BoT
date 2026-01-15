@@ -1,0 +1,40 @@
+{
+  "name": "wasi-md-v7",
+  "version": "7.0.0",
+  "description": "WASI-MD WhatsApp Bot - A powerful modular WhatsApp bot",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "pm2": "pm2 start ecosystem.config.json",
+    "pm2:stop": "pm2 stop wasi-bot",
+    "pm2:logs": "pm2 logs wasi-bot"
+  },
+  "keywords": [
+    "whatsapp",
+    "bot",
+    "baileys",
+    "nodejs"
+  ],
+  "author": "Waseem (@Itxxwasi)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Itxxwasi/WASI-MD-V7.git"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "type": "commonjs",
+  "dependencies": {
+    "@hapi/boom": "^10.0.1",
+    "axios": "^1.13.2",
+    "baileys": "^7.0.0-rc.9",
+    "better-sqlite3": "^12.6.0",
+    "dotenv": "^17.2.3",
+    "express": "^5.2.1",
+    "moment-timezone": "^0.6.0",
+    "mongoose": "^9.1.3",
+    "pino": "^10.2.0",
+    "qrcode-terminal": "^0.12.0"
+  }
+}
