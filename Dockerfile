@@ -1,25 +1,38 @@
-FROM node:20-alpine
+FROM node:20-buster-slim
+
+# Install system dependencies
+# ffmpeg is required for media operations (stickers, audio conversion)
+# libvips-dev is often needed for sharp
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    ffmpeg \
+    chromium \
+    libnss3 \
+    libxss1 \
+    libasound2 \
+    libatk-bridge2.0-0 \
+    libgtk-3-0 \
+    libgbm-dev \
+    git \
+    python3 \
+    make \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app
 
-# Install dependencies for native modules
-RUN apk add --no-cache python3 make g++ git
-
-# Copy package files
+# Copy package files first for better caching
 COPY package*.json ./
 
 # Install dependencies
-RUN npm install --production
+RUN npm install
 
-# Copy source code
+# Copy the rest of the application
 COPY . .
 
-# Create session directory
-RUN mkdir -p session
-
-# Expose port
+# Expose the port
 EXPOSE 3000
 
-# Start the bot
-CMD ["node", "index.js"]
+# Start the application
+CMD ["npm", "start"]

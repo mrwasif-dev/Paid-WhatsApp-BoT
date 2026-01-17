@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WASI-MD V7 | WhatsApp Bot</title>
+    <title>WASI-MD V7 | Setup</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -23,23 +23,11 @@
         }
 
         .glow {
+            box-shadow: 0 0 40px rgba(34, 197, 94, 0.3);
+        }
+
+        .glow-purple {
             box-shadow: 0 0 40px rgba(99, 102, 241, 0.3);
-        }
-
-        .pulse-glow {
-            animation: pulse-glow 2s ease-in-out infinite;
-        }
-
-        @keyframes pulse-glow {
-
-            0%,
-            100% {
-                box-shadow: 0 0 20px rgba(99, 102, 241, 0.4);
-            }
-
-            50% {
-                box-shadow: 0 0 40px rgba(99, 102, 241, 0.8);
-            }
         }
 
         .float-animation {
@@ -57,255 +45,672 @@
                 transform: translateY(-10px);
             }
         }
+
+        .tab-active {
+            background: linear-gradient(135deg, #22c55e, #16a34a);
+        }
+
+        .pairing-code {
+            font-family: 'Courier New', monospace;
+            letter-spacing: 8px;
+            font-size: 2.5rem;
+        }
+
+        .pulse {
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.6;
+            }
+        }
     </style>
 </head>
 
 <body class="gradient-bg min-h-screen text-white">
-    <!-- Floating Background Elements -->
+    <!-- Background -->
     <div class="fixed inset-0 overflow-hidden pointer-events-none">
-        <div class="absolute top-20 left-10 w-72 h-72 bg-indigo-500/10 rounded-full blur-3xl"></div>
+        <div class="absolute top-20 left-10 w-72 h-72 bg-green-500/10 rounded-full blur-3xl"></div>
         <div class="absolute bottom-20 right-10 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl"></div>
-        <div class="absolute top-1/2 left-1/2 w-64 h-64 bg-cyan-500/5 rounded-full blur-3xl"></div>
     </div>
 
     <div class="relative z-10 container mx-auto px-4 py-8">
         <!-- Header -->
-        <header class="text-center mb-12">
+        <header class="text-center mb-8">
             <h1
-                class="text-5xl font-bold bg-gradient-to-r from-indigo-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent mb-2 float-animation">
+                class="text-4xl md:text-5xl font-bold bg-gradient-to-r from-green-400 via-emerald-400 to-cyan-400 bg-clip-text text-transparent mb-2 float-animation">
                 🤖 WASI-MD V7
             </h1>
-            <p class="text-gray-400 text-lg">Powerful WhatsApp Multi-Device Bot</p>
+            <p class="text-gray-400">Powerful WhatsApp Multi-Device Bot</p>
         </header>
+
+        <!-- Status Bar -->
+        <div class="max-w-4xl mx-auto mb-6">
+            <div class="glass-card rounded-xl p-4 flex flex-wrap items-center justify-center gap-6">
+                <div class="flex items-center gap-2">
+                    <span class="text-gray-400">Connection:</span>
+                    <span id="conn-status" class="px-3 py-1 rounded-full text-sm bg-yellow-500/20 text-yellow-400">Not
+                        Connected</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-gray-400">Database:</span>
+                    <span id="db-status"
+                        class="px-3 py-1 rounded-full text-sm bg-gray-500/20 text-gray-400">Checking...</span>
+                </div>
+            </div>
+        </div>
 
         <!-- Main Content -->
         <div class="max-w-4xl mx-auto">
-            <div class="grid md:grid-cols-2 gap-8">
-
-                <!-- QR Code Section -->
-                <div class="glass-card rounded-3xl p-8 glow">
-                    <h2 class="text-2xl font-semibold mb-6 text-center">
-                        <span class="text-indigo-400">📱</span> Scan QR Code
-                    </h2>
-
-                    <div id="qr-container"
-                        class="bg-white rounded-2xl p-4 mb-6 flex items-center justify-center min-h-[280px]">
-                        <div id="qr-loading" class="text-center">
-                            <div
-                                class="animate-spin rounded-full h-12 w-12 border-4 border-indigo-500 border-t-transparent mx-auto mb-4">
-                            </div>
-                            <p class="text-gray-600">Loading QR Code...</p>
-                        </div>
-                        <img id="qr-image" src="" alt="QR Code" class="hidden max-w-full rounded-xl" />
-                        <div id="qr-connected" class="hidden text-center">
-                            <div class="text-6xl mb-4">✅</div>
-                            <p class="text-green-600 font-semibold text-xl">Connected!</p>
-                        </div>
-                    </div>
-
-                    <p class="text-gray-400 text-center text-sm">
-                        Open WhatsApp → Settings → Linked Devices → Link a Device
-                    </p>
-                </div>
-
-                <!-- Status & Info Section -->
-                <div class="space-y-6">
-                    <!-- Connection Status -->
-                    <div class="glass-card rounded-2xl p-6">
-                        <h3 class="text-xl font-semibold mb-4 flex items-center gap-2">
-                            <span class="text-green-400">⚡</span> Status
-                        </h3>
-                        <div id="status-container" class="space-y-3">
-                            <div class="flex items-center justify-between">
-                                <span class="text-gray-400">Connection</span>
-                                <span id="connection-status"
-                                    class="px-3 py-1 rounded-full text-sm bg-yellow-500/20 text-yellow-400">
-                                    Waiting
-                                </span>
-                            </div>
-                            <div class="flex items-center justify-between">
-                                <span class="text-gray-400">Database</span>
-                                <span id="db-status"
-                                    class="px-3 py-1 rounded-full text-sm bg-green-500/20 text-green-400">
-                                    Connected
-                                </span>
-                            </div>
-                            <div class="flex items-center justify-between">
-                                <span class="text-gray-400">Server</span>
-                                <span class="px-3 py-1 rounded-full text-sm bg-green-500/20 text-green-400">
-                                    Running
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Developer Info -->
-                    <div class="glass-card rounded-2xl p-6">
-                        <h3 class="text-xl font-semibold mb-4 flex items-center gap-2">
-                            <span class="text-purple-400">👨‍💻</span> Developer
-                        </h3>
-                        <div class="flex items-center gap-4">
-                            <div
-                                class="w-16 h-16 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-2xl">
-                                W
-                            </div>
-                            <div>
-                                <h4 class="text-lg font-semibold">Waseem</h4>
-                                <p class="text-gray-400 text-sm">@Itxxwasi</p>
-                                <a href="https://github.com/Itxxwasi" target="_blank"
-                                    class="text-indigo-400 hover:text-indigo-300 text-sm flex items-center gap-1 mt-1">
-                                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                                        <path
-                                            d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
-                                    </svg>
-                                    GitHub
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Features -->
-                    <div class="glass-card rounded-2xl p-6">
-                        <h3 class="text-xl font-semibold mb-4 flex items-center gap-2">
-                            <span class="text-cyan-400">✨</span> Features
-                        </h3>
-                        <div class="grid grid-cols-2 gap-2 text-sm">
-                            <div class="flex items-center gap-2 text-gray-300">
-                                <span class="text-green-400">✓</span> Auto Status
-                            </div>
-                            <div class="flex items-center gap-2 text-gray-300">
-                                <span class="text-green-400">✓</span> Stickers
-                            </div>
-                            <div class="flex items-center gap-2 text-gray-300">
-                                <span class="text-green-400">✓</span> Group Tools
-                            </div>
-                            <div class="flex items-center gap-2 text-gray-300">
-                                <span class="text-green-400">✓</span> Translator
-                            </div>
-                            <div class="flex items-center gap-2 text-gray-300">
-                                <span class="text-green-400">✓</span> Text to Speech
-                            </div>
-                            <div class="flex items-center gap-2 text-gray-300">
-                                <span class="text-green-400">✓</span> QR Generator
-                            </div>
-                        </div>
+            <!-- Connected View -->
+            <div id="connected-view" class="hidden">
+                <div class="glass-card rounded-3xl p-8 glow text-center">
+                    <div class="text-8xl mb-6">✅</div>
+                    <h2 class="text-3xl font-bold text-green-400 mb-4">Connected Successfully!</h2>
+                    <p class="text-gray-400 mb-6">Your WhatsApp bot is now active and ready to use.</p>
+                    <div class="flex flex-wrap justify-center gap-4 mt-6">
+                        <a href="https://whatsapp.com/channel/0029Vb6nBy3AYlUNu527gF1q" target="_blank"
+                            class="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-6 rounded-xl transition-all flex items-center gap-2">
+                            📢 Join Channel
+                        </a>
+                        <button onclick="enterConfigMode()"
+                            class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-6 rounded-xl transition-all">
+                            ⚙️ Configure
+                        </button>
+                        <button onclick="disconnect()"
+                            class="bg-red-500/20 hover:bg-red-500/30 text-red-400 font-semibold py-2 px-6 rounded-xl transition-all">
+                            Disconnect
+                        </button>
                     </div>
                 </div>
             </div>
 
-            <!-- Additional Sections Row -->
-            <div class="grid md:grid-cols-2 gap-8 mt-8">
-                <!-- Upcoming Features -->
-                <div class="glass-card rounded-2xl p-6">
-                    <h3 class="text-xl font-semibold mb-4 flex items-center gap-2">
-                        <span class="text-orange-400">🚀</span> Upcoming Features
-                    </h3>
-                    <div class="space-y-3">
-                        <div class="flex items-center gap-3 text-gray-300">
-                            <span class="text-yellow-400">⏳</span>
-                            <span>AI Chat Integration (ChatGPT)</span>
+            <!-- Setup View -->
+            <div id="setup-view">
+                <!-- Tabs -->
+                <div class="flex justify-center mb-8">
+                    <div class="glass-card rounded-xl p-1 flex">
+                        <button id="tab-pair" onclick="showTab('pair')"
+                            class="tab-active px-6 py-3 rounded-lg font-semibold transition-all">
+                            🔢 Pair Code
+                        </button>
+                        <button id="tab-config" onclick="showTab('config')"
+                            class="px-6 py-3 rounded-lg font-semibold transition-all hover:bg-white/10">
+                            ⚙️ Config
+                        </button>
+                        <button id="tab-qr" onclick="showTab('qr')"
+                            class="px-6 py-3 rounded-lg font-semibold transition-all hover:bg-white/10">
+                            📱 QR Code
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Pairing Code Panel (Primary) -->
+                <div id="pair-panel" class="glass-card rounded-3xl p-8 glow">
+                    <div class="text-center">
+                        <div class="text-6xl mb-4">🔗</div>
+                        <h2 class="text-2xl font-semibold mb-2">Connect with Pairing Code</h2>
+                        <p class="text-gray-400 mb-6">Enter your WhatsApp number to get a pairing code</p>
+
+                        <!-- Step 1: Enter Phone -->
+                        <div id="step-phone" class="max-w-md mx-auto">
+                            <div class="mb-4">
+                                <label class="block text-gray-400 text-sm mb-2">WhatsApp Number (with country
+                                    code)</label>
+                                <input type="tel" id="phone-number" placeholder="923001234567"
+                                    class="w-full bg-white/10 border-2 border-green-500/50 rounded-xl px-4 py-4 text-center text-xl focus:outline-none focus:border-green-500 transition-all">
+                                <p class="text-gray-500 text-xs mt-2">Example: 923001234567 (Pakistan), 919876543210
+                                    (India)</p>
+                            </div>
+                            <button onclick="requestPairingCode()" id="pair-btn"
+                                class="w-full bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold py-4 px-6 rounded-xl transition-all transform hover:scale-105 text-lg">
+                                🔑 Get Pairing Code
+                            </button>
                         </div>
-                        <div class="flex items-center gap-3 text-gray-300">
-                            <span class="text-yellow-400">⏳</span>
-                            <span>YouTube Video Downloader</span>
+
+                        <!-- Step 2: Loading -->
+                        <div id="step-loading" class="hidden max-w-md mx-auto">
+                            <div class="bg-green-500/10 rounded-2xl p-8">
+                                <div
+                                    class="animate-spin rounded-full h-16 w-16 border-4 border-green-500 border-t-transparent mx-auto mb-4">
+                                </div>
+                                <p class="text-green-400 font-semibold">Generating pairing code...</p>
+                                <p class="text-gray-400 text-sm mt-2">This may take a few seconds</p>
+                            </div>
                         </div>
-                        <div class="flex items-center gap-3 text-gray-300">
-                            <span class="text-yellow-400">⏳</span>
-                            <span>Instagram Reels Downloader</span>
+
+                        <!-- Step 3: Show Code -->
+                        <div id="step-code" class="hidden max-w-md mx-auto">
+                            <div class="bg-gradient-to-r from-green-500/20 to-emerald-500/20 rounded-2xl p-8 mb-6">
+                                <p class="text-gray-400 text-sm mb-3">Your Pairing Code:</p>
+                                <div id="pairing-code" class="pairing-code text-green-400 font-bold pulse">--------
+                                </div>
+                                <p class="text-gray-500 text-xs mt-3">Code expires in 60 seconds</p>
+                            </div>
+
+                            <div class="bg-white/5 rounded-xl p-4 text-left">
+                                <p class="text-gray-300 font-semibold mb-3">📱 How to link:</p>
+                                <ol class="space-y-2 text-gray-400 text-sm">
+                                    <li>1. Open <span class="text-green-400">WhatsApp</span> on your phone</li>
+                                    <li>2. Go to <span class="text-green-400">Settings → Linked Devices</span></li>
+                                    <li>3. Tap <span class="text-green-400">Link a Device</span></li>
+                                    <li>4. Choose <span class="text-green-400">"Link with phone number"</span></li>
+                                    <li>5. Enter the code shown above</li>
+                                </ol>
+                            </div>
+
+                            <button onclick="resetPairing()"
+                                class="mt-6 text-gray-400 hover:text-white transition-colors">
+                                ← Try again with different number
+                            </button>
                         </div>
-                        <div class="flex items-center gap-3 text-gray-300">
-                            <span class="text-yellow-400">⏳</span>
-                            <span>Spotify Music Downloader</span>
-                        </div>
-                        <div class="flex items-center gap-3 text-gray-300">
-                            <span class="text-yellow-400">⏳</span>
-                            <span>Anti-Delete Messages</span>
-                        </div>
-                        <div class="flex items-center gap-3 text-gray-300">
-                            <span class="text-yellow-400">⏳</span>
-                            <span>Welcome/Goodbye Messages</span>
+
+                        <!-- Error -->
+                        <div id="step-error" class="hidden max-w-md mx-auto">
+                            <div class="bg-red-500/20 rounded-2xl p-6 mb-4">
+                                <p class="text-red-400 font-semibold" id="error-message">Error occurred</p>
+                            </div>
+                            <button onclick="resetPairing()"
+                                class="bg-gray-500/20 hover:bg-gray-500/30 text-white py-3 px-6 rounded-xl transition-all">
+                                Try Again
+                            </button>
                         </div>
                     </div>
                 </div>
 
-                <!-- WhatsApp Channel -->
-                <div class="glass-card rounded-2xl p-6">
-                    <h3 class="text-xl font-semibold mb-4 flex items-center gap-2">
-                        <span class="text-green-400">📢</span> Join Our Channel
-                    </h3>
-                    <p class="text-gray-400 mb-4">
-                        Stay updated with latest features, bug fixes, and announcements!
-                    </p>
-                    <a href="https://whatsapp.com/channel/0029Vb6nBy3AYlUNu527gF1q" target="_blank"
-                        class="flex items-center justify-center gap-3 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-semibold py-3 px-6 rounded-xl transition-all duration-300 transform hover:scale-105">
-                        <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                            <path
-                                d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
-                        </svg>
-                        Follow WhatsApp Channel
-                    </a>
-                    <div class="mt-4 text-center">
-                        <p class="text-gray-500 text-sm">Get notified about:</p>
-                        <div class="flex flex-wrap justify-center gap-2 mt-2">
-                            <span class="px-2 py-1 bg-indigo-500/20 text-indigo-300 rounded-full text-xs">New
-                                Updates</span>
-                            <span class="px-2 py-1 bg-purple-500/20 text-purple-300 rounded-full text-xs">Bug
-                                Fixes</span>
-                            <span class="px-2 py-1 bg-cyan-500/20 text-cyan-300 rounded-full text-xs">Tips &
-                                Tricks</span>
+                <!-- Config Panel -->
+                <div id="config-panel" class="hidden glass-card rounded-3xl p-8">
+                    <h2 class="text-2xl font-semibold mb-6 text-center">⚙️ Bot Configuration</h2>
+
+                    <div class="grid md:grid-cols-2 gap-6">
+                        <div>
+                            <label class="block text-gray-400 mb-2">Bot Name</label>
+                            <input type="text" id="cfg-botname" placeholder="WASI BOT"
+                                class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-green-500 transition-all">
+                        </div>
+                        <div>
+                            <label class="block text-gray-400 mb-2">Owner Number</label>
+                            <input type="text" id="cfg-owner" placeholder="923001234567"
+                                class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-green-500 transition-all">
+                        </div>
+                        <div>
+                            <label class="block text-gray-400 mb-2">Prefix</label>
+                            <input type="text" id="cfg-prefix" placeholder="." maxlength="3"
+                                class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-green-500 transition-all">
+                        </div>
+                        <div>
+                            <label class="block text-gray-400 mb-2">Mode</label>
+                            <select id="cfg-mode"
+                                class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-green-500 transition-all">
+                                <option value="public" class="bg-gray-800">Public</option>
+                                <option value="private" class="bg-gray-800">Private</option>
+                            </select>
+                        </div>
+                        <div class="md:col-span-2">
+                            <label class="block text-gray-400 mb-2">MongoDB URI (Optional)</label>
+                            <input type="text" id="cfg-mongodb" placeholder="mongodb+srv://..."
+                                class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-green-500 transition-all">
+                        </div>
+                        <div class="md:col-span-2">
+                            <label class="block text-gray-400 mb-2">Menu Image URL</label>
+                            <input type="text" id="cfg-menuImage" placeholder="https://..."
+                                class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-green-500 transition-all">
+                        </div>
+                        <div>
+                            <label class="block text-gray-400 mb-2">Time Zone</label>
+                            <input type="text" id="cfg-timeZone" placeholder="Asia/Karachi"
+                                class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-green-500 transition-all">
                         </div>
                     </div>
+
+                    <div class="grid md:grid-cols-2 gap-4 mt-6">
+                        <h3 class="md:col-span-2 text-xl font-semibold mb-2">Features</h3>
+
+                        <label
+                            class="flex items-center space-x-3 bg-white/5 p-4 rounded-xl cursor-pointer hover:bg-white/10 transition-all">
+                            <input type="checkbox" id="cfg-autoReadMessages"
+                                class="form-checkbox h-5 w-5 text-green-500 rounded border-gray-600 bg-gray-700 focus:ring-offset-gray-900">
+                            <span class="text-gray-300">Auto Read Messages (Blue Ticks)</span>
+                        </label>
+
+                        <label
+                            class="flex items-center space-x-3 bg-white/5 p-4 rounded-xl cursor-pointer hover:bg-white/10 transition-all">
+                            <input type="checkbox" id="cfg-autoStatusSeen"
+                                class="form-checkbox h-5 w-5 text-green-500 rounded border-gray-600 bg-gray-700 focus:ring-offset-gray-900">
+                            <span class="text-gray-300">Auto Status Seen</span>
+                        </label>
+
+                        <label
+                            class="flex items-center space-x-3 bg-white/5 p-4 rounded-xl cursor-pointer hover:bg-white/10 transition-all">
+                            <input type="checkbox" id="cfg-autoStatusReact"
+                                class="form-checkbox h-5 w-5 text-green-500 rounded border-gray-600 bg-gray-700 focus:ring-offset-gray-900">
+                            <span class="text-gray-300">Auto React to Status (❤️)</span>
+                        </label>
+
+                        <label
+                            class="flex items-center space-x-3 bg-white/5 p-4 rounded-xl cursor-pointer hover:bg-white/10 transition-all">
+                            <input type="checkbox" id="cfg-autoStatusMessage"
+                                class="form-checkbox h-5 w-5 text-green-500 rounded border-gray-600 bg-gray-700 focus:ring-offset-gray-900">
+                            <span class="text-gray-300">Auto Reply to Status</span>
+                        </label>
+
+                        <label
+                            class="flex items-center space-x-3 bg-white/5 p-4 rounded-xl cursor-pointer hover:bg-white/10 transition-all">
+                            <input type="checkbox" id="cfg-autoTyping"
+                                class="form-checkbox h-5 w-5 text-green-500 rounded border-gray-600 bg-gray-700 focus:ring-offset-gray-900">
+                            <span class="text-gray-300">Always Typing...</span>
+                        </label>
+
+                        <label
+                            class="flex items-center space-x-3 bg-white/5 p-4 rounded-xl cursor-pointer hover:bg-white/10 transition-all">
+                            <input type="checkbox" id="cfg-autoRecording"
+                                class="form-checkbox h-5 w-5 text-green-500 rounded border-gray-600 bg-gray-700 focus:ring-offset-gray-900">
+                            <span class="text-gray-300">Always Recording...</span>
+                        </label>
+
+                        <label
+                            class="flex items-center space-x-3 bg-white/5 p-4 rounded-xl cursor-pointer hover:bg-white/10 transition-all">
+                            <input type="checkbox" id="cfg-alwaysOnline"
+                                class="form-checkbox h-5 w-5 text-green-500 rounded border-gray-600 bg-gray-700 focus:ring-offset-gray-900">
+                            <span class="text-gray-300">Always Online</span>
+                        </label>
+
+                        <label
+                            class="flex items-center space-x-3 bg-white/5 p-4 rounded-xl cursor-pointer hover:bg-white/10 transition-all">
+                            <input type="checkbox" id="cfg-autoReplyEnabled"
+                                class="form-checkbox h-5 w-5 text-green-500 rounded border-gray-600 bg-gray-700 focus:ring-offset-gray-900">
+                            <span class="text-gray-300">Enable Auto Replies</span>
+                        </label>
+                    </div>
+
+                    <!-- Auto Replies Section -->
+                    <div class="mt-8 border-t border-white/10 pt-6">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-xl font-semibold">🤖 Auto Replies</h3>
+                            <button onclick="addReplyField()"
+                                class="text-green-400 hover:text-green-300 text-sm font-semibold">+ Add Reply</button>
+                        </div>
+                        <div id="cfg-replies-container" class="space-y-3">
+                            <!-- Dynamic Reply Fields will populate here -->
+                        </div>
+                    </div>
+
+                    <div class="flex justify-center mt-8">
+                        <button onclick="saveConfig()"
+                            class="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-semibold py-3 px-8 rounded-xl transition-all">
+                            💾 Save Configuration
+                        </button>
+                    </div>
+                </div>
+
+                <!-- QR Code Panel (Optional) -->
+                <div id="qr-panel" class="hidden glass-card rounded-3xl p-8 glow-purple">
+                    <div class="text-center">
+                        <div class="text-6xl mb-4">📱</div>
+                        <h2 class="text-2xl font-semibold mb-2">Scan QR Code</h2>
+                        <p class="text-gray-400 mb-6">Alternative method - scan with WhatsApp</p>
+
+                        <div id="qr-container"
+                            class="bg-white rounded-2xl p-4 mb-6 inline-block min-w-[280px] min-h-[280px] flex items-center justify-center">
+                            <div id="qr-loading" class="text-center">
+                                <div
+                                    class="animate-spin rounded-full h-12 w-12 border-4 border-indigo-500 border-t-transparent mx-auto mb-3">
+                                </div>
+                                <p class="text-gray-600 text-sm">Loading QR Code...</p>
+                            </div>
+                            <img id="qr-image" src="" alt="QR Code" class="hidden max-w-full rounded-xl" />
+                        </div>
+
+                        <p class="text-gray-500 text-sm">Open WhatsApp → Linked Devices → Link Device → Scan QR</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Footer Cards -->
+            <div class="grid md:grid-cols-2 gap-6 mt-8">
+                <div class="glass-card rounded-2xl p-6">
+                    <h3 class="text-lg font-semibold mb-3">🚀 Upcoming</h3>
+                    <div class="space-y-2 text-sm text-gray-300">
+                        <div>⏳ AI Chat (ChatGPT)</div>
+                        <div>⏳ YouTube Downloader</div>
+                        <div>⏳ Anti-Delete Messages</div>
+                    </div>
+                </div>
+                <div class="glass-card rounded-2xl p-6">
+                    <h3 class="text-lg font-semibold mb-3">📢 Join Channel</h3>
+                    <a href="https://whatsapp.com/channel/0029Vb6nBy3AYlUNu527gF1q" target="_blank"
+                        class="inline-flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-xl transition-all text-sm">
+                        Follow for Updates
+                    </a>
                 </div>
             </div>
         </div>
 
         <!-- Footer -->
-        <footer class="text-center mt-12 text-gray-500 text-sm">
-            <p>© 2024 WASI-MD V7 | Built with ❤️ by Waseem</p>
-            <div class="flex justify-center gap-4 mt-3">
-                <a href="https://github.com/Itxxwasi" target="_blank"
-                    class="hover:text-indigo-400 transition-colors">GitHub</a>
-                <span>•</span>
-                <a href="https://whatsapp.com/channel/0029Vb6nBy3AYlUNu527gF1q" target="_blank"
-                    class="hover:text-green-400 transition-colors">WhatsApp Channel</a>
-            </div>
+        <footer class="text-center mt-8 text-gray-500 text-sm">
+            <p>© 2024 WASI-MD V7 | <a href="https://github.com/Itxxwasi"
+                    class="text-green-400 hover:underline">@Itxxwasi</a></p>
         </footer>
     </div>
 
     <script>
         let lastQr = '';
+        let configMode = false;
+
+        function enterConfigMode() {
+            configMode = true;
+            document.getElementById('connected-view').classList.add('hidden');
+            document.getElementById('setup-view').classList.remove('hidden');
+            showTab('config');
+        }
+
+        function showTab(tab) {
+            document.getElementById('pair-panel').classList.toggle('hidden', tab !== 'pair');
+            document.getElementById('config-panel').classList.toggle('hidden', tab !== 'config');
+            document.getElementById('qr-panel').classList.toggle('hidden', tab !== 'qr');
+
+            ['pair', 'config', 'qr'].forEach(t => {
+                const btn = document.getElementById('tab-' + t);
+                btn.classList.toggle('tab-active', t === tab);
+                btn.classList.toggle('hover:bg-white/10', t !== tab);
+            });
+
+            if (tab === 'config') {
+                loadConfig();
+            }
+        }
+        // ... (skip other functions) ...
+        async function saveConfig() {
+            // ... (keep start of saveConfig) ...
+            const configData = {
+                botName: document.getElementById('cfg-botname').value,
+                ownerNumber: document.getElementById('cfg-owner').value,
+                prefix: document.getElementById('cfg-prefix').value,
+                mode: document.getElementById('cfg-mode').value,
+                mongoDbUrl: document.getElementById('cfg-mongodb').value,
+                menuImage: document.getElementById('cfg-menuImage').value,
+                timeZone: document.getElementById('cfg-timeZone').value,
+
+                autoReadMessages: document.getElementById('cfg-autoReadMessages').checked,
+                autoStatusSeen: document.getElementById('cfg-autoStatusSeen').checked,
+                autoStatusReact: document.getElementById('cfg-autoStatusReact').checked,
+                autoStatusMessage: document.getElementById('cfg-autoStatusMessage').checked,
+                autoTyping: document.getElementById('cfg-autoTyping').checked,
+                autoRecording: document.getElementById('cfg-autoRecording').checked,
+                alwaysOnline: document.getElementById('cfg-alwaysOnline').checked,
+                autoReplyEnabled: document.getElementById('cfg-autoReplyEnabled').checked,
+
+                autoReplies: getRepliesFromUI()
+            };
+
+            try {
+                const res = await fetch('/api/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(configData)
+                });
+
+                const data = await res.json();
+                if (data.success) {
+                    alert('Configuration saved! Bot is restarting to apply changes...');
+                    configMode = false; // Reset so connected view shows up on reconnect
+                } else {
+                    alert('Failed to save configuration: ' + (data.error || 'Unknown error'));
+                }
+            } catch (e) {
+                console.error(e);
+                alert('Error saving configuration');
+            }
+        }
 
         async function checkStatus() {
             try {
-                const response = await fetch('/api/status');
-                const data = await response.json();
+                const res = await fetch('/api/status');
+                const data = await res.json();
 
-                const connStatus = document.getElementById('connection-status');
-                const qrImage = document.getElementById('qr-image');
-                const qrLoading = document.getElementById('qr-loading');
-                const qrConnected = document.getElementById('qr-connected');
+                const connStatus = document.getElementById('conn-status');
+                const dbStatus = document.getElementById('db-status');
+                const setupView = document.getElementById('setup-view');
+                const connectedView = document.getElementById('connected-view');
 
                 if (data.connected) {
                     connStatus.textContent = 'Connected';
                     connStatus.className = 'px-3 py-1 rounded-full text-sm bg-green-500/20 text-green-400';
-                    qrImage.classList.add('hidden');
-                    qrLoading.classList.add('hidden');
-                    qrConnected.classList.remove('hidden');
-                } else if (data.qr && data.qr !== lastQr) {
-                    lastQr = data.qr;
-                    connStatus.textContent = 'Scan QR';
+
+                    if (!configMode) {
+                        setupView.classList.add('hidden');
+                        connectedView.classList.remove('hidden');
+                    }
+                } else {
+                    connStatus.textContent = 'Not Connected';
                     connStatus.className = 'px-3 py-1 rounded-full text-sm bg-yellow-500/20 text-yellow-400';
-                    qrImage.src = data.qr;
-                    qrImage.classList.remove('hidden');
-                    qrLoading.classList.add('hidden');
-                    qrConnected.classList.add('hidden');
-                } else if (!data.qr && !data.connected) {
-                    connStatus.textContent = 'Waiting';
-                    connStatus.className = 'px-3 py-1 rounded-full text-sm bg-yellow-500/20 text-yellow-400';
+
+                    // Always show setup view if disconnected (to allow pairing)
+                    setupView.classList.remove('hidden');
+                    connectedView.classList.add('hidden');
+                    configMode = false; // Reset config mode if disconnected
+
+                    if (data.qr && data.qr !== lastQr) {
+                        lastQr = data.qr;
+                        const qrImage = document.getElementById('qr-image');
+                        qrImage.src = data.qr;
+                        qrImage.classList.remove('hidden');
+                        document.getElementById('qr-loading').classList.add('hidden');
+                    }
                 }
 
-                // Update DB status
+                // Database Status
+                if (data.database) {
+                    dbStatus.textContent = 'Connected';
+                    dbStatus.className = 'px-3 py-1 rounded-full text-sm bg-green-500/20 text-green-400';
+                } else {
+                    dbStatus.textContent = 'Disconnected';
+                    dbStatus.className = 'px-3 py-1 rounded-full text-sm bg-red-500/20 text-red-400';
+                }
+
+            } catch (e) {
+                console.error("Status check failed", e);
+            }
+        }
+
+        function resetPairing() {
+            document.getElementById('step-phone').classList.remove('hidden');
+            document.getElementById('step-loading').classList.add('hidden');
+            document.getElementById('step-code').classList.add('hidden');
+            document.getElementById('step-error').classList.add('hidden');
+        }
+
+        async function requestPairingCode() {
+            const phone = document.getElementById('phone-number').value.replace(/[^0-9]/g, '');
+            if (!phone || phone.length < 10) {
+                alert('Please enter a valid phone number with country code');
+                return;
+            }
+
+            document.getElementById('step-phone').classList.add('hidden');
+            document.getElementById('step-loading').classList.remove('hidden');
+            document.getElementById('step-code').classList.add('hidden');
+            document.getElementById('step-error').classList.add('hidden');
+
+            try {
+                const res = await fetch('/api/pair', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phone })
+                });
+                const data = await res.json();
+
+                document.getElementById('step-loading').classList.add('hidden');
+
+                if (data.code) {
+                    document.getElementById('pairing-code').textContent = data.code;
+                    document.getElementById('step-code').classList.remove('hidden');
+                } else {
+                    document.getElementById('error-message').textContent = data.error || 'Failed to get pairing code. Try QR code instead.';
+                    document.getElementById('step-error').classList.remove('hidden');
+                }
+            } catch (e) {
+                document.getElementById('step-loading').classList.add('hidden');
+                document.getElementById('error-message').textContent = 'Network error. Please try again.';
+                document.getElementById('step-error').classList.remove('hidden');
+            }
+        }
+
+        async function loadConfig() {
+            try {
+                const res = await fetch('/api/config');
+                const data = await res.json();
+
+                // Text Inputs
+                document.getElementById('cfg-botname').value = data.botName || 'WASI BOT';
+                document.getElementById('cfg-owner').value = data.ownerNumber || '';
+                document.getElementById('cfg-prefix').value = data.prefix || '.';
+                document.getElementById('cfg-mode').value = data.mode || 'public';
+                document.getElementById('cfg-mongodb').value = data.mongoDbUrl || '';
+                document.getElementById('cfg-menuImage').value = data.menuImage || '';
+                document.getElementById('cfg-timeZone').value = data.timeZone || 'Asia/Karachi';
+
+                // Checkboxes
+                document.getElementById('cfg-autoReadMessages').checked = !!data.autoReadMessages;
+                document.getElementById('cfg-autoStatusSeen').checked = !!data.autoStatusSeen;
+                document.getElementById('cfg-autoStatusReact').checked = !!data.autoStatusReact;
+                document.getElementById('cfg-autoStatusMessage').checked = !!data.autoStatusMessage;
+                document.getElementById('cfg-autoTyping').checked = !!data.autoTyping;
+                document.getElementById('cfg-autoRecording').checked = !!data.autoRecording;
+                document.getElementById('cfg-alwaysOnline').checked = !!data.alwaysOnline;
+                document.getElementById('cfg-autoReplyEnabled').checked = !!data.autoReplyEnabled;
+
+                // Populate Auto Replies
+                const container = document.getElementById('cfg-replies-container');
+                container.innerHTML = ''; // Clear existing
+                if (data.autoReplies && Array.isArray(data.autoReplies)) {
+                    data.autoReplies.forEach(reply => addReplyField(reply.trigger, reply.reply));
+                }
+
+                // Show panels
+                document.getElementById('step-start').classList.add('hidden');
+                document.getElementById('config-panel').classList.remove('hidden');
+            } catch (e) {
+                console.error("Error loading config:", e);
+            }
+        }
+
+        function addReplyField(trigger = '', reply = '') {
+            const container = document.getElementById('cfg-replies-container');
+            const div = document.createElement('div');
+            div.className = 'grid grid-cols-12 gap-2 items-center';
+            div.innerHTML = `
+            <div class="col-span-4">
+                <input type="text" placeholder="Trigger (e.g. hi)" value="${trigger}"
+                    class="reply-trigger w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-500">
+            </div>
+            <div class="col-span-7">
+                <input type="text" placeholder="Reply Message" value="${reply}"
+                    class="reply-msg w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-500">
+            </div>
+            <div class="col-span-1 text-center">
+                <button onclick="this.parentElement.parentElement.remove()" class="text-red-400 hover:text-red-300">×</button>
+            </div>
+        `;
+            container.appendChild(div);
+        }
+
+        function getRepliesFromUI() {
+            const replyElements = document.querySelectorAll('#cfg-replies-container > div');
+            const autoReplies = [];
+            replyElements.forEach(el => {
+                const trigger = el.querySelector('.reply-trigger').value.trim();
+                const reply = el.querySelector('.reply-msg').value.trim();
+                if (trigger && reply) {
+                    autoReplies.push({ trigger, reply });
+                }
+            });
+            return autoReplies;
+        }
+
+        async function saveConfig() {
+            // Gather all config
+            const configData = {
+                botName: document.getElementById('cfg-botname').value,
+                ownerNumber: document.getElementById('cfg-owner').value,
+                prefix: document.getElementById('cfg-prefix').value,
+                mode: document.getElementById('cfg-mode').value,
+                mongoDbUrl: document.getElementById('cfg-mongodb').value,
+                menuImage: document.getElementById('cfg-menuImage').value,
+                timeZone: document.getElementById('cfg-timeZone').value,
+
+                autoReadMessages: document.getElementById('cfg-autoReadMessages').checked,
+                autoStatusSeen: document.getElementById('cfg-autoStatusSeen').checked,
+                autoStatusReact: document.getElementById('cfg-autoStatusReact').checked,
+                autoStatusMessage: document.getElementById('cfg-autoStatusMessage').checked,
+                autoTyping: document.getElementById('cfg-autoTyping').checked,
+                autoRecording: document.getElementById('cfg-autoRecording').checked,
+                alwaysOnline: document.getElementById('cfg-alwaysOnline').checked,
+                autoReplyEnabled: document.getElementById('cfg-autoReplyEnabled').checked,
+
+                autoReplies: getRepliesFromUI()
+            };
+
+            try {
+                const res = await fetch('/api/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(configData)
+                });
+
+                const data = await res.json();
+                if (data.success) {
+                    alert('Configuration saved! Bot is restarting to apply changes...');
+                } else {
+                    alert('Failed to save configuration: ' + (data.error || 'Unknown error'));
+                }
+            } catch (e) {
+                console.error(e);
+                alert('Error saving configuration');
+            }
+        }
+        async function checkStatus() {
+            try {
+                const res = await fetch('/api/status');
+                const data = await res.json();
+
+                const connStatus = document.getElementById('conn-status');
                 const dbStatus = document.getElementById('db-status');
+                const setupView = document.getElementById('setup-view');
+                const connectedView = document.getElementById('connected-view');
+
+                if (data.connected) {
+                    connStatus.textContent = 'Connected';
+                    connStatus.className = 'px-3 py-1 rounded-full text-sm bg-green-500/20 text-green-400';
+
+                    if (!configMode) {
+                        setupView.classList.add('hidden');
+                        connectedView.classList.remove('hidden');
+                    }
+                } else {
+                    connStatus.textContent = 'Not Connected';
+                    connStatus.className = 'px-3 py-1 rounded-full text-sm bg-yellow-500/20 text-yellow-400';
+
+                    // Always show setup view if disconnected (to allow pairing)
+                    setupView.classList.remove('hidden');
+                    connectedView.classList.add('hidden');
+                    configMode = false; // Reset config mode if disconnected
+
+                    if (data.qr && data.qr !== lastQr) {
+                        lastQr = data.qr;
+                        document.getElementById('qr-image').src = data.qr;
+                        document.getElementById('qr-image').classList.remove('hidden');
+                        document.getElementById('qr-loading').classList.add('hidden');
+                    }
+                }
+
                 if (data.database) {
                     dbStatus.textContent = 'Connected';
                     dbStatus.className = 'px-3 py-1 rounded-full text-sm bg-green-500/20 text-green-400';
@@ -313,12 +718,20 @@
                     dbStatus.textContent = 'Disabled';
                     dbStatus.className = 'px-3 py-1 rounded-full text-sm bg-gray-500/20 text-gray-400';
                 }
+            } catch (e) { }
+        }
+
+        async function disconnect() {
+            if (!confirm('Are you sure you want to disconnect?')) return;
+            try {
+                await fetch('/api/disconnect', { method: 'POST' });
+                location.reload();
             } catch (e) {
-                console.error('Status check failed:', e);
+                alert('Error disconnecting');
             }
         }
 
-        // Check status every 2 seconds
+        loadConfig();
         setInterval(checkStatus, 2000);
         checkStatus();
     </script>

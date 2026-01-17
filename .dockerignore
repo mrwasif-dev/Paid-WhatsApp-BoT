@@ -1,6 +1,7 @@
-node_modules/
-session/
+node_modules
+npm-debug.log
+.git
 .env
-*.log
-.DS_Store
-Thumbs.db
+botConfig.json
+replies.json
+sessions

@@ -14,11 +14,19 @@ const wasi_userSettingsSchema = new mongoose.Schema({
     autoStatusReact: { type: Boolean, default: false },
     autoStatusMessage: { type: Boolean, default: false },
     autoTyping: { type: Boolean, default: false },
-    autoRecording: { type: Boolean, default: false }
+    autoRecording: { type: Boolean, default: false },
+    autoViewOnce: { type: Boolean, default: false }
 });
 
 const WasiToggle = mongoose.model('WasiToggle', wasi_toggleSchema);
 const WasiUserSettings = mongoose.model('WasiUserSettings', wasi_userSettingsSchema);
+
+// Auto Reply Schema
+const wasi_autoReplySchema = new mongoose.Schema({
+    trigger: { type: String, required: true },
+    reply: { type: String, required: true }
+});
+const WasiAutoReply = mongoose.model('WasiAutoReply', wasi_autoReplySchema);
 
 let isConnected = false;
 
@@ -99,16 +107,30 @@ async function wasi_setUserAutoStatus(jid, settings) {
     }
 }
 
-// Get all users with auto status enabled
-async function wasi_getAllAutoStatusUsers() {
+// Get all auto replies
+async function wasi_getAutoReplies() {
     if (!isConnected) return [];
-
     try {
-        const users = await WasiUserSettings.find({ autoStatusSeen: true });
-        return users.map(u => u.jid);
+        const replies = await WasiAutoReply.find({});
+        return replies.map(r => ({ trigger: r.trigger, reply: r.reply }));
     } catch (e) {
         console.error('DB Error:', e);
         return [];
+    }
+}
+
+// Save all auto replies (overwrite)
+async function wasi_saveAutoReplies(replies) {
+    if (!isConnected) return false;
+    try {
+        await WasiAutoReply.deleteMany({}); // Clear existing
+        if (replies && replies.length > 0) {
+            await WasiAutoReply.insertMany(replies);
+        }
+        return true;
+    } catch (e) {
+        console.error('DB Error:', e);
+        return false;
     }
 }
 
@@ -119,5 +141,7 @@ module.exports = {
     wasi_toggleCommand,
     wasi_getUserAutoStatus,
     wasi_setUserAutoStatus,
-    wasi_getAllAutoStatusUsers
+    wasi_getAllAutoStatusUsers,
+    wasi_getAutoReplies,
+    wasi_saveAutoReplies
 };

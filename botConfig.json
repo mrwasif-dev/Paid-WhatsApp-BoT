@@ -1,0 +1,36 @@
+{
+  "botName": "WASI BOT",
+  "ownerName": "Waseem",
+  "ownerNumber": "263788049675",
+  "prefix": ".",
+  "mode": "public",
+  "timeZone": "Asia/Karachi",
+  "menuImage": "https://files.catbox.moe/ifruw6.jpg",
+  "autoReadMessages": false,
+  "autoStatusSeen": true,
+  "autoStatusReact": true,
+  "autoStatusMessage": true,
+  "autoTyping": false,
+  "autoRecording": false,
+  "alwaysOnline": true,
+  "autoReplyEnabled": true,
+  "autoReplies": [
+    {
+      "trigger": "hi",
+      "reply": "Hello! How can I help you today? 👋"
+    },
+    {
+      "trigger": "bot",
+      "reply": "Yes, I am here! 🤖"
+    },
+    {
+      "trigger": "ping",
+      "reply": "Pong! 🏓"
+    },
+    {
+      "trigger": "wasi",
+      "reply": "_hey dear user mr wasi cruttnely not avalible plz drop query he will reply soon_"
+    }
+  ],
+  "mongoDbUrl": "mongodb+srv://wasidev710_db_user:5xwzp9OQcJkMe1Tu@cluster0.ycj6rnq.mongodb.net/wasidev?retryWrites=true&w=majority&appName=Cluster0"
+}

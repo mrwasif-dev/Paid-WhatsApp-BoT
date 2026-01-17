@@ -36,6 +36,16 @@ module.exports = {
     alwaysOnline: true,           // Show the bot as "Online" all the time
 
     // ---------------------------------------------------------------------------
+    // AUTO REPLIES
+    // ---------------------------------------------------------------------------
+    autoReplyEnabled: true,
+    autoReplies: [
+        { trigger: 'hi', reply: 'Hello! How can I help you today? 👋' },
+        { trigger: 'bot', reply: 'Yes, I am here! 🤖' },
+        { trigger: 'ping', reply: 'Pong! 🏓' }
+    ],
+
+    // ---------------------------------------------------------------------------
     // DATABASE
     // ---------------------------------------------------------------------------
     mongoDbUrl: process.env.MONGODB_URI || '',

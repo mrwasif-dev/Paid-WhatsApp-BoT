@@ -1,4 +1,4 @@
-const { downloadMediaMessage } = require('baileys');
+const { downloadMediaMessage } = require('@whiskeysockets/baileys');
 const sharp = require('sharp');
 
 module.exports = {
