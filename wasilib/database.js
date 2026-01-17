@@ -107,6 +107,19 @@ async function wasi_setUserAutoStatus(jid, settings) {
     }
 }
 
+// Get all users with auto status enabled
+async function wasi_getAllAutoStatusUsers() {
+    if (!isConnected) return [];
+
+    try {
+        const users = await WasiUserSettings.find({ autoStatusSeen: true });
+        return users.map(u => u.jid);
+    } catch (e) {
+        console.error('DB Error:', e);
+        return [];
+    }
+}
+
 // Get all auto replies
 async function wasi_getAutoReplies() {
     if (!isConnected) return [];

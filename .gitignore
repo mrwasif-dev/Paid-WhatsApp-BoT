@@ -4,4 +4,6 @@ session/
 *.log
 .DS_Store
 Thumbs.db
-auth_info
+auth_info/
+botConfig.json
+replies.json
