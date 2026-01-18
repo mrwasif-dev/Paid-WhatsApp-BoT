@@ -55,6 +55,15 @@ const useMongoDBAuthState = async (collectionName = 'auth_info_baileys') => {
     // 4. Initialize Creds
     const creds = await readData('creds') || (require('@whiskeysockets/baileys')).initAuthCreds();
 
+    // 5. Clear All Data (for logout/reset)
+    const clearAllData = async () => {
+        try {
+            await AuthState.deleteMany({});
+        } catch (error) {
+            console.error('Error clearing auth state from DB:', error);
+        }
+    };
+
     return {
         state: {
             creds,
@@ -89,7 +98,8 @@ const useMongoDBAuthState = async (collectionName = 'auth_info_baileys') => {
         },
         saveCreds: () => {
             return writeData(creds, 'creds');
-        }
+        },
+        clearState: clearAllData
     };
 };
 

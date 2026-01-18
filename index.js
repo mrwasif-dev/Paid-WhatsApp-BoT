@@ -6,7 +6,7 @@ const { Boom } = require('@hapi/boom');
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const { wasi_connectSession } = require('./wasilib/session');
+const { wasi_connectSession, wasi_clearSession } = require('./wasilib/session');
 const { wasi_connectDatabase, wasi_isCommandEnabled } = require('./wasilib/database');
 const config = require('./wasi');
 
@@ -163,7 +163,8 @@ wasi_app.post('/api/pair', async (req, res) => {
             try { currentSock.end(); } catch (e) { }
         }
 
-        // Delete old session for fresh pairing
+        // Delete old session for fresh pairing (Both DB and Local)
+        await wasi_clearSession();
         const authDir = path.join(__dirname, 'auth_info');
         if (fs.existsSync(authDir)) {
             fs.rmSync(authDir, { recursive: true, force: true });
@@ -184,7 +185,8 @@ wasi_app.post('/api/disconnect', async (req, res) => {
         if (currentSock) {
             await currentSock.logout();
         }
-        // Delete session
+        // Delete session (Both DB and Local)
+        await wasi_clearSession();
         const authDir = path.join(__dirname, 'auth_info');
         if (fs.existsSync(authDir)) {
             fs.rmSync(authDir, { recursive: true, force: true });
