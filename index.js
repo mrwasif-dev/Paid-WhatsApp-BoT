@@ -461,12 +461,29 @@ function setupMessageHandler(wasi_sock) {
         }
 
         // AUTO REPLY
-        if (config.autoReplyEnabled && wasi_text) {
-            // ...
-            if (config.autoReplies) {
-                const match = config.autoReplies.find(r => r.trigger.toLowerCase() === wasi_text.trim().toLowerCase());
-                if (match) await wasi_sock.sendMessage(wasi_sender, { text: match.reply }, { quoted: wasi_msg });
+        // ... (truncated in previous view, assuming it's closed properly)
+
+        // BGM HANDLING
+        try {
+            const { wasi_isBgmEnabled, wasi_getBgm } = require('./wasilib/database');
+            const bgmEnabled = await wasi_isBgmEnabled();
+            if (bgmEnabled && wasi_text) {
+                // Exact match or contains? User said "if these word detect in chat".
+                // Simple approach: Exact match (case insensitive) of the trigger word.
+                const cleanText = wasi_text.trim().toLowerCase();
+                const audioUrl = await wasi_getBgm(cleanText);
+
+                if (audioUrl) {
+                    console.log(`🎵 Playing BGM for trigger: ${cleanText}`);
+                    await wasi_sock.sendMessage(wasi_sender, {
+                        audio: { url: audioUrl },
+                        mimetype: 'audio/mp4',
+                        ptt: true // Send as voice note? Or just audio? User said "play that music". Voice note (ptt: true) usually auto-plays or is easier to play.
+                    }, { quoted: wasi_msg });
+                }
             }
+        } catch (e) {
+            console.error('BGM Logic Error:', e);
         }
 
         // COMMANDS

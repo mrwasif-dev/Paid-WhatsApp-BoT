@@ -12,6 +12,7 @@ async function handleGroupParticipantsUpdate(sock, update, config) {
         const groupName = metadata.subject;
 
         for (const participant of participants) {
+            if (typeof participant !== 'string') continue;
             const userName = participant.split('@')[0];
 
             if (action === 'add' && config.autoWelcome) {

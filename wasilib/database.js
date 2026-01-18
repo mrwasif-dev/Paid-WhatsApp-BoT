@@ -36,7 +36,20 @@ const wasi_sessionIndexSchema = new mongoose.Schema({
     sessionId: { type: String, required: true, unique: true },
     createdAt: { type: Date, default: Date.now }
 });
-const WasiSessionIndex = mongoose.model('WasiSessionIndex', wasi_sessionIndexSchema);
+const WasiSessionIndex = mongoose.models[`${SESSION_PREFIX}_SessionIndex`] || mongoose.model(`${SESSION_PREFIX}_SessionIndex`, wasi_sessionIndexSchema);
+
+// BGM Schema
+const wasi_bgmSchema = new mongoose.Schema({
+    trigger: { type: String, required: true }, // The word to trigger
+    audioUrl: { type: String, required: true }  // The audio file URL
+});
+const WasiBgm = mongoose.models[`${SESSION_PREFIX}_Bgm`] || mongoose.model(`${SESSION_PREFIX}_Bgm`, wasi_bgmSchema);
+
+// BGM Config Schema (Global On/Off)
+const wasi_bgmConfigSchema = new mongoose.Schema({
+    isEnabled: { type: Boolean, default: true }
+});
+const WasiBgmConfig = mongoose.models[`${SESSION_PREFIX}_BgmConfig`] || mongoose.model(`${SESSION_PREFIX}_BgmConfig`, wasi_bgmConfigSchema);
 
 let isConnected = false;
 
@@ -81,6 +94,85 @@ async function wasi_getAllSessions() {
     }
 }
 
+// ---------------------------------------------------------------------------
+// BGM MANAGEMENT
+// ---------------------------------------------------------------------------
+
+async function wasi_addBgm(trigger, audioUrl) {
+    if (!isConnected) return false;
+    try {
+        await WasiBgm.findOneAndUpdate(
+            { trigger },
+            { trigger, audioUrl },
+            { upsert: true, new: true }
+        );
+        return true;
+    } catch (e) {
+        console.error('DB Error addBgm:', e);
+        return false;
+    }
+}
+
+async function wasi_deleteBgm(trigger) {
+    if (!isConnected) return false;
+    try {
+        const res = await WasiBgm.findOneAndDelete({ trigger });
+        return !!res;
+    } catch (e) {
+        console.error('DB Error deleteBgm:', e);
+        return false;
+    }
+}
+
+async function wasi_getBgm(trigger) {
+    if (!isConnected) return null;
+    try {
+        // Simple exact match or partial? User said "check filter words if detect in chat".
+        // Usually regex search is better for detection, but here we likely look up specific triggers.
+        // For detection loop, we might need getAllBgms.
+        const bgm = await WasiBgm.findOne({ trigger });
+        return bgm ? bgm.audioUrl : null;
+    } catch (e) {
+        console.error('DB Error getBgm:', e);
+        return null;
+    }
+}
+
+async function wasi_getAllBgms() {
+    if (!isConnected) return [];
+    try {
+        return await WasiBgm.find({});
+    } catch (e) {
+        console.error('DB Error getAllBgms:', e);
+        return [];
+    }
+}
+
+async function wasi_toggleBgm(status) {
+    if (!isConnected) return false;
+    try {
+        await WasiBgmConfig.findOneAndUpdate(
+            {},
+            { isEnabled: status },
+            { upsert: true, new: true }
+        );
+        return true;
+    } catch (e) {
+        console.error('DB Error toggleBgm:', e);
+        return false;
+    }
+}
+
+async function wasi_isBgmEnabled() {
+    if (!isConnected) return false;
+    try {
+        const conf = await WasiBgmConfig.findOne({});
+        return conf ? conf.isEnabled : false; // Default off if not set? User said ".bgm on/off", usually implies default state. Let's say default off safely.
+    } catch (e) {
+        return false;
+    }
+}
+
 module.exports = {
     wasi_connectDatabase,
     wasi_isDbConnected,
@@ -93,7 +185,13 @@ module.exports = {
     wasi_saveAutoReplies,
     wasi_registerSession,
     wasi_unregisterSession,
-    wasi_getAllSessions
+    wasi_getAllSessions,
+    wasi_addBgm,
+    wasi_deleteBgm,
+    wasi_getBgm,
+    wasi_getAllBgms,
+    wasi_toggleBgm,
+    wasi_isBgmEnabled
 };
 
 async function wasi_connectDatabase(dbUrl) {
