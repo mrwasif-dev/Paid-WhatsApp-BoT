@@ -12,7 +12,7 @@ module.exports = {
     category: 'Settings',
     desc: 'Manage Background Music (BGM)\n.bgm on/off\n.bgm add <word> (reply to audio)\n.bgm delete <word>',
     wasi_handler: async (wasi_sock, wasi_sender, context) => {
-        const { wasi_msg, wasi_args } = context;
+        const { wasi_msg, wasi_args, sessionId } = context;
 
         // Ensure arguments exist
         if (wasi_args.length < 1) {
@@ -24,7 +24,7 @@ module.exports = {
         // 1. .bgm on / off
         if (action === 'on' || action === 'off') {
             const status = action === 'on';
-            await wasi_toggleBgm(status);
+            await wasi_toggleBgm(sessionId, status);
             return await wasi_sock.sendMessage(wasi_sender, { text: `✅ BGM is now *${status ? 'ENABLED' : 'DISABLED'}*` });
         }
 
@@ -100,7 +100,7 @@ module.exports = {
                     throw new Error('Upload failed');
                 }
 
-                await wasi_addBgm(word, url.trim());
+                await wasi_addBgm(sessionId, word, url.trim());
                 return await wasi_sock.sendMessage(wasi_sender, { text: `✅ BGM Added!\n\nTrigger: *${word}*\nURL: ${url}` });
             } catch (e) {
                 console.error('Upload Error:', e);
@@ -113,7 +113,7 @@ module.exports = {
             const word = wasi_args.slice(1).join(' ').toLowerCase();
             if (!word) return await wasi_sock.sendMessage(wasi_sender, { text: '❌ Please specify the word to delete.' });
 
-            const success = await wasi_deleteBgm(word);
+            const success = await wasi_deleteBgm(sessionId, word);
             if (success) {
                 return await wasi_sock.sendMessage(wasi_sender, { text: `✅ BGM for *${word}* deleted.` });
             } else {
@@ -123,7 +123,7 @@ module.exports = {
 
         // 4. .bgm list (optional)
         if (action === 'list') {
-            const bgms = await wasi_getAllBgms();
+            const bgms = await wasi_getAllBgms(sessionId);
             if (bgms.length === 0) return await wasi_sock.sendMessage(wasi_sender, { text: '📭 No BGM triggers set.' });
 
             let txt = '🎵 *BGM Triggers:*\n\n';

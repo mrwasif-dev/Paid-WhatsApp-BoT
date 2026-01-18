@@ -395,14 +395,15 @@ async function main() {
     wasi_startServer();
 
     // 4. Restore Sessions
-    const savedSessions = await wasi_getAllSessions();
+    // We pass null or current config session ID to get visible sessions
+    const currentSessionId = config.sessionId || 'wasi_session';
+    const savedSessions = await wasi_getAllSessions(currentSessionId);
     console.log(`🔄 Restoring ${savedSessions.length} sessions from DB...`);
 
     // Always ensure the default session exists if list is empty (first run)
-    const defaultSessionId = config.sessionId || 'wasi_session';
     if (savedSessions.length === 0) {
         console.log('Creating default session...');
-        await startSession(defaultSessionId);
+        await startSession(currentSessionId);
     } else {
         for (const id of savedSessions) {
             startSession(id);
@@ -410,14 +411,14 @@ async function main() {
         // If default session not in list (e.g. new clone), should we start it?
         // Best to only start what's in DB to respect "unregister" logic.
         // But for safety on first migration:
-        if (!savedSessions.includes(defaultSessionId)) {
-            startSession(defaultSessionId);
+        if (!savedSessions.includes(currentSessionId)) {
+            startSession(currentSessionId);
         }
     }
 }
 
 // Separate message handler setup (Unchanged logic, just wrapper)
-function setupMessageHandler(wasi_sock) {
+function setupMessageHandler(wasi_sock, sessionId) {
     wasi_sock.ev.on('messages.upsert', async wasi_m => {
         const wasi_msg = wasi_m.messages[0];
         if (!wasi_msg.message) return;
@@ -446,11 +447,11 @@ function setupMessageHandler(wasi_sock) {
 
         // AUTO STATUS SEEN
         if (wasi_sender === 'status@broadcast') {
-            // ... (Use existing logic, just copy paste)
             try {
                 const statusOwner = wasi_msg.key.participant;
                 const { wasi_getUserAutoStatus } = require('./wasilib/database');
-                const userSettings = await wasi_getUserAutoStatus(statusOwner);
+                // Pass sessionId to DB call
+                const userSettings = await wasi_getUserAutoStatus(sessionId, statusOwner);
                 const shouldAutoView = userSettings?.autoStatusSeen || config.autoStatusSeen;
                 if (shouldAutoView) {
                     await wasi_sock.readMessages([wasi_msg.key]);
@@ -461,24 +462,29 @@ function setupMessageHandler(wasi_sock) {
         }
 
         // AUTO REPLY
-        // ... (truncated in previous view, assuming it's closed properly)
+        if (config.autoReplyEnabled && wasi_text) {
+            const { wasi_getAutoReplies } = require('./wasilib/database');
+            const autoReplies = await wasi_getAutoReplies(sessionId);
+            if (autoReplies) {
+                const match = autoReplies.find(r => r.trigger.toLowerCase() === wasi_text.trim().toLowerCase());
+                if (match) await wasi_sock.sendMessage(wasi_sender, { text: match.reply }, { quoted: wasi_msg });
+            }
+        }
 
         // BGM HANDLING
         try {
             const { wasi_isBgmEnabled, wasi_getBgm } = require('./wasilib/database');
-            const bgmEnabled = await wasi_isBgmEnabled();
+            const bgmEnabled = await wasi_isBgmEnabled(sessionId);
             if (bgmEnabled && wasi_text) {
-                // Exact match or contains? User said "if these word detect in chat".
-                // Simple approach: Exact match (case insensitive) of the trigger word.
                 const cleanText = wasi_text.trim().toLowerCase();
-                const audioUrl = await wasi_getBgm(cleanText);
+                const audioUrl = await wasi_getBgm(sessionId, cleanText);
 
                 if (audioUrl) {
                     console.log(`🎵 Playing BGM for trigger: ${cleanText}`);
                     await wasi_sock.sendMessage(wasi_sender, {
                         audio: { url: audioUrl },
                         mimetype: 'audio/mp4',
-                        ptt: true // Send as voice note? Or just audio? User said "play that music". Voice note (ptt: true) usually auto-plays or is easier to play.
+                        ptt: true
                     }, { quoted: wasi_msg });
                 }
             }
@@ -488,27 +494,32 @@ function setupMessageHandler(wasi_sock) {
 
         // COMMANDS
         if (wasi_text.trim().startsWith(config.prefix)) {
-            // ... (Command handling)
             const wasi_parts = wasi_text.trim().slice(config.prefix.length).trim().split(/\s+/);
             const wasi_cmd_input = wasi_parts[0].toLowerCase();
+            const wasi_args = wasi_parts.slice(1);
+
+            let plugin;
             if (wasi_plugins.has(wasi_cmd_input)) {
-                // ...
-                const plugin = wasi_plugins.get(wasi_cmd_input);
+                plugin = wasi_plugins.get(wasi_cmd_input);
+            } else if (wasi_aliases.has(wasi_cmd_input)) {
+                plugin = wasi_plugins.get(wasi_aliases.get(wasi_cmd_input));
+            }
+
+            if (plugin) {
                 try {
-                    await plugin.wasi_handler(wasi_sock, wasi_sender, {
-                        wasi_plugins,
-                        wasi_args: wasi_parts.slice(1),
-                        wasi_isGroup: wasi_sender.endsWith('@g.us'),
-                        wasi_msg,
-                        wasi_text
-                    });
-                } catch (e) { console.error('Plugin error', e); }
+                    // Pass sessionId to plugin context
+                    await plugin.wasi_handler(
+                        wasi_sock,
+                        wasi_sender,
+                        { wasi_msg, wasi_args, wasi_plugins, sessionId }
+                    );
+                } catch (err) {
+                    console.error(`Error in plugin ${plugin.name}:`, err);
+                    await wasi_sock.sendMessage(wasi_sender, { text: `❌ Error: ${err.message}` });
+                }
             }
         }
-    });
-
-    // Auto View Once
-    // ...
+    }); // End of messages.upsert
 }
 
 main();
