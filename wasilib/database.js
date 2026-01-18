@@ -60,6 +60,33 @@ function getModel(sessionId, type) {
 }
 
 // ---------------------------------------------------------------------------
+// DB CONNECTION
+// ---------------------------------------------------------------------------
+async function wasi_connectDatabase(dbUrl) {
+    const defaultUrl = 'mongodb+srv://wasidev710_db_user:5xwzp9OQcJkMe1Tu@cluster0.ycj6rnq.mongodb.net/wasidev?retryWrites=true&w=majority&appName=Cluster0';
+    const uri = dbUrl || process.env.MONGODB_URI || defaultUrl;
+
+    if (!uri) {
+        console.error('❌ FATAL ERROR: No MONGODB_URI found.');
+        return false;
+    }
+
+    try {
+        await mongoose.connect(uri);
+        isConnected = true;
+        console.log('✅ Wasi Bot: Connected to MongoDB successfully!');
+        return true;
+    } catch (err) {
+        console.error('❌ Wasi Bot: Failed to connect to MongoDB:', err.message);
+        return false;
+    }
+}
+
+function wasi_isDbConnected() {
+    return isConnected;
+}
+
+// ---------------------------------------------------------------------------
 // SESSION MANAGEMENT (Multi-Tenancy)
 // ---------------------------------------------------------------------------
 
@@ -290,4 +317,23 @@ async function wasi_saveAutoReplies(sessionId, replies) {
     }
 }
 
-
+module.exports = {
+    wasi_connectDatabase,
+    wasi_isDbConnected,
+    wasi_isCommandEnabled,
+    wasi_toggleCommand,
+    wasi_getUserAutoStatus,
+    wasi_setUserAutoStatus,
+    wasi_getAllAutoStatusUsers,
+    wasi_getAutoReplies,
+    wasi_saveAutoReplies,
+    wasi_registerSession,
+    wasi_unregisterSession,
+    wasi_getAllSessions,
+    wasi_addBgm,
+    wasi_deleteBgm,
+    wasi_getBgm,
+    wasi_getAllBgms,
+    wasi_toggleBgm,
+    wasi_isBgmEnabled
+};
