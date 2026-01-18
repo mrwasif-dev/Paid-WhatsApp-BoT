@@ -1,13 +1,11 @@
 const mongoose = require('mongoose');
+const { BufferJSON, initAuthCreds } = require('@whiskeysockets/baileys');
 
 // Define Schema for Auth
 const AuthStateSchema = new mongoose.Schema({
     _id: String,
-    data: Object
+    data: mongoose.Schema.Types.Mixed // Use Mixed to allow storing Stringified JSON
 });
-
-// Remove global model definition
-// const AuthState = mongoose.model('AuthState', AuthStateSchema);
 
 const useMongoDBAuthState = async (collectionName = 'auth_info_baileys') => {
     // Dynamic Model
@@ -22,9 +20,13 @@ const useMongoDBAuthState = async (collectionName = 'auth_info_baileys') => {
     // 1. Write Data
     const writeData = async (data, id) => {
         try {
+            // Serialize data to string using BufferJSON to preserve Buffer types
+            // This mimics the filesystem behavior and ensures compatibility
+            const stringifiedData = JSON.stringify(data, BufferJSON.replacer);
+
             await AuthState.findOneAndUpdate(
                 { _id: id },
-                { data: data },
+                { data: stringifiedData },
                 { upsert: true, new: true }
             );
         } catch (error) {
@@ -36,7 +38,17 @@ const useMongoDBAuthState = async (collectionName = 'auth_info_baileys') => {
     const readData = async (id) => {
         try {
             const result = await AuthState.findById(id);
-            return result ? result.data : null;
+            if (result && result.data) {
+                // Deserialize data using BufferJSON
+                // If the data was stored as a string (new format), parse it.
+                // If it was somehow stored as Object (old format), this might fail, so we catch.
+                if (typeof result.data === 'string') {
+                    return JSON.parse(result.data, BufferJSON.reviver);
+                }
+                // Fallback for migration/safety (though we prefer string)
+                return result.data;
+            }
+            return null;
         } catch (error) {
             console.error('Error reading auth state from DB:', error);
             return null;
@@ -53,7 +65,7 @@ const useMongoDBAuthState = async (collectionName = 'auth_info_baileys') => {
     };
 
     // 4. Initialize Creds
-    const creds = await readData('creds') || (require('@whiskeysockets/baileys')).initAuthCreds();
+    const creds = await readData('creds') || initAuthCreds();
 
     // 5. Clear All Data (for logout/reset)
     const clearAllData = async () => {
@@ -72,9 +84,7 @@ const useMongoDBAuthState = async (collectionName = 'auth_info_baileys') => {
                     const data = {};
                     await Promise.all(ids.map(async (id) => {
                         let value = await readData(`${type}-${id}`);
-                        if (type === 'app-state-sync-key' && value) {
-                            value = require('@whiskeysockets/baileys').BufferJSON.reviver(null, value);
-                        }
+                        // No need for explicit BufferJSON.reviver here calls since readData handles it
                         if (value) data[id] = value;
                     }));
                     return data;

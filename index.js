@@ -215,7 +215,14 @@ function wasi_startServer() {
 }
 
 async function wasi_startBot() {
-    const dbResult = await wasi_connectDatabase();
+    const dbResult = await wasi_connectDatabase(config.mongoDbUrl);
+    if (!dbResult) {
+        console.error('❌ database connection failed. Cannot start bot.');
+        // We do not exit process here to allow retry logic if needed, 
+        // but for Heroku it's often better to crash and restart or wait.
+        // Let's just return to stop execution of further steps.
+        return;
+    }
     isDbConnected = !!dbResult;
     const { wasi_sock, saveCreds } = await wasi_connectSession();
     currentSock = wasi_sock; // Store for API access
@@ -273,7 +280,10 @@ async function wasi_startBot() {
 async function wasi_startBotWithPairing(phone) {
     return new Promise(async (resolve, reject) => {
         try {
-            const dbResult = await wasi_connectDatabase();
+            const dbResult = await wasi_connectDatabase(config.mongoDbUrl);
+            if (!dbResult) {
+                return reject(new Error('Database connection failed'));
+            }
             isDbConnected = !!dbResult;
 
             let codeResolved = false;

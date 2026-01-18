@@ -33,18 +33,25 @@ const WasiAutoReply = mongoose.models[`${SESSION_PREFIX}_AutoReply`] || mongoose
 
 let isConnected = false;
 
-async function wasi_connectDatabase() {
-    if (!process.env.MONGODB_URI) {
-        console.log('Wasi Bot: No MONGODB_URI found in .env. Database features will be disabled.');
-        return;
+async function wasi_connectDatabase(dbUrl) {
+    const defaultUrl = 'mongodb+srv://wasidev710_db_user:5xwzp9OQcJkMe1Tu@cluster0.ycj6rnq.mongodb.net/wasidev?retryWrites=true&w=majority&appName=Cluster0';
+    const uri = dbUrl || process.env.MONGODB_URI || defaultUrl;
+
+    if (!uri) {
+        console.error('❌ FATAL ERROR: No MONGODB_URI found.');
+        console.error('   Please add MONGODB_URI to your .env file or Heroku Config Vars.');
+        console.error('   The bot cannot run without a database connection in this mode.');
+        return false;
     }
 
     try {
-        await mongoose.connect(process.env.MONGODB_URI);
+        await mongoose.connect(uri);
         isConnected = true;
-        console.log('Wasi Bot: Connected to MongoDB successfully!');
+        console.log('✅ Wasi Bot: Connected to MongoDB successfully!');
+        return true;
     } catch (err) {
-        console.error('Wasi Bot: Failed to connect to MongoDB:', err.message);
+        console.error('❌ Wasi Bot: Failed to connect to MongoDB:', err.message);
+        return false;
     }
 }
 
