@@ -526,7 +526,7 @@ async function setupMessageHandler(wasi_sock, sessionId) {
             wasi_msg.message.extendedTextMessage?.text ||
             wasi_msg.message.imageMessage?.caption || "";
 
-        console.log('📨 Message Keys:', Object.keys(wasi_msg.message));
+        // console.log('📨 Message Keys:', Object.keys(wasi_msg.message));
 
         // -------------------------------------------------------------------------
         // AUTO VIEW ONCE (RECOVER)
@@ -617,7 +617,7 @@ async function setupMessageHandler(wasi_sock, sessionId) {
         // In a real refactor we should move message handler to a separate file.
 
         // DEBUG LOG
-        console.log(`📩 MSG from ${wasi_sender}: "${wasi_text?.slice(0, 30)}..."`);
+        // console.log(`📩 MSG from ${wasi_sender}: "${wasi_text?.slice(0, 30)}..."`);
 
         // ANTI-BOT (DISABLED)
         /*
@@ -657,17 +657,26 @@ async function setupMessageHandler(wasi_sock, sessionId) {
 
         // Wait, I can do multiple chunks if I want? Yes but strict line matching.
         // I'll do 2 chunks.
-
-
-        // AUTO REPLY
         if (config.autoReplyEnabled && wasi_text) {
             const { wasi_getAutoReplies } = require('./wasilib/database');
-            const autoReplies = await wasi_getAutoReplies(sessionId);
+            const dbReplies = await wasi_getAutoReplies(sessionId);
+
+            // Use DB replies if available, otherwise fallback to static config
+            const autoReplies = (dbReplies && dbReplies.length > 0) ? dbReplies : config.autoReplies;
+
+            // Debug Logs
+            // console.log(`🔎 AutoReply Debug: Enabled=${config.autoReplyEnabled} | Text="${wasi_text}" | Source=${dbReplies?.length > 0 ? 'DB' : 'Config'} | Rules=${autoReplies?.length}`);
+
             if (autoReplies) {
                 const match = autoReplies.find(r => r.trigger.toLowerCase() === wasi_text.trim().toLowerCase());
-                if (match) await wasi_sock.sendMessage(wasi_sender, { text: match.reply }, { quoted: wasi_msg });
+
+                if (match) {
+                    // console.log(`✅ AutoReply Match: "${match.trigger}" -> Sending Reply`);
+                    await wasi_sock.sendMessage(wasi_sender, { text: match.reply }, { quoted: wasi_msg });
+                }
             }
         }
+
 
         // BGM HANDLING
         try {
@@ -678,8 +687,8 @@ async function setupMessageHandler(wasi_sock, sessionId) {
                 const bgmData = await wasi_getBgm(sessionId, cleanText);
 
                 if (bgmData && bgmData.url) {
-                    console.log(`🎵 Playing BGM for trigger: ${cleanText}`);
-                    console.log(`🔗 Audio URL: ${bgmData.url} | Mime: ${bgmData.mimetype}`);
+                    // console.log(`🎵 Playing BGM for trigger: ${cleanText}`);
+                    // console.log(`🔗 Audio URL: ${bgmData.url} | Mime: ${bgmData.mimetype}`);
                     await wasi_sock.sendMessage(wasi_sender, {
                         audio: { url: bgmData.url },
                         mimetype: bgmData.mimetype,
