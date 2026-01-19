@@ -30,15 +30,19 @@ module.exports = {
 
         try {
             // Parse target language
-            const parts = (wasi_args || 'en').split(' ');
-            let targetLang = 'en';
+            // Parse target language
+            // Parse target language
+            let args = wasi_args || [];
+            let targetLang = 'ur'; // Default to Urdu
             let text = textToTranslate;
 
-            if (parts[0].length <= 3) {
-                targetLang = parts[0].toLowerCase();
+            if (args.length > 0 && args[0].length <= 3) {
+                targetLang = args[0].toLowerCase();
                 if (!quotedText) {
-                    text = parts.slice(1).join(' ') || textToTranslate;
+                    text = args.slice(1).join(' ') || textToTranslate;
                 }
+            } else if (!quotedText) {
+                text = args.join(' ');
             }
 
             if (!text) {

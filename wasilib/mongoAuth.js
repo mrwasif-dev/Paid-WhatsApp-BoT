@@ -7,14 +7,17 @@ const AuthStateSchema = new mongoose.Schema({
     data: mongoose.Schema.Types.Mixed // Use Mixed to allow storing Stringified JSON
 });
 
-const useMongoDBAuthState = async (collectionName = 'auth_info_baileys') => {
+const useMongoDBAuthState = async (sessionId = 'wasi_session') => {
     // Dynamic Model
-    const ModelName = `${collectionName}_AuthState`;
+    // We want the collection to be "sessionId.auth" to appear in the folder
+    const dbCollectionName = `${sessionId}.authstates`;
+    const ModelName = `${sessionId}_AuthState`;
+
     let AuthState;
     try {
         AuthState = mongoose.model(ModelName);
     } catch {
-        AuthState = mongoose.model(ModelName, AuthStateSchema);
+        AuthState = mongoose.model(ModelName, AuthStateSchema, dbCollectionName);
     }
 
     // 1. Write Data

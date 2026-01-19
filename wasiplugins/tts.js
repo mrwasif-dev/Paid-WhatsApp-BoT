@@ -16,14 +16,15 @@ module.exports = {
 
         try {
             // Parse language code if provided
-            const parts = wasi_args.split(' ');
+            // Parse language code if provided
+            let args = wasi_args; // It is an array
             let lang = 'en';
-            let text = wasi_args;
+            let text = args.join(' ');
 
             // Check if first word is a language code (2 letters)
-            if (parts[0].length === 2 && parts.length > 1) {
-                lang = parts[0].toLowerCase();
-                text = parts.slice(1).join(' ');
+            if (args.length > 0 && args[0].length === 2) {
+                lang = args[0].toLowerCase();
+                text = args.slice(1).join(' ');
             }
 
             await wasi_sock.sendMessage(wasi_sender, { text: '🎙️ Generating audio...' });

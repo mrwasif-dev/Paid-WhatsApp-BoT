@@ -1,6 +1,7 @@
 require('dotenv').config();
 const {
-    DisconnectReason
+    DisconnectReason,
+    jidNormalizedUser
 } = require('@whiskeysockets/baileys');
 const { Boom } = require('@hapi/boom');
 const express = require('express');
@@ -52,7 +53,10 @@ function wasi_loadPlugins() {
             }
         }
     }
+    console.log(`✅ Loaded ${wasi_plugins.size} commands`);
 }
+// CALL IT IMMEDIATELY
+wasi_loadPlugins();
 
 const QRCode = require('qrcode');
 
@@ -116,6 +120,21 @@ async function startSession(sessionId) {
                 content.caption = applyFont(content.caption, style);
             }
         }
+
+        // Add Channel Button / Newsletter Context
+        if (content && typeof content === 'object') {
+            content.contextInfo = {
+                ...(content.contextInfo || {}),
+                forwardingScore: 999,
+                isForwarded: true,
+                forwardedNewsletterMessageInfo: {
+                    newsletterJid: config.newsletterJid || '120363419652241844@newsletter',
+                    newsletterName: config.newsletterName || 'WASI-MD-V7',
+                    serverMessageId: -1
+                }
+            };
+        }
+
         return await originalSendMessage.call(wasi_sock, jid, content, options);
     };
 
@@ -158,6 +177,33 @@ async function startSession(sessionId) {
 
             // Register session in DB to ensure it restarts on server reboot
             await wasi_registerSession(sessionId);
+
+            // Send Connected Message to Self
+            try {
+                const userJid = jidNormalizedUser(wasi_sock.user.id);
+                const caption = `┏━━┫ *SERVER STATUS* ┣━━┓\n` +
+                    `┃ 🟢 *Bot Connected Successfully!*\n` +
+                    `┃ 🤖 *Bot Name:* ${config.botName}\n` +
+                    `┃ 🆔 *Session:* ${sessionId}\n` +
+                    `┃ 📅 *Date:* ${new Date().toLocaleString()}\n` +
+                    `┗━━━━━━━━━━━━━━━━━━━┛\n\n` +
+                    `> _Powered by WASI BOT_`;
+
+                const imageUrl = config.menuImage && config.menuImage.startsWith('http') ? config.menuImage : 'https://dummyimage.com/600x400/000/fff&text=WASI+BOT';
+
+                try {
+                    await wasi_sock.sendMessage(userJid, {
+                        image: { url: imageUrl },
+                        caption: caption
+                    });
+                } catch (imgError) {
+                    // Fallback to text if image fails
+                    await wasi_sock.sendMessage(userJid, { text: caption });
+                }
+
+            } catch (e) {
+                console.error('Failed to send connected message:', e);
+            }
         }
     });
 
@@ -467,10 +513,98 @@ async function setupMessageHandler(wasi_sock, sessionId) {
             if (currentTime - messageTime > 30) return;
         }
 
-        const wasi_sender = wasi_msg.key.remoteJid;
+        const wasi_sender = jidNormalizedUser(wasi_msg.key.remoteJid);
+        // Normalize JID to handle Linked Devices (LID) correctly
+        // const { jidNormalizedUser } = require('@whiskeysockets/baileys');
+        // const wasi_sender = jidNormalizedUser(wasi_msg.key.remoteJid);
+        // BUT wait, we need to import it first at the top or here.
+        // Let's keep it simple and use the imported one if available, or just keep remoteJid
+        // Actually, responding to LID works fine usually. 
+        // But let's check if the user is asking for "group vs chat" differentiation?
+
         const wasi_text = wasi_msg.message.conversation ||
             wasi_msg.message.extendedTextMessage?.text ||
             wasi_msg.message.imageMessage?.caption || "";
+
+        console.log('📨 Message Keys:', Object.keys(wasi_msg.message));
+
+        // -------------------------------------------------------------------------
+        // AUTO VIEW ONCE (RECOVER)
+        // -------------------------------------------------------------------------
+        try {
+            const msg = wasi_msg.message;
+            // Check direct properties instead of keys[0]
+            let viewOnceMsg = msg.viewOnceMessage || msg.viewOnceMessageV2;
+
+            // Sometimes it is inside imageMessage/videoMessage with viewOnce: true
+            if (!viewOnceMsg) {
+                if (msg.imageMessage?.viewOnce) viewOnceMsg = { message: { imageMessage: msg.imageMessage } };
+                else if (msg.videoMessage?.viewOnce) viewOnceMsg = { message: { videoMessage: msg.videoMessage } };
+                else if (msg.audioMessage?.viewOnce) viewOnceMsg = { message: { audioMessage: msg.audioMessage } };
+            }
+
+            const isViewOnce = !!viewOnceMsg;
+
+            if (isViewOnce) {
+                console.log(`👁️ ViewOnce Detected! Structure found.`);
+
+                const { wasi_getUserAutoStatus } = require('./wasilib/database');
+                const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
+
+                // Check OWNER'S setting.
+                const ownerJid = currentConfig.ownerNumber + '@s.whatsapp.net';
+                const ownerSettings = await wasi_getUserAutoStatus(sessionId, ownerJid);
+
+                console.log(`🔎 AutoVV Check: Owner: ${ownerJid} | Enabled: ${ownerSettings?.autoViewOnce}`);
+
+                if (ownerSettings?.autoViewOnce) {
+                    console.log('🔓 Auto ViewOnce triggered! Downloading...');
+
+                    // Extract actual content
+                    // V2 structure usually has 'message' inside
+                    const innerContent = viewOnceMsg.message;
+                    if (!innerContent) return;
+
+                    const actualMsg = innerContent.imageMessage ||
+                        innerContent.videoMessage ||
+                        innerContent.audioMessage;
+
+                    if (actualMsg) {
+                        // Determine type
+                        let type = '';
+                        if (innerContent.imageMessage) type = 'image';
+                        else if (innerContent.videoMessage) type = 'video';
+                        else if (innerContent.audioMessage) type = 'audio';
+
+                        if (type) {
+                            const stream = await downloadContentFromMessage(actualMsg, type);
+                            let buffer = Buffer.from([]);
+                            for await (const chunk of stream) {
+                                buffer = Buffer.concat([buffer, chunk]);
+                            }
+
+                            if (buffer.length > 0) {
+                                console.log(`✅ Media downloaded (${buffer.length} bytes). Resending...`);
+
+                                // Resend
+                                await wasi_sock.sendMessage(wasi_sender, {
+                                    [type]: buffer,
+                                    caption: '🔓 *ViewOnce Recovered*\n> WASI-MD-V7',
+                                }, { quoted: wasi_msg });
+                                console.log('✅ ViewOnce Resent!');
+                            }
+                        } else {
+                            console.log('❌ Unknown inner media type in ViewOnce');
+                        }
+                    } else {
+                        console.log('❌ No actual message content inside ViewOnce wrapper');
+                    }
+                }
+            }
+        } catch (vvErr) {
+            console.error('AutoVV Logic Error:', vvErr);
+        }
+        // -------------------------------------------------------------------------
 
         // AUTO READ
         if (currentConfig.autoRead) {
@@ -482,11 +616,22 @@ async function setupMessageHandler(wasi_sock, sessionId) {
         // For brevity in this tool call, I will inline the essential parts.
         // In a real refactor we should move message handler to a separate file.
 
-        // ANTI-BOT
+        // DEBUG LOG
+        console.log(`📩 MSG from ${wasi_sender}: "${wasi_text?.slice(0, 30)}..."`);
+
+        // ANTI-BOT (DISABLED)
+        /*
         if (wasi_sender.endsWith('@g.us')) {
-            const { handleAntiBot } = require('./wasilib/antibot');
-            await handleAntiBot(wasi_sock, wasi_msg, true, wasi_msg.key.participant);
+            try {
+                const { handleAntiBot } = require('./wasilib/antibot');
+                // Ensure arguments match: (sock, msg, isGroup, sender, groupMetadata)
+                const participant = wasi_msg.key?.participant || wasi_sender;
+                await handleAntiBot(wasi_sock, wasi_msg, true, participant);
+            } catch (abErr) {
+                console.error('⚠️ AntiBot Check Failed (Ignored):', abErr.message);
+            }
         }
+        */
 
         // AUTO STATUS SEEN
         if (wasi_sender === 'status@broadcast') {
@@ -505,6 +650,16 @@ async function setupMessageHandler(wasi_sock, sessionId) {
         }
 
         // AUTO REPLY
+        // ... (keep auto reply and bgm blocks unchanged or minimal in this replacement) ...
+        // Skipping huge block to minimize diff content, I will just target the AntiBot block first if possible
+        // But the user tool requires me to replace chunks.
+        // Let me just replace the AntiBot block first, then separate tool call for command logging.
+
+        // Wait, I can do multiple chunks if I want? Yes but strict line matching.
+        // I'll do 2 chunks.
+
+
+        // AUTO REPLY
         if (config.autoReplyEnabled && wasi_text) {
             const { wasi_getAutoReplies } = require('./wasilib/database');
             const autoReplies = await wasi_getAutoReplies(sessionId);
@@ -520,14 +675,15 @@ async function setupMessageHandler(wasi_sock, sessionId) {
             const bgmEnabled = await wasi_isBgmEnabled(sessionId);
             if (bgmEnabled && wasi_text) {
                 const cleanText = wasi_text.trim().toLowerCase();
-                const audioUrl = await wasi_getBgm(sessionId, cleanText);
+                const bgmData = await wasi_getBgm(sessionId, cleanText);
 
-                if (audioUrl) {
+                if (bgmData && bgmData.url) {
                     console.log(`🎵 Playing BGM for trigger: ${cleanText}`);
+                    console.log(`🔗 Audio URL: ${bgmData.url} | Mime: ${bgmData.mimetype}`);
                     await wasi_sock.sendMessage(wasi_sender, {
-                        audio: { url: audioUrl },
-                        mimetype: 'audio/mp4',
-                        ptt: true
+                        audio: { url: bgmData.url },
+                        mimetype: bgmData.mimetype,
+                        ptt: false
                     }, { quoted: wasi_msg });
                 }
             }
@@ -542,6 +698,8 @@ async function setupMessageHandler(wasi_sock, sessionId) {
             const wasi_cmd_input = wasi_parts[0].toLowerCase();
             const wasi_args = wasi_parts.slice(1);
 
+            console.log(`🔎 Checking command: '${wasi_cmd_input}' | Exists: ${wasi_plugins.has(wasi_cmd_input)}`);
+
             let plugin;
             if (wasi_plugins.has(wasi_cmd_input)) {
                 plugin = wasi_plugins.get(wasi_cmd_input);
@@ -552,11 +710,67 @@ async function setupMessageHandler(wasi_sock, sessionId) {
 
             if (plugin) {
                 try {
-                    // Pass sessionId AND updated config to plugin context
+                    // Context Preparation
+                    const isGroup = wasi_sender.endsWith('@g.us');
+                    let wasi_isAdmin = false;
+                    let wasi_botIsAdmin = false;
+                    let groupMetadata = null;
+
+                    if (isGroup) {
+                        try {
+                            groupMetadata = await wasi_sock.groupMetadata(wasi_sender);
+                            const participants = groupMetadata.participants;
+
+                            // Check Sender Admin Status
+                            const senderMod = participants.find(p => p.id === wasi_msg.key.participant || p.id === wasi_sender);
+                            wasi_isAdmin = (senderMod?.admin === 'admin' || senderMod?.admin === 'superadmin');
+
+                            // Check Bot Admin Status (Robust)
+                            const { jidNormalizedUser } = require('@whiskeysockets/baileys');
+
+                            // Get Bot's JID
+                            const rawBotId = wasi_sock.user?.id || wasi_sock.authState?.creds?.me?.id;
+                            const botId = jidNormalizedUser(rawBotId);
+                            const botNum = botId.split('@')[0].split(':')[0]; // Just the number
+
+                            // Find bot in participants
+                            const botMod = participants.find(p => {
+                                const pNum = jidNormalizedUser(p.id).split('@')[0].split(':')[0];
+                                return pNum === botNum;
+                            });
+
+                            wasi_botIsAdmin = (botMod?.admin === 'admin' || botMod?.admin === 'superadmin');
+
+                            console.log(`🤖 Bot Admin Check: Target=${botNum} | Found=${!!botMod} | Role=${botMod?.admin}`);
+                        } catch (gErr) {
+                            console.error('Error fetching group metadata:', gErr);
+                        }
+                    }
+
+                    // IS OWNER CHECK (Supports Sudo)
+                    const ownerNumber = currentConfig.ownerNumber;
+                    const senderNum = wasi_sender.split('@')[0];
+                    const sudoList = currentConfig.sudo || [];
+
+                    const wasi_isOwner = (senderNum === ownerNumber) || sudoList.includes(wasi_sender);
+
+                    // Pass all context to plugin
                     await plugin.wasi_handler(
                         wasi_sock,
                         wasi_sender,
-                        { wasi_msg, wasi_args, wasi_plugins, sessionId, config: currentConfig, wasi_text }
+                        {
+                            wasi_msg,
+                            wasi_args,
+                            wasi_plugins,
+                            sessionId,
+                            config: currentConfig,
+                            wasi_text,
+                            wasi_isGroup: isGroup,
+                            wasi_isAdmin,
+                            wasi_botIsAdmin,
+                            wasi_isOwner, // NEW
+                            wasi_groupMetadata: groupMetadata
+                        }
                     );
                 } catch (err) {
                     console.error(`Error in plugin ${plugin.name}:`, err);

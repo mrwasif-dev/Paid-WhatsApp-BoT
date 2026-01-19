@@ -12,6 +12,7 @@ module.exports = {
     category: 'Settings',
     desc: 'Manage Background Music (BGM)\n.bgm on/off\n.bgm add <word> (reply to audio)\n.bgm delete <word>',
     wasi_handler: async (wasi_sock, wasi_sender, context) => {
+        console.log('🎵 BGM Plugin Triggered');
         const { wasi_msg, wasi_args, sessionId } = context;
 
         // Ensure arguments exist
@@ -22,8 +23,15 @@ module.exports = {
         const action = wasi_args[0].toLowerCase();
 
         // 1. .bgm on / off
+        // 1. .bgm on / off
         if (action === 'on' || action === 'off') {
             const status = action === 'on';
+            const currentStatus = await wasi_isBgmEnabled(sessionId);
+
+            if (currentStatus === status) {
+                return await wasi_sock.sendMessage(wasi_sender, { text: `⚠️ BGM is *ALREADY ${status ? 'ENABLED' : 'DISABLED'}*` });
+            }
+
             await wasi_toggleBgm(sessionId, status);
             return await wasi_sock.sendMessage(wasi_sender, { text: `✅ BGM is now *${status ? 'ENABLED' : 'DISABLED'}*` });
         }
@@ -58,52 +66,37 @@ module.exports = {
             // User requirement: "in reply of auduio or video this will save in databse"
             // So we MUST handle the upload.
 
-            const { downloadMediaMessage } = require('@whiskeysockets/baileys');
-            const fs = require('fs');
-            const path = require('path');
-            const axios = require('axios');
-            const FormData = require('form-data');
+            // NEW: Use centralized media handler
+            const { wasi_downloadMedia, wasi_uploadMedia } = require('../wasilib/media');
 
-            // Download
-            let buffer;
-            try {
-                // Reconstruct buffer logic
-                buffer = await downloadMediaMessage(
-                    { key: wasi_msg.message.extendedTextMessage.contextInfo.stanzaId, message: quotedMsg },
-                    'buffer',
-                    {},
-                    {
-                        logger: console,
-                        reuploadRequest: wasi_sock.updateMediaMessage
-                    }
-                );
-            } catch (e) {
-                // Fallback if direct download fails (maybe use msg itself)
-                // Or better, just try to download the quoted.
-                // Actually, Baileys download requires the message object. 
-                // Let's keep it simple: inform user if fail.
+            const buffer = await wasi_downloadMedia(wasi_msg, wasi_sock);
+            if (!buffer) {
                 return await wasi_sock.sendMessage(wasi_sender, { text: '❌ Failed to download media. Please try again.' });
             }
 
-            // Upload to Catbox
             try {
-                const formData = new FormData();
-                formData.append('reqtype', 'fileupload');
-                formData.append('fileToUpload', buffer, 'bgm.mp3');
+                // EXTRAC MIMETYPE
+                const mime = quotedMsg.audioMessage?.mimetype || 'audio/mp4';
+                let ext = '.mp3';
+                let finalMime = 'audio/mpeg';
 
-                const response = await axios.post('https://catbox.moe/user/api.php', formData, {
-                    headers: formData.getHeaders()
-                });
-
-                const url = response.data;
-                if (!url || !url.startsWith('http')) {
-                    throw new Error('Upload failed');
+                if (mime.includes('opus') || mime.includes('ogg')) {
+                    ext = '.opus';
+                    finalMime = 'audio/ogg; codecs=opus';
+                } else if (mime.includes('mp4')) {
+                    ext = '.m4a';
+                    finalMime = 'audio/mp4';
                 }
 
-                await wasi_addBgm(sessionId, word, url.trim());
-                return await wasi_sock.sendMessage(wasi_sender, { text: `✅ BGM Added!\n\nTrigger: *${word}*\nURL: ${url}` });
+                // Upload with correct extension
+                const url = await wasi_uploadMedia(buffer, `bgm-${Date.now()}${ext}`);
+
+                // Save to DB with proper mimetype
+                await wasi_addBgm(sessionId, word, url.trim(), finalMime);
+
+                return await wasi_sock.sendMessage(wasi_sender, { text: `✅ BGM Added!\n\nTrigger: *${word}*\nMime: ${finalMime}` });
             } catch (e) {
-                console.error('Upload Error:', e);
+                console.error('BGM Add Error:', e);
                 return await wasi_sock.sendMessage(wasi_sender, { text: '❌ Failed to upload media to cloud.' });
             }
         }

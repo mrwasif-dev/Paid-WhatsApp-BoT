@@ -31,7 +31,8 @@ const wasi_sessionIndexSchema = new mongoose.Schema({
 
 const wasi_bgmSchema = new mongoose.Schema({
     trigger: { type: String, required: true },
-    audioUrl: { type: String, required: true }
+    audioUrl: { type: String, required: true },
+    mimetype: { type: String, default: 'audio/mp4' }
 });
 
 const wasi_bgmConfigSchema = new mongoose.Schema({
@@ -46,6 +47,7 @@ const wasi_botConfigSchema = new mongoose.Schema({
     welcomeMessage: { type: String, default: '' },
     goodbyeMessage: { type: String, default: '' },
     ownerName: { type: String, default: 'Wasi' },
+    sudo: { type: [String], default: [] } // Array of Sudo JIDs
 });
 
 let isConnected = false;
@@ -55,17 +57,21 @@ let isConnected = false;
 // ---------------------------------------------------------------------------
 function getModel(sessionId, type) {
     const prefix = sessionId || 'wasi_session';
-    const name = `${prefix}_${type}`;
-    if (mongoose.models[name]) return mongoose.models[name];
+    // Use dot notation for collection to get folder view in Compass
+    const collectionName = `${prefix}.${type.toLowerCase()}`;
+    // Model name can be anything unique
+    const modelName = `${prefix}_${type}`;
+
+    if (mongoose.models[modelName]) return mongoose.models[modelName];
 
     switch (type) {
-        case 'Toggle': return mongoose.model(name, wasi_toggleSchema);
-        case 'UserSettings': return mongoose.model(name, wasi_userSettingsSchema);
-        case 'AutoReply': return mongoose.model(name, wasi_autoReplySchema);
-        case 'SessionIndex': return mongoose.model(name, wasi_sessionIndexSchema);
-        case 'Bgm': return mongoose.model(name, wasi_bgmSchema);
-        case 'BgmConfig': return mongoose.model(name, wasi_bgmConfigSchema);
-        case 'BotConfig': return mongoose.model(name, wasi_botConfigSchema);
+        case 'Toggle': return mongoose.model(modelName, wasi_toggleSchema, collectionName);
+        case 'UserSettings': return mongoose.model(modelName, wasi_userSettingsSchema, collectionName);
+        case 'AutoReply': return mongoose.model(modelName, wasi_autoReplySchema, collectionName);
+        case 'SessionIndex': return mongoose.model(modelName, wasi_sessionIndexSchema, collectionName);
+        case 'Bgm': return mongoose.model(modelName, wasi_bgmSchema, collectionName);
+        case 'BgmConfig': return mongoose.model(modelName, wasi_bgmConfigSchema, collectionName);
+        case 'BotConfig': return mongoose.model(modelName, wasi_botConfigSchema, collectionName);
         default: throw new Error(`Unknown model type: ${type}`);
     }
 }
@@ -184,13 +190,13 @@ async function wasi_getAllSessions(sessionId) {
 // BGM MANAGEMENT
 // ---------------------------------------------------------------------------
 
-async function wasi_addBgm(sessionId, trigger, audioUrl) {
+async function wasi_addBgm(sessionId, trigger, audioUrl, mimetype = 'audio/mp4') {
     if (!isConnected) return false;
     try {
         const Model = getModel(sessionId, 'Bgm');
         await Model.findOneAndUpdate(
             { trigger },
-            { trigger, audioUrl },
+            { trigger, audioUrl, mimetype },
             { upsert: true, new: true }
         );
         return true;
@@ -217,7 +223,8 @@ async function wasi_getBgm(sessionId, trigger) {
     try {
         const Model = getModel(sessionId, 'Bgm');
         const bgm = await Model.findOne({ trigger });
-        return bgm ? bgm.audioUrl : null;
+        // Return object structure
+        return bgm ? { url: bgm.audioUrl, mimetype: bgm.mimetype || 'audio/mp4' } : null;
     } catch (e) {
         console.error('DB Error getBgm:', e);
         return null;

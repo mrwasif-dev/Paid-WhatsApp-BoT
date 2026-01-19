@@ -20,15 +20,30 @@ module.exports = {
             // Send Message
             const IMAGE_URL = config.menuImage;
 
+            // Context Info for View Channel
+            const contextInfo = {
+                forwardingScore: 999,
+                isForwarded: true,
+                forwardedNewsletterMessageInfo: {
+                    newsletterJid: config.newsletterJid || '120363419652241844@newsletter',
+                    newsletterName: config.newsletterName || 'WASI-MD-V7',
+                    serverMessageId: -1
+                }
+            };
+
             try {
                 // If there's an image, send as caption
                 await wasi_sock.sendMessage(wasi_sender, {
                     image: { url: IMAGE_URL },
-                    caption: menuText
+                    caption: menuText,
+                    contextInfo: contextInfo
                 });
             } catch (e) {
                 // Fallback to text if image fails
-                await wasi_sock.sendMessage(wasi_sender, { text: menuText });
+                await wasi_sock.sendMessage(wasi_sender, {
+                    text: menuText,
+                    contextInfo: contextInfo
+                });
             }
 
         } catch (e) {

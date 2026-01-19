@@ -16,7 +16,8 @@ module.exports = {
         }
 
         // Clean the number - remove spaces, dashes, and non-digits
-        const number = wasi_args.replace(/[^0-9]/g, '');
+        const rawInput = Array.isArray(wasi_args) ? wasi_args.join('') : wasi_args;
+        const number = rawInput.replace(/[^0-9]/g, '');
 
         if (!number || number.length < 10) {
             return wasi_sock.sendMessage(wasi_sender, {
