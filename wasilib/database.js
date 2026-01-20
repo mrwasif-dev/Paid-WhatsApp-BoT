@@ -39,6 +39,16 @@ const wasi_bgmConfigSchema = new mongoose.Schema({
     isEnabled: { type: Boolean, default: true }
 });
 
+const wasi_mentionSchema = new mongoose.Schema({
+    type: { type: String, default: 'text' }, // text, audio, image
+    content: { type: String, required: true },
+    mimetype: { type: String }
+});
+
+const wasi_mentionConfigSchema = new mongoose.Schema({
+    isEnabled: { type: Boolean, default: true }
+});
+
 const wasi_botConfigSchema = new mongoose.Schema({
     prefix: { type: String, default: '.' },
     menuImage: { type: String, default: '' },
@@ -47,7 +57,18 @@ const wasi_botConfigSchema = new mongoose.Schema({
     welcomeMessage: { type: String, default: '' },
     goodbyeMessage: { type: String, default: '' },
     ownerName: { type: String, default: 'Wasi' },
-    sudo: { type: [String], default: [] } // Array of Sudo JIDs
+    sudo: { type: [String], default: [] }, // Array of Sudo JIDs
+    autoStatusSeen: { type: Boolean, default: false },
+    autoStatusReact: { type: Boolean, default: false },
+    autoStatusSave: { type: Boolean, default: false } // New field
+});
+
+const wasi_groupSettingsSchema = new mongoose.Schema({
+    jid: { type: String, required: true, unique: true },
+    antilink: { type: Boolean, default: false },
+    antidelete: { type: Boolean, default: false },
+    welcome: { type: Boolean, default: false },
+    goodbye: { type: Boolean, default: false }
 });
 
 let isConnected = false;
@@ -71,7 +92,10 @@ function getModel(sessionId, type) {
         case 'SessionIndex': return mongoose.model(modelName, wasi_sessionIndexSchema, collectionName);
         case 'Bgm': return mongoose.model(modelName, wasi_bgmSchema, collectionName);
         case 'BgmConfig': return mongoose.model(modelName, wasi_bgmConfigSchema, collectionName);
+        case 'Mention': return mongoose.model(modelName, wasi_mentionSchema, collectionName);
+        case 'MentionConfig': return mongoose.model(modelName, wasi_mentionConfigSchema, collectionName);
         case 'BotConfig': return mongoose.model(modelName, wasi_botConfigSchema, collectionName);
+        case 'GroupSettings': return mongoose.model(modelName, wasi_groupSettingsSchema, collectionName);
         default: throw new Error(`Unknown model type: ${type}`);
     }
 }
@@ -269,6 +293,87 @@ async function wasi_isBgmEnabled(sessionId) {
 }
 
 // ---------------------------------------------------------------------------
+// MENTION REPLY MANAGEMENT
+// ---------------------------------------------------------------------------
+
+async function wasi_setMention(sessionId, data) {
+    if (!isConnected) return false;
+    try {
+        const Model = getModel(sessionId, 'Mention');
+        // We only store ONE mention reply setting for simplicity like BGM config
+        await Model.deleteMany({});
+        await Model.create(data);
+        return true;
+    } catch (e) {
+        console.error('DB Error setMention:', e);
+        return false;
+    }
+}
+
+async function wasi_getMention(sessionId) {
+    if (!isConnected) return null;
+    try {
+        const Model = getModel(sessionId, 'Mention');
+        return await Model.findOne({});
+    } catch (e) {
+        return null;
+    }
+}
+
+async function wasi_toggleMention(sessionId, status) {
+    if (!isConnected) return false;
+    try {
+        const Model = getModel(sessionId, 'MentionConfig');
+        await Model.findOneAndUpdate({}, { isEnabled: status }, { upsert: true, new: true });
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
+async function wasi_isMentionEnabled(sessionId) {
+    if (!isConnected) return false;
+    try {
+        const Model = getModel(sessionId, 'MentionConfig');
+        const conf = await Model.findOne({});
+        return conf ? conf.isEnabled : false;
+    } catch (e) {
+        return false;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// GROUP SETTINGS MANAGEMENT
+// ---------------------------------------------------------------------------
+
+async function wasi_getGroupSettings(sessionId, jid) {
+    if (!isConnected) return null;
+    try {
+        const Model = getModel(sessionId, 'GroupSettings');
+        let settings = await Model.findOne({ jid });
+        if (!settings) {
+            settings = await Model.create({ jid });
+        }
+        return settings;
+    } catch (e) {
+        console.error('DB Error getGroupSettings:', e);
+        return null;
+    }
+}
+
+async function wasi_updateGroupSettings(sessionId, jid, updates) {
+    if (!isConnected) return false;
+    try {
+        const Model = getModel(sessionId, 'GroupSettings');
+        await Model.findOneAndUpdate({ jid }, updates, { upsert: true, new: true });
+        return true;
+    } catch (e) {
+        console.error('DB Error updateGroupSettings:', e);
+        return false;
+    }
+}
+
+// ---------------------------------------------------------------------------
 // COMMANDS / ETC
 // ---------------------------------------------------------------------------
 
@@ -387,5 +492,11 @@ module.exports = {
     wasi_toggleBgm,
     wasi_isBgmEnabled,
     wasi_getBotConfig,
-    wasi_updateBotConfig
+    wasi_updateBotConfig,
+    wasi_setMention,
+    wasi_getMention,
+    wasi_toggleMention,
+    wasi_isMentionEnabled,
+    wasi_getGroupSettings,
+    wasi_updateGroupSettings
 };

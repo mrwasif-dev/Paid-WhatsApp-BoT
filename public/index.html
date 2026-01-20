@@ -246,6 +246,11 @@
                                 class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-green-500 transition-all">
                         </div>
                         <div>
+                            <label class="block text-gray-400 mb-2">Session ID</label>
+                            <input type="text" id="cfg-sessionId" placeholder="wasi_session"
+                                class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-green-500 transition-all">
+                        </div>
+                        <div>
                             <label class="block text-gray-400 mb-2">Mode</label>
                             <select id="cfg-mode"
                                 class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-green-500 transition-all">
@@ -602,6 +607,8 @@
                 document.getElementById('cfg-botname').value = data.botName || 'WASI BOT';
                 document.getElementById('cfg-owner').value = data.ownerNumber || '';
                 document.getElementById('cfg-prefix').value = data.prefix || '.';
+
+                document.getElementById('cfg-sessionId').value = data.sessionId || 'wasi_session';
                 document.getElementById('cfg-mode').value = data.mode || 'public';
                 document.getElementById('cfg-mongodb').value = data.mongoDbUrl || '';
                 document.getElementById('cfg-menuImage').value = data.menuImage || '';
@@ -676,6 +683,7 @@
                 botName: document.getElementById('cfg-botname').value,
                 ownerNumber: document.getElementById('cfg-owner').value,
                 prefix: document.getElementById('cfg-prefix').value,
+                sessionId: document.getElementById('cfg-sessionId').value,
                 mode: document.getElementById('cfg-mode').value,
                 mongoDbUrl: document.getElementById('cfg-mongodb').value,
                 menuImage: document.getElementById('cfg-menuImage').value,

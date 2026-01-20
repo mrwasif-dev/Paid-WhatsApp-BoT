@@ -10,6 +10,7 @@ module.exports = {
     prefix: '.',
     mode: process.env.MODE || 'public', // public / private put public if you want to use it in public group    
     sessionId: process.env.SESSION_ID || 'wasi_session', // Unique ID to separate data in MongoDB
+    sudo: process.env.SUDO ? process.env.SUDO.split(',') : [], // Comma separated numbers e.g. 92300...,92301...
 
     // -----------------------powered by mrwasi.dev----------------------------------------------------
     // TIME & REGION

@@ -1,7 +1,7 @@
 const { wasi_get, wasi_getBuffer } = require('./fetch');
 const instatouch = require('instatouch');
 const { instagramGetUrl } = require('instagram-url-direct');
-const ytdl = require('@distube/ytdl-core');
+// const ytdl = require('@distube/ytdl-core'); // disabled to avoid ytdl-core errors
 const fbdl = require('fbdl-core');
 
 /**
@@ -164,7 +164,7 @@ async function wasi_facebook(url) {
         console.log('[FB] Trying Vreden API...');
         const apiUrl = `https://api.vreden.my.id/api/v1/download/facebook?url=${encodeURIComponent(url)}`;
         const data = await wasi_get(apiUrl);
-        if (data && data.status && data.result) {
+        if (data && data.status && data.result && (data.result.sd || data.result.hd)) {
             return {
                 status: true,
                 provider: 'Vreden-v1',
@@ -180,7 +180,7 @@ async function wasi_facebook(url) {
         console.log('[FB] Trying Siputzx API...');
         const apiUrl = `https://api.siputzx.my.id/api/d/facebook?url=${encodeURIComponent(url)}`;
         const data = await wasi_get(apiUrl);
-        if (data && data.status && data.data) {
+        if (data && data.status && data.data && data.data.urls && data.data.urls.length > 0) {
             return {
                 status: true,
                 provider: 'Siputzx',
@@ -190,6 +190,39 @@ async function wasi_facebook(url) {
             };
         }
     } catch (e) { console.error('Siputzx FB Failed:', e.message); }
+
+    // Strategy 4: AIO Downloader (Backup)
+    try {
+        console.log('[FB] Trying AIO API...');
+        const apiUrl = `https://api.ryzendesu.vip/api/downloader/fbdl?url=${encodeURIComponent(url)}`;
+        const data = await wasi_get(apiUrl);
+        if (data && data.data && data.data.length > 0) {
+            const best = data.data.find(v => v.resolution === 'HD') || data.data[0];
+            return {
+                status: true,
+                provider: 'Ryzen-AIO',
+                sd: data.data[0].url,
+                hd: best.url,
+                title: 'Facebook Video'
+            };
+        }
+    } catch (e) { console.error('Ryzen-AIO FB Failed:', e.message); }
+
+    // Strategy 5: BK9 API (Final Backup)
+    try {
+        console.log('[FB] Trying BK9 API...');
+        const apiUrl = `https://bk9.fun/download/facebook?url=${encodeURIComponent(url)}`;
+        const data = await wasi_get(apiUrl);
+        if (data && data.status && data.BK9 && data.BK9.video) {
+            return {
+                status: true,
+                provider: 'BK9',
+                sd: data.BK9.video,
+                hd: data.BK9.hd || data.BK9.video,
+                title: 'Facebook Video'
+            };
+        }
+    } catch (e) { console.error('BK9 FB Failed:', e.message); }
 
     return { status: false, message: 'All Facebook providers failed' };
 }

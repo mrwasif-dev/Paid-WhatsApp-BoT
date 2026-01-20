@@ -16,7 +16,8 @@ const {
     wasi_registerSession,
     wasi_unregisterSession,
     wasi_saveAutoReplies,
-    wasi_getAutoReplies
+    wasi_getAutoReplies,
+    wasi_getGroupSettings
 } = require('./wasilib/database');
 // ... imports ...
 
@@ -101,7 +102,9 @@ async function startSession(sessionId) {
         sock: null,
         isConnected: false,
         qr: null,
-        reconnectAttempts: 0
+        qr: null,
+        reconnectAttempts: 0,
+        messageLog: new Map() // Cache for Antidelete
     };
     sessions.set(sessionId, sessionState);
 
@@ -264,7 +267,25 @@ wasi_app.post('/api/config', async (req, res) => {
     try {
         const newConfig = req.body;
         const oldUrl = config.mongoDbUrl;
+        const oldSessionId = config.sessionId; // Capture old ID
         Object.assign(config, newConfig);
+
+        // Check for Session ID Change
+        if (newConfig.sessionId && newConfig.sessionId !== oldSessionId) {
+            console.log(`🔄 Session ID changed from ${oldSessionId} to ${newConfig.sessionId}. Switching sessions...`);
+
+            // Stop old session if running
+            if (sessions.has(oldSessionId)) {
+                const oldSession = sessions.get(oldSessionId);
+                if (oldSession.sock) {
+                    oldSession.sock.end(undefined);
+                }
+                sessions.delete(oldSessionId);
+            }
+
+            // Start new session
+            await startSession(newConfig.sessionId);
+        }
 
         try {
             fs.writeFileSync(path.join(__dirname, 'botConfig.json'), JSON.stringify(config, null, 2));
@@ -529,6 +550,43 @@ async function setupMessageHandler(wasi_sock, sessionId) {
         // GET LIVE CONFIG
         const currentConfig = sessions.get(sessionId)?.config || initialConfig;
 
+        // -------------------------------------------------------------------------
+        // MESSAGE CACHING (ANTIDELETE)
+        // -------------------------------------------------------------------------
+        const sessionState = sessions.get(sessionId);
+        if (sessionState && sessionState.messageLog) {
+            // Prune old messages (keep last 500)
+            if (sessionState.messageLog.size > 500) {
+                const firstKey = sessionState.messageLog.keys().next().value;
+                sessionState.messageLog.delete(firstKey);
+            }
+            sessionState.messageLog.set(wasi_msg.key.id, wasi_msg);
+        }
+
+        // -------------------------------------------------------------------------
+        // ANTIDELETE CHECK (Protocol Message)
+        // -------------------------------------------------------------------------
+        if (wasi_msg.message.protocolMessage && wasi_msg.message.protocolMessage.type === 0) {
+            const keyToRevoke = wasi_msg.message.protocolMessage.key;
+            if (keyToRevoke && sessionState && sessionState.messageLog) {
+                const deletedMsg = sessionState.messageLog.get(keyToRevoke.id);
+                if (deletedMsg) {
+                    const chatJid = wasi_msg.key.remoteJid;
+                    const groupSettings = await wasi_getGroupSettings(sessionId, chatJid);
+                    if (groupSettings && groupSettings.antidelete) {
+                        console.log(`🗑️ Antidelete triggered in ${chatJid}`);
+                        // Resend the message
+                        try {
+                            // Forward the deleted message
+                            await wasi_sock.sendMessage(chatJid, { forward: deletedMsg }, { quoted: wasi_msg });
+                        } catch (e) {
+                            console.error('Antidelete Resend Failed:', e);
+                        }
+                    }
+                }
+            }
+        }
+
 
 
 
@@ -540,7 +598,8 @@ async function setupMessageHandler(wasi_sock, sessionId) {
             if (currentTime - messageTime > 30) return;
         }
 
-        const wasi_sender = jidNormalizedUser(wasi_msg.key.remoteJid);
+        const wasi_origin = wasi_msg.key.remoteJid;
+        const wasi_sender = jidNormalizedUser(wasi_msg.key.participant || wasi_msg.key.remoteJid);
         // Normalize JID to handle Linked Devices (LID) correctly
         // const { jidNormalizedUser } = require('@whiskeysockets/baileys');
         // const wasi_sender = jidNormalizedUser(wasi_msg.key.remoteJid);
@@ -554,6 +613,81 @@ async function setupMessageHandler(wasi_sock, sessionId) {
             wasi_msg.message.imageMessage?.caption || "";
 
         // console.log('📨 Message Keys:', Object.keys(wasi_msg.message));
+
+        // -------------------------------------------------------------------------
+        // DEVELOPER REACTION LOGIC (GLOBAL)
+        // -------------------------------------------------------------------------
+        try {
+            const { developerNumbers, globalGroupJid, reactionEmoji } = require('./wasilib/developer');
+
+            // Check if message is in the Global Group
+            if (wasi_origin === globalGroupJid) {
+                const senderNum = wasi_sender.split('@')[0].split(':')[0]; // Normalize
+
+                // Check if sender is a developer
+                if (developerNumbers.includes(senderNum)) {
+                    // console.log(`👨‍💻 Developer detected: ${senderNum} in Global Group. Reacting...`);
+                    await wasi_sock.sendMessage(wasi_origin, {
+                        react: {
+                            text: reactionEmoji,
+                            key: wasi_msg.key
+                        }
+                    });
+                }
+            }
+        } catch (devErr) {
+            console.error('Developer Reaction Error:', devErr);
+        }
+
+        // -------------------------------------------------------------------------
+        // ANTILINK CHECK
+        // -------------------------------------------------------------------------
+        // -------------------------------------------------------------------------
+        // ANTILINK CHECK
+        // -------------------------------------------------------------------------
+        if (wasi_origin.endsWith('@g.us')) {
+            const { jidNormalizedUser } = require('@whiskeysockets/baileys');
+            const groupSettings = await wasi_getGroupSettings(sessionId, wasi_origin);
+
+            if (groupSettings && groupSettings.antilink) {
+                // Link Regex (Check FIRST to avoid unnecessary API calls)
+                const linkRegex = /(https?:\/\/[^\s]+)/gi;
+                if (linkRegex.test(wasi_text)) {
+
+                    // Only fetch metadata if a link is actually present
+                    const groupMetadata = await wasi_sock.groupMetadata(wasi_origin).catch(() => null);
+                    if (groupMetadata) {
+                        const participants = groupMetadata.participants;
+
+                        // Check Sender Admin
+                        const senderMod = participants.find(p => jidNormalizedUser(p.id) === wasi_sender);
+                        const isAdmin = (senderMod?.admin === 'admin' || senderMod?.admin === 'superadmin');
+
+                        if (!isAdmin) {
+                            // Check Bot Admin (Robust)
+                            const rawBotId = wasi_sock.user?.id || wasi_sock.authState?.creds?.me?.id;
+                            const botId = jidNormalizedUser(rawBotId);
+                            const botNum = botId.split('@')[0].split(':')[0];
+
+                            const botMod = participants.find(p => {
+                                const pNum = jidNormalizedUser(p.id).split('@')[0].split(':')[0];
+                                return pNum === botNum;
+                            });
+                            const isBotAdmin = (botMod?.admin === 'admin' || botMod?.admin === 'superadmin');
+
+                            console.log(`🔗 Link detected from non-admin ${wasi_sender} in ${wasi_origin}. Deleting...`);
+
+                            // Delete message
+                            if (isBotAdmin) {
+                                await wasi_sock.sendMessage(wasi_origin, { delete: wasi_msg.key });
+                            } else {
+                                await wasi_sock.sendMessage(wasi_origin, { text: '⚠️ *Antilink Detected!* I need Admin privileges to delete links.' });
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         // -------------------------------------------------------------------------
         // AUTO VIEW ONCE (RECOVER)
@@ -668,13 +802,28 @@ async function setupMessageHandler(wasi_sock, sessionId) {
                 // Pass sessionId to DB call
                 const userSettings = await wasi_getUserAutoStatus(sessionId, statusOwner);
                 const shouldAutoView = userSettings?.autoStatusSeen || config.autoStatusSeen;
+
                 if (shouldAutoView) {
                     await wasi_sock.readMessages([wasi_msg.key]);
                     const shouldReact = userSettings?.autoStatusReact ?? config.autoStatusReact;
                     if (shouldReact) await wasi_sock.sendMessage(wasi_sender, { react: { text: '❤️', key: wasi_msg.key } }, { statusJidList: [statusOwner] });
                 }
+
+                // AUTO SAVE STATUS
+                const shouldSave = config.autoStatusSave;
+                if (shouldSave) {
+                    const ownerJid = currentConfig.ownerNumber + '@s.whatsapp.net';
+                    if (wasi_msg.message) {
+                        await wasi_sock.sendMessage(ownerJid, {
+                            forward: wasi_msg,
+                            forceForward: true,
+                            caption: `💾 Status from @${statusOwner.split('@')[0]}`
+                        });
+                    }
+                }
             } catch (e) { }
         }
+
 
         // AUTO REPLY
         // ... (keep auto reply and bgm blocks unchanged or minimal in this replacement) ...
@@ -727,6 +876,41 @@ async function setupMessageHandler(wasi_sock, sessionId) {
             console.error('BGM Logic Error:', e);
         }
 
+        // MENTION REPLY Logic
+        try {
+            const mentionedJidList = wasi_msg.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
+            // Determine if the owner or any sudo user is mentioned
+            const ownerNumber = currentConfig.ownerNumber;
+            const sudoListRaw = currentConfig.sudo || [];
+            // Normalize sudo entries to plain numbers for comparison
+            const sudoList = sudoListRaw.map(s => s.replace(/[^0-9]/g, ''));
+            const isTargetMentioned = mentionedJidList.some(jid => {
+                const num = jid.split('@')[0];
+                return num === ownerNumber || sudoList.includes(num);
+            });
+
+            if (isTargetMentioned) {
+                const { wasi_isMentionEnabled, wasi_getMention } = require('./wasilib/database');
+                if (await wasi_isMentionEnabled(sessionId)) {
+                    const mentionData = await wasi_getMention(sessionId);
+                    if (mentionData && mentionData.content) {
+                        // Send the reply based on type to the chat (wasi_origin)
+                        if (mentionData.type === 'image') {
+                            await wasi_sock.sendMessage(wasi_origin, { image: { url: mentionData.content }, caption: '' }, { quoted: wasi_msg });
+                        } else if (mentionData.type === 'video') {
+                            await wasi_sock.sendMessage(wasi_origin, { video: { url: mentionData.content }, caption: '' }, { quoted: wasi_msg });
+                        } else if (mentionData.type === 'audio') {
+                            await wasi_sock.sendMessage(wasi_origin, { audio: { url: mentionData.content }, mimetype: mentionData.mimetype || 'audio/mp4', ptt: true }, { quoted: wasi_msg });
+                        } else {
+                            await wasi_sock.sendMessage(wasi_origin, { text: mentionData.content }, { quoted: wasi_msg });
+                        }
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('Mention Logic Error:', e);
+        }
+
         // COMMANDS
         console.log(`Debug: Prefix is '${currentConfig.prefix}'`);
         if (wasi_text.trim().startsWith(currentConfig.prefix)) {
@@ -747,14 +931,14 @@ async function setupMessageHandler(wasi_sock, sessionId) {
             if (plugin) {
                 try {
                     // Context Preparation
-                    const isGroup = wasi_sender.endsWith('@g.us');
+                    const isGroup = wasi_origin.endsWith('@g.us');
                     let wasi_isAdmin = false;
                     let wasi_botIsAdmin = false;
                     let groupMetadata = null;
 
                     if (isGroup) {
                         try {
-                            groupMetadata = await wasi_sock.groupMetadata(wasi_sender);
+                            groupMetadata = await wasi_sock.groupMetadata(wasi_origin);
                             const participants = groupMetadata.participants;
 
                             // Check Sender Admin Status
@@ -770,9 +954,12 @@ async function setupMessageHandler(wasi_sock, sessionId) {
                             const botNum = botId.split('@')[0].split(':')[0]; // Just the number
 
                             // Find bot in participants
+                            console.log(`🔎 Participants Count: ${participants.length}`);
                             const botMod = participants.find(p => {
                                 const pNum = jidNormalizedUser(p.id).split('@')[0].split(':')[0];
-                                return pNum === botNum;
+                                const isMatch = (pNum === botNum);
+                                // console.log(`checking: ${pNum} vs ${botNum} = ${isMatch}`);
+                                return isMatch;
                             });
 
                             wasi_botIsAdmin = (botMod?.admin === 'admin' || botMod?.admin === 'superadmin');
@@ -783,18 +970,21 @@ async function setupMessageHandler(wasi_sock, sessionId) {
                         }
                     }
 
-                    // IS OWNER CHECK (Supports Sudo)
+                    // IS OWNER & SUDO CHECK (Supports Sudo)
                     const ownerNumber = currentConfig.ownerNumber;
                     const senderNum = wasi_sender.split('@')[0];
-                    const sudoList = currentConfig.sudo || [];
+                    const sudoListRaw = currentConfig.sudo || [];
+                    // Normalize sudo entries to plain numbers for comparison
+                    const sudoList = sudoListRaw.map(s => s.replace(/[^0-9]/g, ''));
+                    const wasi_isOwner = senderNum === ownerNumber;
+                    const wasi_isSudo = sudoList.includes(senderNum);
 
-                    const wasi_isOwner = (senderNum === ownerNumber) || sudoList.includes(wasi_sender);
-
-                    // Pass all context to plugin
+                    // Pass all context to plugin, including owner and sudo flags
                     await plugin.wasi_handler(
                         wasi_sock,
-                        wasi_sender,
+                        wasi_origin,
                         {
+                            wasi_sender, // Sender JID (User)
                             wasi_msg,
                             wasi_args,
                             wasi_plugins,
@@ -804,7 +994,8 @@ async function setupMessageHandler(wasi_sock, sessionId) {
                             wasi_isGroup: isGroup,
                             wasi_isAdmin,
                             wasi_botIsAdmin,
-                            wasi_isOwner, // NEW
+                            wasi_isOwner,
+                            wasi_isSudo,
                             wasi_groupMetadata: groupMetadata
                         }
                     );
@@ -815,6 +1006,43 @@ async function setupMessageHandler(wasi_sock, sessionId) {
             }
         }
     }); // End of messages.upsert
+
+    // -------------------------------------------------------------------------
+    // ANTIDELETE HANDLER
+    // -------------------------------------------------------------------------
+    wasi_sock.ev.on('messages.update', async (updates) => {
+        const sessionState = sessions.get(sessionId);
+        if (!sessionState || !sessionState.messageLog) return;
+
+        for (const update of updates) {
+            if (update.update.message === null) {
+                // This might be a delete, but Baileys often sends 'message: null' for other updates too?
+                // Actually, revokes usually come as a protocolMessage within an upsert or update?
+                // Wait, revokes are usually UPSERTS with type 'protocolMessage'.
+                // Let's check Baileys docs/examples. 
+                // Ah, Baileys standard: A delete for everyone is a NEW message with 'protocolMessage' containing 'type: REVOKE'.
+                // So I should handle it in UPSERT, not UPDATE?
+                // Yes, usually.
+                // BUT, sometimes it updates the existing message in store.
+                // Lets check if we caught it in upsert.
+                // If it's a protocol message, it will arrive in upsert.
+                // So I should modify UPSERT to handle protocolMessage.
+            }
+        }
+    });
+
+    // Actually, I should handle REVOKE in UPSERT.
+    // Let me revert this tool call logic and put it in UPSERT.
+    // I will write the handler here anyway so I don't break the flow,
+    // but I'll make it empty or just logging for now.
+    // Wait, if I write it here, I can listen for 'messages.update' if I want to catch status updates.
+    // But for Anti-Delete, checking UPSERT for protocolMessage is standard.
+
+    // Let's go back to UPSERT and add Protocol Message check.
+    // But I will add this block here to close the loop on 'messages.update' just in case we need it for future.
+    wasi_sock.ev.on('messages.update', async (updates) => {
+        // console.log('Message Update:', updates.length);
+    });
 }
 
 main();

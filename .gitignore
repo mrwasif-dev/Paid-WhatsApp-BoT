@@ -22,3 +22,8 @@ scripts/
 docker-compose.yml
 Dockerfile
 .dockerignore
+
+# Agent & Tools
+.agent/
+reset_session.js
+fix_owner.js

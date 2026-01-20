@@ -39,6 +39,7 @@ module.exports = {
                     contextInfo: contextInfo
                 });
             } catch (e) {
+                console.error('Menu Image Send Failed:', e.message); // Log the specific error
                 // Fallback to text if image fails
                 await wasi_sock.sendMessage(wasi_sender, {
                     text: menuText,
