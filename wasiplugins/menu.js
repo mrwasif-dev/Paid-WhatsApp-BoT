@@ -32,14 +32,18 @@ module.exports = {
             };
 
             try {
-                // If there's an image, send as caption
+                // Fetch image as buffer for reliability
+                const axios = require('axios');
+                const response = await axios.get(IMAGE_URL, { responseType: 'arraybuffer', timeout: 8000 });
+                const buffer = Buffer.from(response.data);
+
                 await wasi_sock.sendMessage(wasi_sender, {
-                    image: { url: IMAGE_URL },
+                    image: buffer,
                     caption: menuText,
                     contextInfo: contextInfo
                 });
             } catch (e) {
-                console.error('Menu Image Send Failed:', e.message); // Log the specific error
+                console.error(`Menu Image Fetch Failed (${IMAGE_URL}):`, e.message);
                 // Fallback to text if image fails
                 await wasi_sock.sendMessage(wasi_sender, {
                     text: menuText,

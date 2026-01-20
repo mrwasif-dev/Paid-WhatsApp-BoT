@@ -40,14 +40,18 @@ module.exports = {
         const imageUrl = config.menuImage && config.menuImage.startsWith('http') ? config.menuImage : 'https://i.ibb.co/31z1z8d/invite.png';
 
         try {
+            const axios = require('axios');
+            const response = await axios.get(imageUrl, { responseType: 'arraybuffer', timeout: 8000 });
+            const buffer = Buffer.from(response.data);
+
             await wasi_sock.sendMessage(wasi_sender, {
-                image: { url: imageUrl },
+                image: buffer,
                 caption: wasi_status,
                 mentions: [wasi_sender],
                 contextInfo: contextInfo
             });
         } catch (e) {
-            console.error('Alive Image Error:', e);
+            console.error('Alive Image Fetch Error:', e.message);
             // Fallback to text if image fails
             await wasi_sock.sendMessage(wasi_sender, {
                 text: wasi_status,

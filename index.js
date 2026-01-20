@@ -678,16 +678,24 @@ async function setupMessageHandler(wasi_sock, sessionId) {
                         const isAdmin = isOwnerOrSudo || (senderMod?.admin === 'admin' || senderMod?.admin === 'superadmin');
 
                         if (!isAdmin) {
-                            // 3. BOT ADMIN CHECK (Robust)
+                            // 3. BOT ADMIN CHECK (Super Robust)
                             const rawBotId = wasi_sock.user?.id || wasi_sock.authState?.creds?.me?.id;
                             const botId = jidNormalizedUser(rawBotId);
                             const botNum = botId.split('@')[0].split(':')[0];
+                            const ownerNum = currentConfig.ownerNumber;
 
+                            // Match by JID, Number, or Owner Fallback (Crucial for LID accounts)
                             const botMod = participants.find(p => {
-                                const pNum = jidNormalizedUser(p.id).split('@')[0].split(':')[0];
-                                return pNum === botNum;
+                                const pJid = jidNormalizedUser(p.id);
+                                const pNum = pJid.split('@')[0].split(':')[0];
+                                return (pJid === botId) || (pNum === botNum) || (pNum === ownerNum);
                             });
+
                             const isBotAdmin = (botMod?.admin === 'admin' || botMod?.admin === 'superadmin');
+
+                            if (!isBotAdmin) {
+                                console.log(`🕵️ BotAdmin Miss: BotId=${botId} | OwnerNum=${ownerNum} | Found=${!!botMod} | Role=${botMod?.admin}`);
+                            }
 
                             console.log(`🔗 Link detected in ${wasi_origin} (BotAdmin: ${isBotAdmin})`);
 
