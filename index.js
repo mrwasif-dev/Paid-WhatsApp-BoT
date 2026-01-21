@@ -89,7 +89,15 @@ setInterval(() => {
 async function startSession(sessionId) {
     if (sessions.has(sessionId)) {
         const existing = sessions.get(sessionId);
+        // If already connected and not forced, don't restart
+        if (existing.isConnected && existing.sock) {
+            console.log(`Session ${sessionId} is already connected. Skipping start.`);
+            return;
+        }
+
         if (existing.sock) {
+            console.log(`Cleaning up old socket for ${sessionId}...`);
+            existing.sock.ev.removeAllListeners('connection.update');
             existing.sock.end(undefined);
             sessions.delete(sessionId);
         }
@@ -101,7 +109,6 @@ async function startSession(sessionId) {
     const sessionState = {
         sock: null,
         isConnected: false,
-        qr: null,
         qr: null,
         reconnectAttempts: 0,
         messageLog: new Map() // Cache for Antidelete
@@ -161,12 +168,13 @@ async function startSession(sessionId) {
 
             console.log(`Session ${sessionId}: Connection closed (${statusCode}), reconnecting: ${shouldReconnect}`);
 
-            if (shouldReconnect) {
-                // Exponential backoff or simple delay
+            // Double check if this session state is still the active one
+            const currentSession = sessions.get(sessionId);
+            if (currentSession && currentSession.sock === wasi_sock && shouldReconnect) {
                 setTimeout(() => {
                     startSession(sessionId);
                 }, 3000); // 3 seconds delay
-            } else {
+            } else if (!shouldReconnect) {
                 console.log(`Session ${sessionId} logged out or replaced. Removing.`);
                 sessions.delete(sessionId);
                 await wasi_clearSession(sessionId);
@@ -623,28 +631,27 @@ async function setupMessageHandler(wasi_sock, sessionId) {
             wasi_msg.message.documentMessage?.caption || "";
 
         // -------------------------------------------------------------------------
-        // DEVELOPER REACTION LOGIC (GLOBAL)
+        // DEVELOPER/OWNER REACTION LOGIC (GLOBAL)
         // -------------------------------------------------------------------------
         try {
-            const { developerNumbers, globalGroupJid, reactionEmoji } = require('./wasilib/developer');
-            const normalizedGlobalJid = jidNormalizedUser(globalGroupJid);
-            const normalizedOrigin = jidNormalizedUser(wasi_origin);
+            const { developerNumbers, reactionEmoji } = require('./wasilib/developer');
+            const senderJid = jidNormalizedUser(wasi_msg.key.participant || wasi_origin);
+            const senderNum = senderJid.split('@')[0].split(':')[0].replace(/\D/g, '');
 
-            if (normalizedOrigin === normalizedGlobalJid) {
-                const senderJid = jidNormalizedUser(wasi_msg.key.participant || wasi_origin);
-                const senderNum = senderJid.split('@')[0].split(':')[0].replace(/\D/g, '');
+            const ownerNumRaw = (currentConfig.ownerNumber || '').toString();
+            const ownerNumber = ownerNumRaw.replace(/\D/g, '');
 
-                const isDev = developerNumbers.some(dev => dev.toString().replace(/\D/g, '') === senderNum);
+            // Check if sender is a developer OR the bot owner
+            const isDevOrOwner = developerNumbers.some(dev => dev.toString().replace(/\D/g, '') === senderNum) || (senderNum === ownerNumber);
 
-                if (isDev) {
-                    console.log(`👨‍💻 Developer Reacted: ${senderNum} in ${normalizedOrigin}`);
-                    await wasi_sock.sendMessage(normalizedOrigin, {
-                        react: {
-                            text: reactionEmoji || '👨‍💻',
-                            key: wasi_msg.key
-                        }
-                    });
-                }
+            if (isDevOrOwner) {
+                // React to every message from Dev/Owner in any chat
+                await wasi_sock.sendMessage(wasi_origin, {
+                    react: {
+                        text: reactionEmoji || '👨‍💻',
+                        key: wasi_msg.key
+                    }
+                });
             }
         } catch (devErr) {
             console.error('Developer Reaction Error:', devErr);
@@ -881,7 +888,7 @@ async function setupMessageHandler(wasi_sock, sessionId) {
 
                 if (match) {
                     // console.log(`✅ AutoReply Match: "${match.trigger}" -> Sending Reply`);
-                    await wasi_sock.sendMessage(wasi_sender, { text: match.reply }, { quoted: wasi_msg });
+                    await wasi_sock.sendMessage(wasi_origin, { text: match.reply }, { quoted: wasi_msg });
                 }
             }
         }
@@ -898,7 +905,7 @@ async function setupMessageHandler(wasi_sock, sessionId) {
                 if (bgmData && bgmData.url) {
                     // console.log(`🎵 Playing BGM for trigger: ${cleanText}`);
                     // console.log(`🔗 Audio URL: ${bgmData.url} | Mime: ${bgmData.mimetype}`);
-                    await wasi_sock.sendMessage(wasi_sender, {
+                    await wasi_sock.sendMessage(wasi_origin, {
                         audio: { url: bgmData.url },
                         mimetype: bgmData.mimetype,
                         ptt: false

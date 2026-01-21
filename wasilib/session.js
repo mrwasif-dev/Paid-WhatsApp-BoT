@@ -25,7 +25,7 @@ async function wasi_connectSession(usePairingCode = false, customSessionId = nul
         const v = await fetchLatestWaWebVersion();
         version = v.version;
     } catch (e) {
-        version = [2, 3000, 1015901307];
+        version = [2, 3000, 1017531287];
     }
 
     const socketOptions = {
