@@ -320,7 +320,7 @@ wasi_app.post('/api/config', async (req, res) => {
             await startSession(newConfig.sessionId);
         }
 
-        if (newConfig.mongoDbUrl && newConfig.mongoDbUrl !== oldUrl) {
+        if (newConfig.mongoDbUrl && newConfig.mongoDbUrl.trim() !== "" && newConfig.mongoDbUrl !== oldUrl) {
             config.mongoDbUrl = newConfig.mongoDbUrl;
             console.log('🔗 New MongoDB URL provided. Attempting to connect...');
             const dbResult = await wasi_connectDatabase(newConfig.mongoDbUrl);
@@ -350,60 +350,33 @@ wasi_app.post('/api/config', async (req, res) => {
 
 
 // Pair/Create Session
-// Pair/Create Session
 wasi_app.post('/api/pair', async (req, res) => {
     try {
         const { phone, sessionId: customId } = req.body;
         if (!phone) return res.json({ error: 'Phone number required' });
 
-        // Generate session ID if not provided (e.g. use phone number or random)
         const sessionId = customId || `user_${phone}`;
 
-        // 1. Clear any existing data for this session
+        // 1. Kill and clear any existing session for this ID to prevent conflicts
+        if (sessions.has(sessionId)) {
+            const old = sessions.get(sessionId);
+            if (old.sock) {
+                old.sock.ev.removeAllListeners('connection.update');
+                old.sock.end(undefined);
+            }
+            sessions.delete(sessionId);
+        }
         await wasi_clearSession(sessionId);
 
-        // 2. Start Pairing Flow
-        // We can't reuse startSession directly because we need to call requestPairingCode
-        // So we implement a special pairing flow that eventually transitions to a normal session
-
-        const sessionState = { sock: null, isConnected: false, qr: null };
-        sessions.set(sessionId, sessionState);
-
-        const { wasi_sock, saveCreds } = await wasi_connectSession(true, sessionId);
-        sessionState.sock = wasi_sock;
-
-        // Wait for connection to be ready to request code
-        setTimeout(async () => {
-            if (!wasi_sock.authState.creds.registered) {
-                try {
-                    const code = await wasi_sock.requestPairingCode(phone);
-                    console.log(`Pairing code for ${sessionId}: ${code}`);
-                    // We can return the code now? But this is async inside timeout.
-                    // We need to Promise wrap this.
-                } catch (e) {
-                    console.error('Failed to request code:', e);
-                }
-            }
-        }, 3000);
-
-        // We need a proper promise wrapper for the API response
-        // Let's do it clean:
-
-        // Kill existing socket if any for this ID
-        if (sessions.has(sessionId) && sessions.get(sessionId).sock) {
-            sessions.get(sessionId).sock.end();
-        }
-
+        // 2. Start Pairing Flow with a clean Promise-based approach
+        console.log(`🌀 Initializing pairing for: ${sessionId} (${phone})`);
         const code = await startPairingSession(sessionId, phone);
-
-        // Register session immediately or wait for connection?
-        // Better to wait for connection ('open' event handles registration)
 
         res.json({ code, sessionId });
 
     } catch (e) {
         console.error('Pairing error:', e);
-        res.json({ error: e.message });
+        res.json({ error: e.message || 'Failed to generate code. Try again.' });
     }
 });
 
@@ -416,64 +389,76 @@ async function startPairingSession(sessionId, phone) {
             sessions.set(sessionId, sessionState);
 
             let codeResolved = false;
+            let requestLock = false;
+
+            const requestCode = async (attempt = 1) => {
+                if (codeResolved || requestLock) return;
+                requestLock = true;
+
+                try {
+                    // Small delay for socket stabilization
+                    await new Promise(r => setTimeout(r, 4000));
+
+                    if (wasi_sock.authState.creds.registered) {
+                        codeResolved = true;
+                        return resolve('ALREADY_REGISTERED');
+                    }
+
+                    const code = await wasi_sock.requestPairingCode(phone);
+                    console.log(`✅ Pairing code for ${sessionId}: ${code}`);
+                    codeResolved = true;
+                    resolve(code);
+                } catch (e) {
+                    console.error(`❌ Pairing request failed (Attempt ${attempt}):`, e.message);
+
+                    // If connection closed (428) or other transient error, retry once after 3s
+                    if (attempt < 2 && (e.message.includes('Closed') || e.message.includes('428'))) {
+                        requestLock = false;
+                        setTimeout(() => requestCode(attempt + 1), 3000);
+                    } else {
+                        reject(e);
+                    }
+                } finally {
+                    requestLock = false;
+                }
+            };
 
             wasi_sock.ev.on('connection.update', async (update) => {
                 const { connection, lastDisconnect, qr } = update;
 
-                if (qr && !codeResolved && !wasi_sock.authState.creds.registered) {
-                    codeResolved = true;
-                    try {
-                        // Wait a tiny bit for stability
-                        await new Promise(r => setTimeout(r, 2000));
-                        const code = await wasi_sock.requestPairingCode(phone);
-                        console.log(`Pairing code for ${sessionId}: ${code}`);
-                        resolve(code);
-                    } catch (e) {
-                        console.error('Failed to request code:', e);
-                        reject(e);
-                    }
+                // When QR or pairing eligibility is detected
+                if (qr && !codeResolved) {
+                    requestCode();
                 }
 
                 if (connection === 'open') {
-                    console.log(`Session ${sessionId} paired successfully!`);
+                    console.log(`✨ Session ${sessionId} paired and open!`);
                     sessionState.isConnected = true;
                     await wasi_registerSession(sessionId);
                 }
+
                 if (connection === 'close') {
                     const statusCode = (lastDisconnect?.error instanceof Boom) ?
                         lastDisconnect.error.output.statusCode : 500;
-                    if (statusCode !== DisconnectReason.loggedOut) {
-                        // If we haven't resolved code yet, we might want to retry pairing logic?
-                        // Or just let startSession handle reconnect.
-                        if (!codeResolved) {
-                            // Retrying pairing logic might be infinite loop if we don't be careful.
-                            // For now, let it fail so user can retry API call.
-                        } else {
-                            startSession(sessionId);
-                        }
+
+                    sessionState.isConnected = false;
+
+                    if (statusCode !== DisconnectReason.loggedOut && !codeResolved) {
+                        // Transient close during pairing - will be handled by Baileys reconnect or manual retry
+                        console.log(`⚠️ Pairing socket closed (${statusCode}). Ready for retry.`);
                     }
                 }
             });
+
             wasi_sock.ev.on('creds.update', saveCreds);
 
-            // Fallback: If QR event doesn't fire within 6 seconds, try checking eligibility and requesting
-            setTimeout(async () => {
-                if (!codeResolved && !wasi_sock.authState.creds.registered) {
-                    console.log(`Fallback: Requesting code for ${sessionId} without explicit QR event...`);
-                    codeResolved = true;
-                    try {
-                        const code = await wasi_sock.requestPairingCode(phone);
-                        console.log(`Pairing code for ${sessionId}: ${code}`);
-                        resolve(code);
-                    } catch (e) {
-                        console.error('Fallback failed to request code:', e);
-                        reject(e);
-                    }
+            // Fallback: If no QR event within 8s, force the request
+            setTimeout(() => {
+                if (!codeResolved) {
+                    console.log(`🕒 Fallback: Forcing pairing request for ${sessionId}`);
+                    requestCode();
                 }
-            }, 6000);
-
-            // Removed fixed timeout
-
+            }, 8000);
 
         } catch (e) {
             reject(e);
