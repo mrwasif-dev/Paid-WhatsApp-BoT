@@ -8,7 +8,8 @@ module.exports = {
     wasi_handler: async (wasi_sock, wasi_sender, context) => {
         const { wasi_args } = context;
 
-        if (!wasi_args) {
+        const query = wasi_args.join(' ');
+        if (!query) {
             return wasi_sock.sendMessage(wasi_sender, {
                 text: '❌ *Please provide a city name!*\n\nUsage: `.weather London`'
             });
@@ -16,7 +17,7 @@ module.exports = {
 
         try {
             // Use wttr.in API (free, no API key needed)
-            const url = `https://wttr.in/${encodeURIComponent(wasi_args)}?format=j1`;
+            const url = `https://wttr.in/${encodeURIComponent(query)}?format=j1`;
             const response = await axios.get(url, { timeout: 10000 });
             const data = response.data;
 

@@ -18,7 +18,7 @@ module.exports = {
         const currentSettings = await wasi_getUserAutoStatus(wasi_sender);
         const isCurrentlyEnabled = currentSettings?.autoTyping || false;
 
-        const arg = wasi_args?.toLowerCase()?.trim();
+        const arg = wasi_args[0]?.toLowerCase()?.trim();
 
         if (arg === 'on' || arg === 'enable') {
             await wasi_setUserAutoStatus(wasi_sender, { autoTyping: true, autoRecording: false });

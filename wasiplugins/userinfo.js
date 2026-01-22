@@ -9,7 +9,7 @@ module.exports = {
     wasi_handler: async (wasi_sock, wasi_sender, context) => {
         const { wasi_args } = context;
 
-        if (!wasi_args) {
+        if (!wasi_args || wasi_args.length === 0) {
             return wasi_sock.sendMessage(wasi_sender, {
                 text: '❌ *Please provide a phone number!*\n\nUsage: `.userinfo 03xxxxxxxxx`'
             });

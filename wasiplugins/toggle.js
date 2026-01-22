@@ -16,7 +16,7 @@ module.exports = {
             return wasi_sock.sendMessage(wasi_sender, { text: '❌ Usage: .toggle <command> on/off' });
         }
 
-        const [cmd, status] = wasi_args.split(' ');
+        const [cmd, status] = wasi_args;
 
         if (!wasi_plugins.has(cmd)) {
             return wasi_sock.sendMessage(wasi_sender, { text: `❌ Command ${cmd} does not exist.` });
