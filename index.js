@@ -932,50 +932,88 @@ async function setupMessageHandler(wasi_sock, sessionId) {
         }
         */
 
-        // AUTO STATUS SEEN
-        if (wasi_origin === 'status@broadcast') {
+        // -------------------------------------------------------------------------
+        // AUTO STATUS SEEN (Enhanced based on Baileys)
+        // -------------------------------------------------------------------------
+        const isStatusMessage = wasi_origin === 'status@broadcast' || wasi_msg.key.remoteJid === 'status@broadcast';
+
+        if (isStatusMessage && wasi_msg.key.participant) {
             try {
                 const statusOwner = jidNormalizedUser(wasi_msg.key.participant);
                 const { wasi_getUserAutoStatus } = require('./wasilib/database');
 
-                // Get user-specific settings if any, otherwise use session-specific config
-                const userSettings = await wasi_getUserAutoStatus(sessionId, statusOwner);
-                const shouldAutoView = userSettings?.autoStatusSeen ?? currentConfig.autoStatusSeen;
+                // Skip if status is from bot itself
+                if (statusOwner === meJid) {
+                    console.log('📌 Skipping own status');
+                } else {
+                    // Get user-specific settings if any, otherwise use session-specific config
+                    const userSettings = await wasi_getUserAutoStatus(sessionId, statusOwner);
+                    const shouldAutoView = userSettings?.autoStatusSeen ?? currentConfig.autoStatusSeen;
 
-                if (shouldAutoView) {
-                    console.log(`👁️ Status Seen: ${statusOwner} [${sessionId}]`);
-                    await wasi_sock.readMessages([wasi_msg.key]);
+                    if (shouldAutoView) {
+                        console.log(`👁️ Auto-viewing status from: ${statusOwner}`);
 
-                    const shouldReact = userSettings?.autoStatusReact ?? currentConfig.autoStatusReact;
-                    if (shouldReact) {
-                        const emojiList = currentConfig.autoStatusEmojis || ['❤️', '🧡', '💛', '💚', '💙', '💜', '🌈', '🔥', '✨', '💯'];
-                        const randomEmoji = emojiList[Math.floor(Math.random() * emojiList.length)];
-                        await wasi_sock.sendMessage('status@broadcast', {
-                            react: { text: randomEmoji, key: wasi_msg.key }
-                        }, {
-                            statusJidList: [statusOwner]
-                        });
-                        console.log(`❤️ Status Reacted: ${randomEmoji} to ${statusOwner}`);
+                        // Read the status message (mark as seen)
+                        try {
+                            await wasi_sock.readMessages([wasi_msg.key]);
+                            console.log(`✅ Status marked as seen`);
+                        } catch (readErr) {
+                            console.error('Failed to read status:', readErr.message);
+                        }
+
+                        // Auto React to Status
+                        const shouldReact = userSettings?.autoStatusReact ?? currentConfig.autoStatusReact;
+                        if (shouldReact) {
+                            try {
+                                const emojiList = currentConfig.autoStatusEmojis || ['❤️', '🧡', '💛', '💚', '💙', '💜', '🌈', '🔥', '✨', '💯'];
+                                const randomEmoji = emojiList[Math.floor(Math.random() * emojiList.length)];
+
+                                await wasi_sock.sendMessage('status@broadcast', {
+                                    react: { text: randomEmoji, key: wasi_msg.key }
+                                }, {
+                                    statusJidList: [statusOwner]
+                                });
+                                console.log(`❤️ Status Reacted with: ${randomEmoji}`);
+                            } catch (reactErr) {
+                                console.error('Failed to react to status:', reactErr.message);
+                            }
+                        }
                     }
-                }
 
-                // AUTO SAVE STATUS
-                const shouldSave = currentConfig.autoStatusSave;
-                if (shouldSave) {
-                    const ownerJid = (currentConfig.ownerNumber || '').replace(/\D/g, '') + '@s.whatsapp.net';
-                    if (wasi_msg.message && ownerJid !== '@s.whatsapp.net') {
-                        console.log(`💾 Saving Status from ${statusOwner} to Owner`);
-                        await wasi_sock.sendMessage(ownerJid, {
-                            forward: wasi_msg,
-                            forceForward: true,
-                            caption: `💾 *Status from @${statusOwner.split('@')[0]}*`,
-                            mentions: [statusOwner]
-                        });
+                    // AUTO SAVE STATUS (Forward to Owner)
+                    const shouldSave = currentConfig.autoStatusSave;
+                    if (shouldSave) {
+                        const ownerNumber = (currentConfig.ownerNumber || '').replace(/\D/g, '');
+                        const ownerJid = ownerNumber + '@s.whatsapp.net';
+
+                        if (wasi_msg.message && ownerNumber) {
+                            try {
+                                console.log(`💾 Saving status from ${statusOwner} to owner`);
+
+                                // Send info message first
+                                await wasi_sock.sendMessage(ownerJid, {
+                                    text: `📸 *Status from @${statusOwner.split('@')[0]}*\n⏰ ${new Date().toLocaleString()}`,
+                                    mentions: [statusOwner]
+                                });
+
+                                // Forward the actual status
+                                await wasi_sock.sendMessage(ownerJid, {
+                                    forward: wasi_msg
+                                });
+
+                                console.log(`✅ Status saved to owner`);
+                            } catch (saveErr) {
+                                console.error('Failed to save status:', saveErr.message);
+                            }
+                        }
                     }
                 }
             } catch (e) {
-                console.error('Status handling error:', e);
+                console.error('Status handling error:', e.message);
             }
+
+            // Return early for status messages (don't process as commands)
+            return;
         }
 
 
