@@ -2,35 +2,67 @@ const { wasi_updateGroupSettings, wasi_getGroupSettings } = require('../wasilib/
 
 module.exports = {
     name: 'antidelete',
-    description: 'Enable or disable Anti-Delete for this group.',
-    aliases: ['anticall'], // optional alias? maybe 'antidel'
+    description: 'Advanced Anti-Delete system - recover deleted messages',
+    aliases: ['antidel', 'recover'],
+    category: 'Group',
     wasi_handler: async (sock, from, context) => {
-        const { wasi_args, wasi_isAdmin, wasi_isOwner, wasi_isSudo, wasi_isGroup, sessionId } = context;
+        const { wasi_args, wasi_isAdmin, wasi_isOwner, wasi_isSudo, wasi_isGroup, sessionId, wasi_msg } = context;
 
-        if (!wasi_isGroup) {
-            // Anti-delete can work in private chats too, but let's restrict to groups for now or check args
-            // Usually requested for groups.
-            // Let's support both if user wants? But logic in index.js checks 'groupSettings'.
-            // For PMs we would need 'userSettings' or handle it differently.
-            // Index.js implementation uses 'wasi_getGroupSettings' which keys by JID.
-            // So it CAN work for PMs if we allow it here.
-        }
-
+        // Allow in both groups and PMs (for personal anti-delete)
         if (wasi_isGroup && !wasi_isAdmin && !wasi_isOwner && !wasi_isSudo) {
             return await sock.sendMessage(from, { text: '❌ You need to be an Admin to use this command.' });
         }
 
         const action = wasi_args[0]?.toLowerCase();
+        const current = await wasi_getGroupSettings(sessionId, from) || {};
 
-        if (!['on', 'off'].includes(action)) {
-            const current = await wasi_getGroupSettings(sessionId, from);
-            const status = current ? (current.antidelete ? 'ON' : 'OFF') : 'OFF';
-            return await sock.sendMessage(from, { text: `⚠️ Use: *.antidelete on* or *.antidelete off*\n🗑️ Current Status: *${status}*` });
+        // Show status if no args
+        if (!action) {
+            const status = current.antidelete ? '🟢 ON' : '🔴 OFF';
+            const destination = current.antideleteDestination || 'group';
+
+            let text = `🗑️ *ANTI-DELETE SETTINGS*\n\n`;
+            text += `📌 *Status:* ${status}\n`;
+            text += `📍 *Destination:* ${destination}\n\n`;
+            text += `*Available Commands:*\n`;
+            text += `• \`.antidelete on\` - Enable\n`;
+            text += `• \`.antidelete off\` - Disable\n`;
+            text += `• \`.antidelete group\` - Send recovered messages to group\n`;
+            text += `• \`.antidelete owner\` - Send recovered messages to owner only\n`;
+            text += `• \`.antidelete both\` - Send to both group and owner\n\n`;
+            text += `_When enabled, deleted messages will be recovered and shown._`;
+
+            return await sock.sendMessage(from, { text });
         }
 
-        const isEnabled = action === 'on';
-        await wasi_updateGroupSettings(sessionId, from, { antidelete: isEnabled });
+        // On/Off
+        if (action === 'on') {
+            await wasi_updateGroupSettings(sessionId, from, { antidelete: true });
+            return await sock.sendMessage(from, { text: `🗑️ *Anti-Delete* has been *ENABLED*.\n\nDeleted messages will be recovered.` });
+        }
 
-        return await sock.sendMessage(from, { text: `🗑️ *Anti-Delete* has been turned *${action.toUpperCase()}* for this chat.` });
+        if (action === 'off') {
+            await wasi_updateGroupSettings(sessionId, from, { antidelete: false });
+            return await sock.sendMessage(from, { text: `🗑️ *Anti-Delete* has been *DISABLED*.` });
+        }
+
+        // Destination settings
+        if (action === 'group' || action === 'chat') {
+            await wasi_updateGroupSettings(sessionId, from, { antideleteDestination: 'group' });
+            return await sock.sendMessage(from, { text: `📍 Anti-Delete destination set to *GROUP*.\n\nRecovered messages will be sent to this chat.` });
+        }
+
+        if (action === 'owner' || action === 'dm' || action === 'private') {
+            await wasi_updateGroupSettings(sessionId, from, { antideleteDestination: 'owner' });
+            return await sock.sendMessage(from, { text: `📍 Anti-Delete destination set to *OWNER*.\n\nRecovered messages will be sent to the bot owner privately.` });
+        }
+
+        if (action === 'both' || action === 'all') {
+            await wasi_updateGroupSettings(sessionId, from, { antideleteDestination: 'both' });
+            return await sock.sendMessage(from, { text: `📍 Anti-Delete destination set to *BOTH*.\n\nRecovered messages will be sent to both group and owner.` });
+        }
+
+        // Unknown action
+        return await sock.sendMessage(from, { text: `❌ Unknown action. Use \`.antidelete\` to see available options.` });
     }
 };

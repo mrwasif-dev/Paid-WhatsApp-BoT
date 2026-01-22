@@ -68,8 +68,16 @@ const wasi_botConfigSchema = new mongoose.Schema({
 
 const wasi_groupSettingsSchema = new mongoose.Schema({
     jid: { type: String, required: true, unique: true },
+    // Antilink settings
     antilink: { type: Boolean, default: false },
+    antilinkMode: { type: String, default: 'delete' }, // warn, delete, remove (kick)
+    antilinkWarnings: { type: Map, of: Number, default: {} }, // user JID -> warning count
+    antilinkMaxWarnings: { type: Number, default: 3 },
+    antilinkWhitelist: { type: [String], default: [] }, // Whitelisted link patterns
+    // Antidelete settings
     antidelete: { type: Boolean, default: false },
+    antideleteDestination: { type: String, default: 'group' }, // group, owner, both
+    // Other settings
     welcome: { type: Boolean, default: false },
     goodbye: { type: Boolean, default: false }
 });

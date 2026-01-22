@@ -600,7 +600,7 @@ async function setupMessageHandler(wasi_sock, sessionId) {
         }
 
         // -------------------------------------------------------------------------
-        // ANTIDELETE CHECK (Protocol Message)
+        // ADVANCED ANTIDELETE CHECK (Protocol Message)
         // -------------------------------------------------------------------------
         if (wasi_msg.message.protocolMessage && wasi_msg.message.protocolMessage.type === 0) {
             const keyToRevoke = wasi_msg.message.protocolMessage.key;
@@ -608,13 +608,55 @@ async function setupMessageHandler(wasi_sock, sessionId) {
                 const deletedMsg = sessionState.messageLog.get(keyToRevoke.id);
                 if (deletedMsg) {
                     const chatJid = wasi_msg.key.remoteJid;
+                    const { wasi_getGroupSettings } = require('./wasilib/database');
                     const groupSettings = await wasi_getGroupSettings(sessionId, chatJid);
+
                     if (groupSettings && groupSettings.antidelete) {
-                        console.log(`🗑️ Antidelete triggered in ${chatJid}`);
-                        // Resend the message
+                        const destination = groupSettings.antideleteDestination || 'group';
+                        const deleterJid = wasi_msg.key.participant || wasi_msg.key.remoteJid;
+                        const deleterNum = deleterJid.split('@')[0].split(':')[0];
+                        const originalSender = deletedMsg.key.participant || deletedMsg.key.remoteJid;
+                        const originalNum = originalSender.split('@')[0].split(':')[0];
+
+                        console.log(`🗑️ Antidelete triggered in ${chatJid} (dest: ${destination})`);
+
+                        // Build info message
+                        const isGroup = chatJid.endsWith('@g.us');
+                        let infoText = `🗑️ *DELETED MESSAGE RECOVERED*\n\n`;
+                        infoText += `👤 *Original Sender:* @${originalNum}\n`;
+                        if (isGroup && deleterJid !== originalSender) {
+                            infoText += `🗑️ *Deleted By:* @${deleterNum}\n`;
+                        }
+                        infoText += `⏰ *Time:* ${new Date().toLocaleString()}\n`;
+                        if (isGroup) {
+                            infoText += `📍 *Group:* ${chatJid}\n`;
+                        }
+                        infoText += `\n📝 *Message Content Below:*`;
+
+                        const mentions = [originalSender];
+                        if (deleterJid !== originalSender) mentions.push(deleterJid);
+
                         try {
-                            // Forward the deleted message
-                            await wasi_sock.sendMessage(chatJid, { forward: deletedMsg }, { quoted: wasi_msg });
+                            // Send to group
+                            if (destination === 'group' || destination === 'both') {
+                                await wasi_sock.sendMessage(chatJid, {
+                                    text: infoText,
+                                    mentions: mentions
+                                });
+                                await wasi_sock.sendMessage(chatJid, { forward: deletedMsg });
+                            }
+
+                            // Send to owner
+                            if (destination === 'owner' || destination === 'both') {
+                                const ownerJid = (currentConfig.ownerNumber || '').replace(/\D/g, '') + '@s.whatsapp.net';
+                                if (ownerJid !== '@s.whatsapp.net') {
+                                    await wasi_sock.sendMessage(ownerJid, {
+                                        text: infoText,
+                                        mentions: mentions
+                                    });
+                                    await wasi_sock.sendMessage(ownerJid, { forward: deletedMsg });
+                                }
+                            }
                         } catch (e) {
                             console.error('Antidelete Resend Failed:', e);
                         }
@@ -667,64 +709,117 @@ async function setupMessageHandler(wasi_sock, sessionId) {
         }
 
         // -------------------------------------------------------------------------
-        // ANTILINK CHECK
+        // ADVANCED ANTILINK CHECK
         // -------------------------------------------------------------------------
-        // -------------------------------------------------------------------------
-        // ANTILINK CHECK
-        // -------------------------------------------------------------------------
-        if (wasi_origin.endsWith('@g.us')) {
-            const { jidNormalizedUser } = require('@whiskeysockets/baileys');
+        if (wasi_origin.endsWith('@g.us') && wasi_text) {
+            const { wasi_getGroupSettings, wasi_updateGroupSettings } = require('./wasilib/database');
             const groupSettings = await wasi_getGroupSettings(sessionId, wasi_origin);
 
             if (groupSettings && groupSettings.antilink) {
-                // Link Regex (Check FIRST to avoid unnecessary API calls)
-                const linkRegex = /(https?:\/\/[^\s]+)/gi;
-                if (linkRegex.test(wasi_text)) {
+                // Link Regex
+                const linkRegex = /(https?:\/\/[^\s]+|wa\.me\/[^\s]+|chat\.whatsapp\.com\/[^\s]+)/gi;
+                const links = wasi_text.match(linkRegex);
 
-                    // Only fetch metadata if a link is actually present
-                    const groupMetadata = await wasi_sock.groupMetadata(wasi_origin).catch(() => null);
-                    if (groupMetadata) {
-                        const participants = groupMetadata.participants;
+                if (links && links.length > 0) {
+                    // Check whitelist
+                    const whitelist = groupSettings.antilinkWhitelist || [];
+                    const isWhitelisted = links.every(link => {
+                        return whitelist.some(domain => link.toLowerCase().includes(domain.toLowerCase()));
+                    });
 
-                        // 1. OWNER & SUDO BYPASS
-                        const ownerNumber = currentConfig.ownerNumber;
-                        const sudoListRaw = currentConfig.sudo || [];
-                        const sudoList = sudoListRaw.map(s => s.replace(/[^0-9]/g, ''));
-                        const senderNum = wasi_sender.split('@')[0].split(':')[0];
+                    if (!isWhitelisted) {
+                        // Fetch metadata for admin checks
+                        const groupMetadata = await wasi_sock.groupMetadata(wasi_origin).catch(() => null);
+                        if (groupMetadata) {
+                            const participants = groupMetadata.participants;
 
-                        const isOwnerOrSudo = (senderNum === ownerNumber) || sudoList.includes(senderNum);
+                            // Owner/Sudo bypass
+                            const ownerNumber = (currentConfig.ownerNumber || '').replace(/\D/g, '');
+                            const sudoListRaw = currentConfig.sudo || [];
+                            const sudoList = sudoListRaw.map(s => s.toString().replace(/\D/g, ''));
+                            const senderNum = wasi_sender.split('@')[0].split(':')[0].replace(/\D/g, '');
 
-                        // 2. SENDER ADMIN CHECK
-                        const senderMod = participants.find(p => jidNormalizedUser(p.id) === wasi_sender);
-                        const isAdmin = isOwnerOrSudo || (senderMod?.admin === 'admin' || senderMod?.admin === 'superadmin');
+                            const isOwnerOrSudo = (senderNum === ownerNumber) || sudoList.includes(senderNum);
 
-                        if (!isAdmin) {
-                            // 3. BOT ADMIN CHECK (Super Robust)
-                            const me = wasi_sock.user || wasi_sock.authState?.creds?.me;
-                            const botJids = new Set([
-                                jidNormalizedUser(me?.id),
-                                jidNormalizedUser(me?.jid),
-                                jidNormalizedUser(me?.lid),
-                                jidNormalizedUser(currentConfig.ownerNumber + '@s.whatsapp.net')
-                            ].filter(Boolean));
+                            // Sender admin check
+                            const senderMod = participants.find(p => jidNormalizedUser(p.id) === wasi_sender);
+                            const isSenderAdmin = isOwnerOrSudo || (senderMod?.admin === 'admin' || senderMod?.admin === 'superadmin');
 
-                            const botNumbers = new Set();
-                            botJids.forEach(j => botNumbers.add(j.split('@')[0].split(':')[0]));
+                            if (!isSenderAdmin) {
+                                // Bot admin check
+                                const me = wasi_sock.user || wasi_sock.authState?.creds?.me;
+                                const botJidsLocal = new Set([
+                                    jidNormalizedUser(me?.id),
+                                    jidNormalizedUser(me?.jid),
+                                    jidNormalizedUser(me?.lid)
+                                ].filter(Boolean));
 
-                            const botMod = participants.find(p => {
-                                const pJid = jidNormalizedUser(p.id);
-                                const pNum = pJid.split('@')[0].split(':')[0];
-                                return botJids.has(pJid) || botNumbers.has(pNum);
-                            });
+                                const botMod = participants.find(p => botJidsLocal.has(jidNormalizedUser(p.id)));
+                                const isBotAdmin = (botMod?.admin === 'admin' || botMod?.admin === 'superadmin');
 
-                            const isBotAdmin = (botMod?.admin === 'admin' || botMod?.admin === 'superadmin');
-                            // console.log(`🔗 Link detected in ${wasi_origin} (BotAdmin: ${isBotAdmin})`);
+                                const mode = groupSettings.antilinkMode || 'delete';
+                                const maxWarnings = groupSettings.antilinkMaxWarnings || 3;
+                                let warnings = groupSettings.antilinkWarnings || {};
+                                // Convert Map to object if needed
+                                if (warnings instanceof Map) {
+                                    warnings = Object.fromEntries(warnings);
+                                }
+                                const userWarnings = (warnings[wasi_sender] || 0) + 1;
 
-                            // Delete message
-                            if (isBotAdmin) {
-                                await wasi_sock.sendMessage(wasi_origin, { delete: wasi_msg.key });
-                            } else {
-                                await wasi_sock.sendMessage(wasi_origin, { text: '⚠️ *Antilink Detected!* I need Admin privileges to delete links.' });
+                                console.log(`🔗 Antilink triggered: mode=${mode}, warnings=${userWarnings}/${maxWarnings}`);
+
+                                if (mode === 'warn') {
+                                    // Update warning count
+                                    warnings[wasi_sender] = userWarnings;
+                                    await wasi_updateGroupSettings(sessionId, wasi_origin, { antilinkWarnings: warnings });
+
+                                    if (userWarnings >= maxWarnings) {
+                                        // Max warnings reached - take action
+                                        if (isBotAdmin) {
+                                            await wasi_sock.sendMessage(wasi_origin, { delete: wasi_msg.key });
+                                            await wasi_sock.groupParticipantsUpdate(wasi_origin, [wasi_sender], 'remove');
+                                            await wasi_sock.sendMessage(wasi_origin, {
+                                                text: `🚫 *@${senderNum}* has been removed for sending links!\n\n⚠️ Warnings: ${userWarnings}/${maxWarnings}`,
+                                                mentions: [wasi_sender]
+                                            });
+                                            // Reset warnings for this user
+                                            delete warnings[wasi_sender];
+                                            await wasi_updateGroupSettings(sessionId, wasi_origin, { antilinkWarnings: warnings });
+                                        }
+                                    } else {
+                                        // Delete and warn
+                                        if (isBotAdmin) {
+                                            await wasi_sock.sendMessage(wasi_origin, { delete: wasi_msg.key });
+                                        }
+                                        await wasi_sock.sendMessage(wasi_origin, {
+                                            text: `⚠️ *@${senderNum}* Links are not allowed!\n\n⚡ Warning: ${userWarnings}/${maxWarnings}\n\n_Next violation may result in removal._`,
+                                            mentions: [wasi_sender]
+                                        });
+                                    }
+                                } else if (mode === 'delete') {
+                                    // Just delete the message
+                                    if (isBotAdmin) {
+                                        await wasi_sock.sendMessage(wasi_origin, { delete: wasi_msg.key });
+                                        await wasi_sock.sendMessage(wasi_origin, {
+                                            text: `🛡️ Link deleted from @${senderNum}`,
+                                            mentions: [wasi_sender]
+                                        });
+                                    } else {
+                                        await wasi_sock.sendMessage(wasi_origin, { text: '⚠️ *Antilink:* I need Admin privileges to delete links.' });
+                                    }
+                                } else if (mode === 'remove' || mode === 'kick') {
+                                    // Delete and kick immediately
+                                    if (isBotAdmin) {
+                                        await wasi_sock.sendMessage(wasi_origin, { delete: wasi_msg.key });
+                                        await wasi_sock.groupParticipantsUpdate(wasi_origin, [wasi_sender], 'remove');
+                                        await wasi_sock.sendMessage(wasi_origin, {
+                                            text: `🚫 *@${senderNum}* has been removed for sending links!`,
+                                            mentions: [wasi_sender]
+                                        });
+                                    } else {
+                                        await wasi_sock.sendMessage(wasi_origin, { text: '⚠️ *Antilink:* I need Admin privileges to remove users.' });
+                                    }
+                                }
                             }
                         }
                     }
