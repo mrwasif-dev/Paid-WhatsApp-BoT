@@ -7,7 +7,7 @@ module.exports = {
     desc: 'Toggle auto typing indicator',
     ownerOnly: true, // Only owner can use this command
     wasi_handler: async (wasi_sock, wasi_sender, context) => {
-        const { wasi_args } = context;
+        const { wasi_args, sessionId } = context;
 
         if (!wasi_isDbConnected()) {
             return wasi_sock.sendMessage(wasi_sender, {
@@ -15,20 +15,20 @@ module.exports = {
             });
         }
 
-        const currentSettings = await wasi_getUserAutoStatus(wasi_sender);
+        const currentSettings = await wasi_getUserAutoStatus(sessionId, wasi_sender);
         const isCurrentlyEnabled = currentSettings?.autoTyping || false;
 
         const arg = wasi_args[0]?.toLowerCase()?.trim();
 
         if (arg === 'on' || arg === 'enable') {
-            await wasi_setUserAutoStatus(wasi_sender, { autoTyping: true, autoRecording: false });
+            await wasi_setUserAutoStatus(sessionId, wasi_sender, { autoTyping: true, autoRecording: false });
             return wasi_sock.sendMessage(wasi_sender, {
                 text: '✅ *Auto Typing Enabled!*\n\n⌨️ Bot will show "typing..." before responding to you.'
             });
         }
 
         if (arg === 'off' || arg === 'disable') {
-            await wasi_setUserAutoStatus(wasi_sender, { autoTyping: false });
+            await wasi_setUserAutoStatus(sessionId, wasi_sender, { autoTyping: false });
             return wasi_sock.sendMessage(wasi_sender, {
                 text: '❌ *Auto Typing Disabled!*'
             });

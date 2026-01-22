@@ -71,17 +71,17 @@ async function wasi_uploadToPomf(buffer, filename = 'file') {
 }
 
 // 3. Main Upload Function (Universal)
-// Strategy: Qu.ax -> Pomf -> Catbox
+// Strategy: Catbox (most reliable) -> Pomf -> Qu.ax
 async function wasi_uploadMedia(buffer, filename = 'media') {
     try {
-        return await wasi_uploadToQuax(buffer, filename);
+        return await wasi_uploadToCatbox(buffer, filename);
     } catch (e) {
-        console.log('Qu.ax failed, trying Pomf...');
+        console.log('Catbox failed, trying Pomf...');
         try {
             return await wasi_uploadToPomf(buffer, filename);
         } catch (e2) {
-            console.log('Pomf failed, falling back to Catbox...');
-            return await wasi_uploadToCatbox(buffer, filename);
+            console.log('Pomf failed, trying Qu.ax...');
+            return await wasi_uploadToQuax(buffer, filename);
         }
     }
 }

@@ -838,7 +838,7 @@ async function setupMessageHandler(wasi_sock, sessionId) {
         */
 
         // AUTO STATUS SEEN
-        if (wasi_sender === 'status@broadcast') {
+        if (wasi_origin === 'status@broadcast') {
             try {
                 const statusOwner = jidNormalizedUser(wasi_msg.key.participant);
                 const { wasi_getUserAutoStatus } = require('./wasilib/database');
@@ -1081,6 +1081,20 @@ async function setupMessageHandler(wasi_sock, sessionId) {
 
                     // EXECUTE
                     console.log(`🚀 Executing [${wasi_cmd_input}] for ${normSenderJid}`);
+
+                    // AUTO TYPING / RECORDING PRESENCE (based on Baileys API)
+                    try {
+                        const { wasi_getUserAutoStatus } = require('./wasilib/database');
+                        const userSettings = await wasi_getUserAutoStatus(sessionId, normSenderJid);
+                        if (userSettings?.autoTyping) {
+                            await wasi_sock.sendPresenceUpdate('composing', wasi_origin);
+                        } else if (userSettings?.autoRecording) {
+                            await wasi_sock.sendPresenceUpdate('recording', wasi_origin);
+                        }
+                    } catch (presErr) {
+                        // Silently ignore presence errors
+                    }
+
                     await plugin.wasi_handler(wasi_sock, wasi_origin, {
                         wasi_sender: normSenderJid,
                         wasi_msg,
