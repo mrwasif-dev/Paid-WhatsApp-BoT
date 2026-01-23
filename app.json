@@ -3,7 +3,7 @@
     "template": "https://github.com/Itxxwasi/WASI-MD-V7",
     "description": "WASI-MD WhatsApp Bot - A powerful modular WhatsApp bot",
     "repository": "https://github.com/Itxxwasi/WASI-MD-V7",
-    "logo": "https://graph.org/file/7c6999908a8df07400d41.jpg",
+    "logo": "https://files.catbox.moe/ifruw6.jpg",
     "keywords": [
         "whatsapp",
         "bot",
@@ -58,6 +58,14 @@
         "FONT_STYLE": {
             "description": "Font style for messages (original/bold/italic)",
             "value": "original"
+        },
+        "MENU_IMAGE_ASSET": {
+            "description": "Use local assets folder for menu images/videos (true/false)",
+            "value": "false"
+        },
+        "MENU_IMAGE_URL": {
+            "description": "Use URL for menu image (true/false)",
+            "value": "true"
         },
         "MENU_STYLE": {
             "description": "Menu style (classic/modern/minimal)",

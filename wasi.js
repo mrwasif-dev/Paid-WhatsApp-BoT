@@ -23,7 +23,9 @@ module.exports = {
     // ---------------------------------------------------------------------------
     fontStyle: process.env.FONT_STYLE || 'original',
     menuStyle: process.env.MENU_STYLE || 'classic',
-    menuImage: process.env.BOT_MENU_IMAGE_URL || 'https://graph.org/file/7c6999908a8df07400d41.jpg',
+    menuImageAsset: process.env.MENU_IMAGE_ASSET === 'true', // Priority: use local assets
+    menuImageUrl: process.env.MENU_IMAGE_URL === 'true' || !process.env.MENU_IMAGE_ASSET, // Fallback: use URL
+    menuImage: process.env.BOT_MENU_IMAGE_URL || '',
 
     // ---------------------------------------------------------------------------
     // AUTO FEATURES
