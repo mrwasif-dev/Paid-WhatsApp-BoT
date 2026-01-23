@@ -5,6 +5,7 @@ module.exports = {
     aliases: ['rmsudo', 'removesudo'],
     category: 'Owner',
     desc: 'Remove a user from Sudo.',
+    ownerOnly: true,
     wasi_handler: async (wasi_sock, wasi_sender, context) => {
         const { wasi_args, wasi_msg, sessionId, config } = context;
 

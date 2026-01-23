@@ -7,6 +7,7 @@ module.exports = {
     name: 'setmenu',
     category: 'Settings',
     desc: 'Change the menu layout design',
+    ownerOnly: true,
     wasi_handler: async (wasi_sock, wasi_sender, { wasi_args }) => {
         try {
             if (!wasi_args || wasi_args.length === 0) {

@@ -1204,9 +1204,31 @@ async function setupMessageHandler(wasi_sock, sessionId) {
                     const sudoListRaw = currentConfig.sudo || [];
                     const sudoList = sudoListRaw.map(s => s.toString().replace(/\D/g, ''));
 
-                    // THE MASTER CHECK
-                    const wasi_isOwner = botJids.has(normSenderJid) || ownerJids.has(normSenderJid) || (senderNum === ownerNumber) || sudoList.includes(senderNum);
-                    const wasi_isSudo = wasi_isOwner || sudoList.some(s => senderNum === s);
+                    // THE MASTER CHECK (Using Baileys areJidsSameUser pattern)
+                    // Extract user part from sender JID for proper comparison
+                    const { jidDecode } = require('@whiskeysockets/baileys');
+                    const senderDecoded = jidDecode(normSenderJid);
+                    const senderUserPart = senderDecoded?.user || senderNum;
+
+                    // Check if sender is the bot itself
+                    const isBotSelf = botJids.has(normSenderJid) ||
+                        Array.from(botJids).some(bJid => {
+                            const bDecoded = jidDecode(bJid);
+                            return bDecoded?.user === senderUserPart;
+                        });
+
+                    // Check if sender is owner (compare user parts, not full JIDs)
+                    const isOwnerByNumber = senderUserPart === ownerNumber || senderNum === ownerNumber;
+                    const isOwnerByJid = ownerJids.has(normSenderJid);
+
+                    // Check if sender is in sudo list
+                    const isSudoUser = sudoList.includes(senderUserPart) || sudoList.includes(senderNum);
+
+                    const wasi_isOwner = isBotSelf || isOwnerByNumber || isOwnerByJid || isSudoUser;
+                    const wasi_isSudo = wasi_isOwner || isSudoUser;
+
+                    // Debug log for troubleshooting
+                    // console.log(`👤 Permission Check: sender=${senderUserPart}, owner=${ownerNumber}, isOwner=${wasi_isOwner}, isSudo=${wasi_isSudo}`);
 
                     if (plugin.ownerOnly && !wasi_isOwner && !wasi_isSudo) {
                         return await wasi_sock.sendMessage(wasi_origin, { text: `❌ *${plugin.name.toUpperCase()}* is restricted to the Owner.` }, { quoted: wasi_msg });

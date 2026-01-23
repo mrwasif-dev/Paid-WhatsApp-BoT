@@ -7,6 +7,7 @@ module.exports = {
     name: 'setfont',
     category: 'Settings',
     desc: 'Change the global font style of the bot',
+    ownerOnly: true,
     wasi_handler: async (wasi_sock, wasi_sender, { wasi_args }) => {
         try {
             // Only owner? 

@@ -5,6 +5,7 @@ module.exports = {
     aliases: ['addsudo', 'createsudo'],
     category: 'Owner',
     desc: 'Add a user as a Sudo (temporary owner).',
+    ownerOnly: true,
     wasi_handler: async (wasi_sock, wasi_sender, context) => {
         const { wasi_args, wasi_msg, sessionId, config } = context;
         // NOTE: Permissions (Owner/Sudo check) are handled inside plugin or main index. 
