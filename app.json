@@ -61,11 +61,11 @@
         },
         "MENU_IMAGE_ASSET": {
             "description": "Use local assets folder for menu images/videos (true/false)",
-            "value": "false"
+            "value": "true"
         },
         "MENU_IMAGE_URL": {
-            "description": "Use URL for menu image (true/false)",
-            "value": "true"
+            "description": "Use URL for menu image - only if no local assets (true/false)",
+            "value": "false"
         },
         "MENU_STYLE": {
             "description": "Menu style (classic/modern/minimal)",

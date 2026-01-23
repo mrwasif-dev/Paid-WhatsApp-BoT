@@ -52,10 +52,9 @@ module.exports = {
                 }
             }
 
-            // PRIORITY 2: Use URL
-            if (config.menuImageUrl || !config.menuImageAsset) {
-                const IMAGE_URL = config.menuImage;
-
+            // PRIORITY 2: Use URL (only if explicitly enabled AND URL is valid)
+            const IMAGE_URL = config.menuImage;
+            if (config.menuImageUrl && IMAGE_URL && IMAGE_URL.startsWith('http')) {
                 try {
                     const axios = require('axios');
                     const response = await axios.get(IMAGE_URL, { responseType: 'arraybuffer', timeout: 8000 });

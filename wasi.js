@@ -23,9 +23,9 @@ module.exports = {
     // ---------------------------------------------------------------------------
     fontStyle: process.env.FONT_STYLE || 'original',
     menuStyle: process.env.MENU_STYLE || 'classic',
-    menuImageAsset: process.env.MENU_IMAGE_ASSET === 'true', // Priority: use local assets
-    menuImageUrl: process.env.MENU_IMAGE_URL === 'true' || !process.env.MENU_IMAGE_ASSET, // Fallback: use URL
-    menuImage: process.env.BOT_MENU_IMAGE_URL || '',
+    menuImageAsset: process.env.MENU_IMAGE_ASSET !== 'false', // Default true - use local assets
+    menuImageUrl: process.env.MENU_IMAGE_URL === 'true', // Default false - must explicitly enable
+    menuImage: process.env.BOT_MENU_IMAGE_URL || 'https://files.catbox.moe/ifruw6.jpg',
 
     // ---------------------------------------------------------------------------
     // AUTO FEATURES
