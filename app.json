@@ -126,6 +126,14 @@
         "NEWSLETTER_NAME": {
             "description": "Newsletter name for menu footer",
             "value": "WASI-MD-V7"
+        },
+        "YT_COOKIES": {
+            "description": "Netscape formatted cookies for YouTube (Optional, helps on Heroku)",
+            "required": false
+        },
+        "YT_USER_AGENT": {
+            "description": "Browser User-Agent string (must match the one used to export cookies)",
+            "required": false
         }
     },
     "formation": {
