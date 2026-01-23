@@ -10,20 +10,24 @@ module.exports = {
     wasi_handler: async (sock, from, context) => {
         const { wasi_msg } = context;
 
-        // Check for quoted message or direct media
+        // Extract metadata
         const contextInfo = wasi_msg.message?.extendedTextMessage?.contextInfo;
         const quotedMsg = contextInfo?.quotedMessage;
-
-        // Media detection (supports image, video, document)
         const isQuoted = !!quotedMsg;
-        const msg = isQuoted ? quotedMsg : wasi_msg.message;
 
-        const isImage = msg.imageMessage || msg.viewOnceMessageV2?.message?.imageMessage || msg.viewOnceMessage?.message?.imageMessage;
-        const isVideo = msg.videoMessage || msg.viewOnceMessageV2?.message?.videoMessage || msg.viewOnceMessage?.message?.videoMessage;
+        // Detect correct media container
+        let targetMsg = isQuoted ? quotedMsg : wasi_msg.message;
+
+        // Handle ViewOnce wrappers
+        if (targetMsg?.viewOnceMessageV2?.message) targetMsg = targetMsg.viewOnceMessageV2.message;
+        if (targetMsg?.viewOnceMessage?.message) targetMsg = targetMsg.viewOnceMessage.message;
+
+        const isImage = !!targetMsg?.imageMessage;
+        const isVideo = !!targetMsg?.videoMessage;
 
         if (!isImage && !isVideo) {
             return await sock.sendMessage(from, {
-                text: '❌ *Reply to an image or video to upload it!*\n\nUsage: Reply to a media with `.url`'
+                text: '❌ *Reply to an image or video to upload it!*'
             }, { quoted: wasi_msg });
         }
 
@@ -32,7 +36,7 @@ module.exports = {
 
             // Download media
             const buffer = await downloadMediaMessage(
-                { message: msg },
+                { message: targetMsg },
                 'buffer',
                 {},
                 {
@@ -65,7 +69,7 @@ module.exports = {
         } catch (error) {
             console.error('URL command error:', error);
             await sock.sendMessage(from, {
-                text: '❌ Failed to upload media. Catbox might be down or file is too large.'
+                text: '❌ Failed to upload media. Upload services might be down or file is too large.'
             }, { quoted: wasi_msg });
         }
     }

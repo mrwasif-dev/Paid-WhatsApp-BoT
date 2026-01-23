@@ -12,45 +12,33 @@ module.exports = {
     wasi_handler: async (sock, from, context) => {
         const { wasi_msg, wasi_args, sessionId } = context;
 
-        // Media detection
+        // Extract metadata from message
         const contextInfo = wasi_msg.message?.extendedTextMessage?.contextInfo;
         const quotedMsg = contextInfo?.quotedMessage;
+        const isQuoted = !!quotedMsg;
 
-        let msg = null;
-        let msgType = null;
+        // Detect correct media container
+        let targetMsg = isQuoted ? quotedMsg : wasi_msg.message;
 
-        if (wasi_msg.message?.imageMessage) {
-            msg = wasi_msg.message.imageMessage;
-            msgType = 'image';
-        } else if (wasi_msg.message?.videoMessage) {
-            msg = wasi_msg.message.videoMessage;
-            msgType = 'video';
-        } else if (quotedMsg?.imageMessage) {
-            msg = quotedMsg.imageMessage;
-            msgType = 'image';
-        } else if (quotedMsg?.videoMessage) {
-            msg = quotedMsg.videoMessage;
-            msgType = 'video';
-        } else if (quotedMsg?.viewOnceMessageV2?.message?.imageMessage || quotedMsg?.viewOnceMessage?.message?.imageMessage) {
-            msg = quotedMsg.viewOnceMessageV2?.message?.imageMessage || quotedMsg.viewOnceMessage?.message?.imageMessage;
-            msgType = 'image';
-        } else if (quotedMsg?.viewOnceMessageV2?.message?.videoMessage || quotedMsg?.viewOnceMessage?.message?.videoMessage) {
-            msg = quotedMsg.viewOnceMessageV2?.message?.videoMessage || quotedMsg.viewOnceMessage?.message?.videoMessage;
-            msgType = 'video';
-        }
+        // Handle ViewOnce wrappers
+        if (targetMsg?.viewOnceMessageV2?.message) targetMsg = targetMsg.viewOnceMessageV2.message;
+        if (targetMsg?.viewOnceMessage?.message) targetMsg = targetMsg.viewOnceMessage.message;
 
-        if (!msg) {
+        const isImage = !!targetMsg?.imageMessage;
+        const isVideo = !!targetMsg?.videoMessage;
+
+        if (!isImage && !isVideo) {
             return await sock.sendMessage(from, {
                 text: '❌ *Reply to an image or short video to create a sticker!*'
             }, { quoted: wasi_msg });
         }
 
         try {
-            console.log(`[Sticker] Processing ${msgType}...`);
             await sock.sendMessage(from, { text: '⏳ Creating sticker...' }, { quoted: wasi_msg });
 
+            // Download media - We MUST pass the container that has the [type]Message key
             const buffer = await downloadMediaMessage(
-                { message: msg },
+                { message: targetMsg },
                 'buffer',
                 {},
                 {
@@ -59,15 +47,15 @@ module.exports = {
                 }
             );
 
-            // Parse metadata
+            // Parse sticker metadata
             const fullArgs = wasi_args.join(' ');
             const pack = fullArgs.split('|')[0]?.trim() || 'WASI BOT';
             const author = fullArgs.split('|')[1]?.trim() || '@Itxxwasi';
 
             let webpBuffer;
 
-            if (msgType === 'image') {
-                // Handle Image Sticker
+            if (isImage) {
+                // Image Sticker
                 webpBuffer = await sharp(buffer)
                     .resize(512, 512, {
                         fit: 'contain',
@@ -76,7 +64,7 @@ module.exports = {
                     .webp({ quality: 80 })
                     .toBuffer();
             } else {
-                // Handle Video/GIF Sticker (Requires FFmpeg)
+                // Video Sticker
                 const tempDir = path.join(__dirname, '../temp');
                 if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 
@@ -85,9 +73,9 @@ module.exports = {
 
                 fs.writeFileSync(inputPath, buffer);
 
-                // Convert using FFmpeg
                 await new Promise((resolve, reject) => {
-                    exec(`ffmpeg -i "${inputPath}" -vcodec libwebp -filter_complex "[0:v] scale=512:512:force_original_aspect_ratio=decrease,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=#00000000,setsar=1,fps=15" -loop 0 -preset default -an -vsync 0 -s 512:512 "${outputPath}"`, (err) => {
+                    // Optimized FFmpeg command for WhatsApp animated stickers
+                    exec(`ffmpeg -i "${inputPath}" -vcodec libwebp -filter_complex "[0:v] fps=15,scale=512:512:force_original_aspect_ratio=decrease,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=#00000000" -loop 0 -preset default -an -vsync 0 -s 512:512 "${outputPath}"`, (err) => {
                         if (err) reject(err);
                         else resolve();
                     });
@@ -110,9 +98,9 @@ module.exports = {
             }, { quoted: wasi_msg });
 
         } catch (error) {
-            console.error('Sticker error:', error);
+            console.error('Sticker Error:', error);
             await sock.sendMessage(from, {
-                text: '❌ Failed to create sticker. Make sure file is not too large or corrupt.'
+                text: '❌ Failed to create sticker. Ensure you are replying to a supported image/video.'
             }, { quoted: wasi_msg });
         }
     }
