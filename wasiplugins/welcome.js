@@ -1,16 +1,16 @@
 const { wasi_updateBotConfig } = require('../wasilib/database');
 
 module.exports = {
-    name: 'goodbye',
-    aliases: ['gb'],
+    name: 'welcome',
+    aliases: ['wellcome'],
     category: 'Group',
-    desc: 'Enable/Disable or set custom Goodbye message.\nUsage:\n.gb on/off\n.gb <message>',
+    desc: 'Enable/Disable or set custom Welcome message.\nUsage:\n.welcome on/off\n.welcome <message>',
     wasi_handler: async (wasi_sock, wasi_sender, context) => {
         const { wasi_args, sessionId, config, wasi_msg } = context;
 
         if (wasi_args.length === 0) {
             return await wasi_sock.sendMessage(wasi_sender, {
-                text: `👋 *Goodbye Manager*\n\n*Status:* ${config.autoGoodbye ? 'Enabled ✅' : 'Disabled ❌'}\n*Current Message:* ${config.goodbyeMessage}\n\n*Usage:*\n- .gb on\n- .gb off\n- .gb <your message>\n\n*Tags:* @user, @group`
+                text: `👋 *Welcome Manager*\n\n*Status:* ${config.autoWelcome ? 'Enabled ✅' : 'Disabled ❌'}\n*Current Message:* ${config.welcomeMessage}\n\n*Usage:*\n- .welcome on\n- .welcome off\n- .welcome <your message>\n\n*Tags:* @user, @group`
             }, { quoted: wasi_msg });
         }
 
@@ -19,16 +19,16 @@ module.exports = {
         let responseText = '';
 
         if (input === 'on') {
-            updateObj = { autoGoodbye: true };
-            responseText = '✅ Auto Goodbye enabled.';
+            updateObj = { autoWelcome: true };
+            responseText = '✅ Auto Welcome enabled.';
         } else if (input === 'off') {
-            updateObj = { autoGoodbye: false };
-            responseText = '❌ Auto Goodbye disabled.';
+            updateObj = { autoWelcome: false };
+            responseText = '❌ Auto Welcome disabled.';
         } else {
             // Treat as custom message
             const customMsg = wasi_args.join(' ');
-            updateObj = { goodbyeMessage: customMsg, autoGoodbye: true };
-            responseText = `✅ Goodbye message updated and enabled:\n\n"${customMsg}"`;
+            updateObj = { welcomeMessage: customMsg, autoWelcome: true };
+            responseText = `✅ Welcome message updated and enabled:\n\n"${customMsg}"`;
         }
 
         const success = await wasi_updateBotConfig(sessionId, updateObj);

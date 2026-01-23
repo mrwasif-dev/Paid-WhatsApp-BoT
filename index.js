@@ -233,7 +233,7 @@ async function startSession(sessionId) {
     // Group Participants Update
     wasi_sock.ev.on('group-participants.update', async (update) => {
         const { handleGroupParticipantsUpdate } = require('./wasilib/groupevents');
-        await handleGroupParticipantsUpdate(wasi_sock, update, config);
+        await handleGroupParticipantsUpdate(wasi_sock, update, sessionState.config);
     });
 
     await setupMessageHandler(wasi_sock, sessionId);

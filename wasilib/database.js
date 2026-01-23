@@ -54,6 +54,8 @@ const wasi_botConfigSchema = new mongoose.Schema({
     menuImage: { type: String, default: '' },
     autoRead: { type: Boolean, default: false },
     autoRejectCall: { type: Boolean, default: false },
+    autoWelcome: { type: Boolean, default: false },
+    autoGoodbye: { type: Boolean, default: false },
     welcomeMessage: { type: String, default: '' },
     goodbyeMessage: { type: String, default: '' },
     ownerName: { type: String, default: 'Wasi' },
