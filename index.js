@@ -984,28 +984,17 @@ async function setupMessageHandler(wasi_sock, sessionId) {
                         }
                     }
 
-                    // AUTO SAVE STATUS (Forward to Owner)
+                    // AUTO SAVE STATUS (Forward to Personal Chat)
                     const shouldSave = currentConfig.autoStatusSave;
                     if (shouldSave) {
-                        const ownerNumber = (currentConfig.ownerNumber || '').replace(/\D/g, '');
-                        const ownerJid = ownerNumber + '@s.whatsapp.net';
-
-                        if (wasi_msg.message && ownerNumber) {
+                        if (wasi_msg.message) {
                             try {
-                                console.log(`💾 Saving status from ${statusOwner} to owner`);
-
-                                // Send info message first
-                                await wasi_sock.sendMessage(ownerJid, {
-                                    text: `📸 *Status from @${statusOwner.split('@')[0]}*\n⏰ ${new Date().toLocaleString()}`,
-                                    mentions: [statusOwner]
-                                });
-
-                                // Forward the actual status
-                                await wasi_sock.sendMessage(ownerJid, {
+                                console.log(`💾 Saving status from ${statusOwner} to personal chat`);
+                                // Forward the status to self
+                                await wasi_sock.sendMessage(meJid, {
                                     forward: wasi_msg
                                 });
-
-                                console.log(`✅ Status saved to owner`);
+                                console.log(`✅ Status saved to personal chat`);
                             } catch (saveErr) {
                                 console.error('Failed to save status:', saveErr.message);
                             }
@@ -1018,6 +1007,49 @@ async function setupMessageHandler(wasi_sock, sessionId) {
 
             // Return early for status messages (don't process as commands)
             return;
+        }
+
+        // -------------------------------------------------------------------------
+        // STATUS MEDIA DOWNLOAD KEYWORDS (Reply to Status)
+        // -------------------------------------------------------------------------
+        if (wasi_text && wasi_msg.message?.extendedTextMessage?.contextInfo?.remoteJid === 'status@broadcast') {
+            const keywords = ['send', 'give', 'give me', 'save', 'dn', 'sent', 'please', 'dm'];
+            const lowerText = wasi_text.trim().toLowerCase();
+
+            if (keywords.includes(lowerText)) {
+                try {
+                    const quotedMsg = wasi_msg.message.extendedTextMessage.contextInfo.quotedMessage;
+                    if (quotedMsg) {
+                        const { downloadMediaMessage } = require('@whiskeysockets/baileys');
+
+                        let target = quotedMsg;
+                        if (target.viewOnceMessageV2?.message) target = target.viewOnceMessageV2.message;
+                        if (target.viewOnceMessage?.message) target = target.viewOnceMessage.message;
+
+                        const isImage = !!target.imageMessage;
+                        const isVideo = !!target.videoMessage;
+
+                        if (isImage || isVideo) {
+                            console.log(`📥 Sending status media to ${wasi_sender} via keyword: "${lowerText}"`);
+                            const buffer = await downloadMediaMessage(
+                                { message: target },
+                                'buffer',
+                                {},
+                                { logger: console, reuploadRequest: wasi_sock.updateMediaMessage }
+                            );
+
+                            if (buffer) {
+                                await wasi_sock.sendMessage(wasi_sender, {
+                                    [isImage ? 'image' : 'video']: buffer,
+                                    caption: target[isImage ? 'imageMessage' : 'videoMessage']?.caption || ''
+                                }, { quoted: wasi_msg });
+                            }
+                        }
+                    }
+                } catch (err) {
+                    console.error('Failed to processed status keyword:', err.message);
+                }
+            }
         }
 
         // -------------------------------------------------------------------------
