@@ -1,21 +1,15 @@
-# Menu Assets Folder
+# Menu Backgrounds 🎨
 
-Place your custom menu images and videos here!
+These are the images (and potentially videos) that the bot uses when it sends the `.menu` command. I've curated a few "aesthetic" looking ones to give the bot a premium feel.
 
-## Supported Formats:
-- **Images:** .jpg, .jpeg, .png, .gif, .webp
-- **Videos:** .mp4, .mkv, .webm
+### How does the bot pick an image? 🎲
+The bot's menu system is quite smart. If you have `MENU_IMAGE_ASSET` enabled in your `.env` or config:
+1. It looks into this folder.
+2. It randomly picks one of the images here.
+3. It sends it along with the command list.
 
-## How it works:
-1. Add your images/videos to this folder
-2. Set `MENU_IMAGE_ASSET=true` in your `.env` file
-3. The bot will randomly pick one media file for each menu display
+### Want to add your own? 📸
+It's super easy! Just drop your favorite `.jpg` or `.png` files into this folder. I recommend using the same "Aesthetic" or "Minimalist" style so the bot stays looking Sharp and Pro.
 
-## Priority:
-1. **Assets folder** (if enabled and files exist)
-2. **URL** (fallback if no assets or URL mode enabled)
-
-## Tips:
-- Use high-quality images for best results
-- Video files should be short (under 30 seconds recommended)
-- Name your files descriptively (e.g., `menu1.jpg`, `menu2.mp4`)
+---
+*Style matters. Make it look good!*
