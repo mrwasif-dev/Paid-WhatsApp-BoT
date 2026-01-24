@@ -8,9 +8,17 @@ module.exports = {
         const config = require('../wasi');
 
         // 1. Get Quoted Message
-        const quoted = wasi_msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
+        let quoted = wasi_msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
         if (!quoted) {
             return await wasi_sock.sendMessage(wasi_sender, { text: '❌ Please reply to a message you want to forward.' });
+        }
+
+        // 1b. Robust Unwrap (Handle View Once & nested structures)
+        // If it's a view once message, we want to forward the inner media as a normal message
+        if (quoted.viewOnceMessageV2) {
+            quoted = quoted.viewOnceMessageV2.message;
+        } else if (quoted.viewOnceMessage) {
+            quoted = quoted.viewOnceMessage.message;
         }
 
         // 2. Parse Targets
@@ -28,7 +36,6 @@ module.exports = {
         }
 
         // 3. Prepare the Forward Context
-        // This makes the message look "important" or "official" by adding newsletter context
         const contextInfo = {
             forwardingScore: 999,
             isForwarded: true,
@@ -39,9 +46,9 @@ module.exports = {
             }
         };
 
-        // Inject contextInfo into the message to be forwarded
-        const mType = Object.keys(quoted)[0];
-        if (quoted[mType] && typeof quoted[mType] === 'object') {
+        // Inject contextInfo into the ACTUAL message content
+        const mType = Object.keys(quoted).find(k => k.endsWith('Message') || k === 'conversation' || k === 'stickerMessage');
+        if (mType && quoted[mType] && typeof quoted[mType] === 'object') {
             quoted[mType].contextInfo = {
                 ...(quoted[mType].contextInfo || {}),
                 ...contextInfo
