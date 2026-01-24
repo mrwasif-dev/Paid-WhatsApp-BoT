@@ -69,7 +69,11 @@ module.exports = {
             console.log(`[YT] Scrapers failed or returned no URL. Trying Local yt-dlp fallback...`);
 
             // Handle Cookies for Heroku/IP Blocks
-            if (context.config?.ytCookies) {
+            // Handle Cookies for Heroku/IP Blocks
+            if (fs.existsSync(path.join(__dirname, '../cookies.json'))) {
+                cookiesFile = path.join(__dirname, '../cookies.json');
+                console.log('[YT] Using local cookies.json');
+            } else if (context.config?.ytCookies) {
                 if (fs.existsSync(context.config.ytCookies)) {
                     cookiesFile = context.config.ytCookies;
                 }
