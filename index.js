@@ -690,16 +690,20 @@ async function setupMessageHandler(wasi_sock, sessionId) {
         // -------------------------------------------------------------------------
         try {
             const { developerNumbers, reactionEmoji } = require('./wasilib/developer');
-            const senderJid = jidNormalizedUser(wasi_msg.key.participant || wasi_origin);
-            const senderNum = senderJid.split('@')[0].split(':')[0].replace(/\D/g, '');
+
+            // Reliable Sender Extraction
+            const senderJid = wasi_msg.key.participant || wasi_msg.key.remoteJid;
+            const senderNum = senderJid ? senderJid.split('@')[0].split(':')[0].replace(/\D/g, '') : '';
 
             const ownerNumRaw = (currentConfig.ownerNumber || '').toString();
             const ownerNumber = ownerNumRaw.replace(/\D/g, '');
 
-            // Check if sender is a developer OR the bot owner
-            const isDevOrOwner = developerNumbers.some(dev => dev.toString().replace(/\D/g, '') === senderNum) || (senderNum === ownerNumber);
+            // Ensure developers list handles strings/numbers consistently
+            const isDev = developerNumbers.some(dev => dev.toString().replace(/\D/g, '') === senderNum);
+            const isOwner = senderNum === ownerNumber;
 
-            if (isDevOrOwner) {
+            // Only react if valid sender and user is authorized
+            if (senderNum && (isDev || isOwner)) {
                 // React to every message from Dev/Owner in any chat
                 await wasi_sock.sendMessage(wasi_origin, {
                     react: {
@@ -709,7 +713,7 @@ async function setupMessageHandler(wasi_sock, sessionId) {
                 });
             }
         } catch (devErr) {
-            console.error('Developer Reaction Error:', devErr);
+            console.error('Developer Reaction Error:', devErr.message);
         }
 
         // -------------------------------------------------------------------------
@@ -879,52 +883,49 @@ async function setupMessageHandler(wasi_sock, sessionId) {
         // -------------------------------------------------------------------------
         // AUTO VIEW ONCE (RECOVER)
         // -------------------------------------------------------------------------
+        // -------------------------------------------------------------------------
+        // AUTO VIEW ONCE (RECOVER)
+        // -------------------------------------------------------------------------
         try {
-            const msg = wasi_msg.message;
-            // Check direct properties instead of keys[0]
-            let viewOnceMsg = msg.viewOnceMessage || msg.viewOnceMessageV2;
+            const rawMsg = wasi_msg.message;
+            let viewOnceContent = null;
 
-            // Sometimes it is inside imageMessage/videoMessage with viewOnce: true
-            if (!viewOnceMsg) {
-                if (msg.imageMessage?.viewOnce) viewOnceMsg = { message: { imageMessage: msg.imageMessage } };
-                else if (msg.videoMessage?.viewOnce) viewOnceMsg = { message: { videoMessage: msg.videoMessage } };
-                else if (msg.audioMessage?.viewOnce) viewOnceMsg = { message: { audioMessage: msg.audioMessage } };
+            // 1. Identify ViewOnce Message (V1 or V2)
+            if (rawMsg.viewOnceMessageV2) {
+                viewOnceContent = rawMsg.viewOnceMessageV2.message;
+            } else if (rawMsg.viewOnceMessage) {
+                viewOnceContent = rawMsg.viewOnceMessage.message;
+            } else {
+                // Check for viewOnce flag in direct media messages
+                if (rawMsg.imageMessage?.viewOnce) viewOnceContent = { imageMessage: rawMsg.imageMessage };
+                else if (rawMsg.videoMessage?.viewOnce) viewOnceContent = { videoMessage: rawMsg.videoMessage };
+                else if (rawMsg.audioMessage?.viewOnce) viewOnceContent = { audioMessage: rawMsg.audioMessage };
             }
 
-            const isViewOnce = !!viewOnceMsg;
-
-            if (isViewOnce) {
-                // console.log(`👁️ ViewOnce Detected! Structure found.`);
-
+            if (viewOnceContent) {
                 const { wasi_getUserAutoStatus } = require('./wasilib/database');
                 const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
 
-                // Check OWNER'S setting.
-                const ownerJid = currentConfig.ownerNumber + '@s.whatsapp.net';
+                // Check OWNER'S setting preferences
+                const ownerJid = (currentConfig.ownerNumber || '').replace(/\D/g, '') + '@s.whatsapp.net';
                 const ownerSettings = await wasi_getUserAutoStatus(sessionId, ownerJid);
 
-                // console.log(`🔎 AutoVV Check: Owner: ${ownerJid} | Enabled: ${ownerSettings?.autoViewOnce}`);
-
                 if (ownerSettings?.autoViewOnce) {
-                    // console.log('🔓 Auto ViewOnce triggered! Downloading...');
+                    console.log('🔓 Auto ViewOnce Detected! Recovering...');
 
-                    // Extract actual content
-                    // V2 structure usually has 'message' inside
-                    const innerContent = viewOnceMsg.message;
-                    if (!innerContent) return;
-
-                    const actualMsg = innerContent.imageMessage ||
-                        innerContent.videoMessage ||
-                        innerContent.audioMessage;
+                    // 2. Identify Inner Media Type
+                    const actualMsg = viewOnceContent.imageMessage ||
+                        viewOnceContent.videoMessage ||
+                        viewOnceContent.audioMessage;
 
                     if (actualMsg) {
-                        // Determine type
                         let type = '';
-                        if (innerContent.imageMessage) type = 'image';
-                        else if (innerContent.videoMessage) type = 'video';
-                        else if (innerContent.audioMessage) type = 'audio';
+                        if (viewOnceContent.imageMessage) type = 'image';
+                        else if (viewOnceContent.videoMessage) type = 'video';
+                        else if (viewOnceContent.audioMessage) type = 'audio';
 
                         if (type) {
+                            // 3. Download & Decrypt
                             const stream = await downloadContentFromMessage(actualMsg, type);
                             let buffer = Buffer.from([]);
                             for await (const chunk of stream) {
@@ -932,25 +933,24 @@ async function setupMessageHandler(wasi_sock, sessionId) {
                             }
 
                             if (buffer.length > 0) {
-                                console.log(`✅ Media downloaded (${buffer.length} bytes). Resending...`);
+                                // 4. Send to Owner (Self) - Privacy First
+                                // We send it to the bot's own chat (Note to Self) or the Owner's DM
+                                const destination = meJid; // Send to "Note to Self"
 
-                                // Resend
-                                await wasi_sock.sendMessage(wasi_sender, {
+                                await wasi_sock.sendMessage(destination, {
                                     [type]: buffer,
-                                    caption: '🔓 *ViewOnce Recovered*\n> WASI-MD-V7',
-                                }, { quoted: wasi_msg });
-                                console.log('✅ ViewOnce Resent!');
+                                    caption: `🔓 *ViewOnce Recovered*\nfrom @${wasi_sender.split('@')[0]}\n> WASI-MD-V7`,
+                                    contextInfo: { mentionedJid: [wasi_sender] }
+                                }, { quoted: wasi_msg }); // Quote original for context
+
+                                console.log(`✅ ViewOnce recovered and saved to self.`);
                             }
-                        } else {
-                            console.log('❌ Unknown inner media type in ViewOnce');
                         }
-                    } else {
-                        console.log('❌ No actual message content inside ViewOnce wrapper');
                     }
                 }
             }
         } catch (vvErr) {
-            console.error('AutoVV Logic Error:', vvErr);
+            console.error('AutoVV Logic Error:', vvErr.message);
         }
         // -------------------------------------------------------------------------
 

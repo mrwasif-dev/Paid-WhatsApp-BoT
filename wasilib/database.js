@@ -479,6 +479,34 @@ async function wasi_saveAutoReplies(sessionId, replies) {
     }
 }
 
+async function wasi_addAutoReply(sessionId, trigger, reply) {
+    if (!isConnected) return false;
+    try {
+        const Model = getModel(sessionId, 'AutoReply');
+        await Model.findOneAndUpdate(
+            { trigger },
+            { trigger, reply },
+            { upsert: true, new: true }
+        );
+        return true;
+    } catch (e) {
+        console.error('DB Error addAutoReply:', e);
+        return false;
+    }
+}
+
+async function wasi_deleteAutoReply(sessionId, trigger) {
+    if (!isConnected) return false;
+    try {
+        const Model = getModel(sessionId, 'AutoReply');
+        await Model.findOneAndDelete({ trigger });
+        return true;
+    } catch (e) {
+        console.error('DB Error deleteAutoReply:', e);
+        return false;
+    }
+}
+
 module.exports = {
     wasi_connectDatabase,
     wasi_isDbConnected,
@@ -489,6 +517,8 @@ module.exports = {
     wasi_getAllAutoStatusUsers,
     wasi_getAutoReplies,
     wasi_saveAutoReplies,
+    wasi_addAutoReply,
+    wasi_deleteAutoReply,
     wasi_registerSession,
     wasi_unregisterSession,
     wasi_getAllSessions,
