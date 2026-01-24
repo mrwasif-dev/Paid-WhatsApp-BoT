@@ -421,6 +421,91 @@ async function wasi_spotify(url) {
     return { status: false, message: 'Spotify scraping failed' };
 }
 
+/**
+ * Pinterest Downloader
+ */
+async function wasi_pinterest(url) {
+    // Strategy 1: Vreden v1
+    try {
+        const apiUrl = `https://api.vreden.my.id/api/v1/download/pinterest?url=${encodeURIComponent(url)}`;
+        const data = await wasi_get(apiUrl);
+        if (data && data.status && data.result) {
+            return {
+                status: true,
+                provider: 'Vreden-v1',
+                url: data.result.url || data.result.image || data.result.video,
+                type: data.result.video ? 'video' : 'image',
+                title: data.result.title || 'Pinterest Media'
+            };
+        }
+    } catch (e) { console.error('Vreden-v1 Pinterest Failed:', e.message); }
+
+    // Strategy 2: Siputzx
+    try {
+        const apiUrl = `https://api.siputzx.my.id/api/d/pinterest?url=${encodeURIComponent(url)}`;
+        const data = await wasi_get(apiUrl);
+        if (data && data.status && data.data) {
+            return {
+                status: true,
+                provider: 'Siputzx',
+                url: data.data.url || data.data.image || data.data.video,
+                type: data.data.video ? 'video' : 'image',
+                title: data.data.title || 'Pinterest Media'
+            };
+        }
+    } catch (e) { console.error('Siputzx Pinterest Failed:', e.message); }
+
+    // Strategy 3: BK9
+    try {
+        const apiUrl = `https://bk9.fun/download/pinterest?url=${encodeURIComponent(url)}`;
+        const data = await wasi_get(apiUrl);
+        if (data && data.status && data.BK9) {
+            return {
+                status: true,
+                provider: 'BK9',
+                url: data.BK9.url || data.BK9.image || data.BK9.video,
+                type: data.BK9.video ? 'video' : 'image',
+                title: 'Pinterest Media'
+            };
+        }
+    } catch (e) { console.error('BK9 Pinterest Failed:', e.message); }
+
+    return { status: false, message: 'Failed to fetch Pinterest media' };
+}
+
+/**
+ * Pinterest Search
+ */
+async function wasi_pinterest_search(query) {
+    // Strategy 1: Vreden v1
+    try {
+        const apiUrl = `https://api.vreden.my.id/api/v1/search/pinterest?query=${encodeURIComponent(query)}`;
+        const data = await wasi_get(apiUrl);
+        if (data && data.status && data.result) {
+            return {
+                status: true,
+                provider: 'Vreden-v1',
+                result: data.result
+            };
+        }
+    } catch (e) { console.error('Vreden-v1 Pinterest Search Failed:', e.message); }
+
+    // Strategy 2: Siputzx
+    try {
+        const apiUrl = `https://api.siputzx.my.id/api/s/pinterest?query=${encodeURIComponent(query)}`;
+        const data = await wasi_get(apiUrl);
+        if (data && data.status && data.data) {
+            return {
+                status: true,
+                provider: 'Siputzx',
+                result: data.data
+            };
+        }
+    } catch (e) { console.error('Siputzx Pinterest Search Failed:', e.message); }
+
+    return { status: false, message: 'Failed to search Pinterest' };
+}
+
 module.exports = {
     wasi_tiktok,
     wasi_instagram,
@@ -428,5 +513,7 @@ module.exports = {
     wasi_twitter,
     wasi_youtube,
     wasi_capcut,
-    wasi_spotify
+    wasi_spotify,
+    wasi_pinterest,
+    wasi_pinterest_search
 };

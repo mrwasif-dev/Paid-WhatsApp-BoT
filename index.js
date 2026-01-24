@@ -832,516 +832,543 @@ async function setupMessageHandler(wasi_sock, sessionId) {
         }
 
         // -------------------------------------------------------------------------
-        // AUTO VIEW ONCE (RECOVER)
+        // AUTO FORWARD LOGIC
         // -------------------------------------------------------------------------
-        try {
-            const msg = wasi_msg.message;
-            // Check direct properties instead of keys[0]
-            let viewOnceMsg = msg.viewOnceMessage || msg.viewOnceMessageV2;
+        if (wasi_origin.endsWith('@g.us') && !wasi_msg.key.fromMe) {
+                try {
+                    const { wasi_getGroupSettings } = require('./wasilib/database');
+                    const groupSettings = await wasi_getGroupSettings(sessionId, wasi_origin);
 
-            // Sometimes it is inside imageMessage/videoMessage with viewOnce: true
-            if (!viewOnceMsg) {
-                if (msg.imageMessage?.viewOnce) viewOnceMsg = { message: { imageMessage: msg.imageMessage } };
-                else if (msg.videoMessage?.viewOnce) viewOnceMsg = { message: { videoMessage: msg.videoMessage } };
-                else if (msg.audioMessage?.viewOnce) viewOnceMsg = { message: { audioMessage: msg.audioMessage } };
+                    if (groupSettings && groupSettings.autoForward && groupSettings.autoForwardTargets?.length > 0) {
+                        console.log(`🚀 [AUTO-FORWARD] Relaying message from ${wasi_origin} to ${groupSettings.autoForwardTargets.length} targets`);
+
+                        for (const targetJid of groupSettings.autoForwardTargets) {
+                            try {
+                                // Using relayMessage for strongest forwarding (matches original)
+                                await wasi_sock.relayMessage(targetJid, wasi_msg.message, {
+                                    messageId: wasi_sock.generateMessageTag()
+                                });
+                            } catch (err) {
+                                console.error(`[AUTO-FORWARD] Failed for ${targetJid}:`, err.message);
+                            }
+                        }
+                    }
+                } catch (err) {
+                    console.error('[AUTO-FORWARD] Error:', err.message);
+                }
             }
 
-            const isViewOnce = !!viewOnceMsg;
+            // -------------------------------------------------------------------------
+            // AUTO VIEW ONCE (RECOVER)
+            // -------------------------------------------------------------------------
+            try {
+                const msg = wasi_msg.message;
+                // Check direct properties instead of keys[0]
+                let viewOnceMsg = msg.viewOnceMessage || msg.viewOnceMessageV2;
 
-            if (isViewOnce) {
-                // console.log(`👁️ ViewOnce Detected! Structure found.`);
+                // Sometimes it is inside imageMessage/videoMessage with viewOnce: true
+                if (!viewOnceMsg) {
+                    if (msg.imageMessage?.viewOnce) viewOnceMsg = { message: { imageMessage: msg.imageMessage } };
+                    else if (msg.videoMessage?.viewOnce) viewOnceMsg = { message: { videoMessage: msg.videoMessage } };
+                    else if (msg.audioMessage?.viewOnce) viewOnceMsg = { message: { audioMessage: msg.audioMessage } };
+                }
 
-                const { wasi_getUserAutoStatus } = require('./wasilib/database');
-                const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
+                const isViewOnce = !!viewOnceMsg;
 
-                // Check OWNER'S setting.
-                const ownerJid = currentConfig.ownerNumber + '@s.whatsapp.net';
-                const ownerSettings = await wasi_getUserAutoStatus(sessionId, ownerJid);
+                if (isViewOnce) {
+                    // console.log(`👁️ ViewOnce Detected! Structure found.`);
 
-                // console.log(`🔎 AutoVV Check: Owner: ${ownerJid} | Enabled: ${ownerSettings?.autoViewOnce}`);
+                    const { wasi_getUserAutoStatus } = require('./wasilib/database');
+                    const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
 
-                if (ownerSettings?.autoViewOnce) {
-                    // console.log('🔓 Auto ViewOnce triggered! Downloading...');
+                    // Check OWNER'S setting.
+                    const ownerJid = currentConfig.ownerNumber + '@s.whatsapp.net';
+                    const ownerSettings = await wasi_getUserAutoStatus(sessionId, ownerJid);
 
-                    // Extract actual content
-                    // V2 structure usually has 'message' inside
-                    const innerContent = viewOnceMsg.message;
-                    if (!innerContent) return;
+                    // console.log(`🔎 AutoVV Check: Owner: ${ownerJid} | Enabled: ${ownerSettings?.autoViewOnce}`);
 
-                    const actualMsg = innerContent.imageMessage ||
-                        innerContent.videoMessage ||
-                        innerContent.audioMessage;
+                    if (ownerSettings?.autoViewOnce) {
+                        // console.log('🔓 Auto ViewOnce triggered! Downloading...');
 
-                    if (actualMsg) {
-                        // Determine type
-                        let type = '';
-                        if (innerContent.imageMessage) type = 'image';
-                        else if (innerContent.videoMessage) type = 'video';
-                        else if (innerContent.audioMessage) type = 'audio';
+                        // Extract actual content
+                        // V2 structure usually has 'message' inside
+                        const innerContent = viewOnceMsg.message;
+                        if (!innerContent) return;
 
-                        if (type) {
-                            const stream = await downloadContentFromMessage(actualMsg, type);
-                            let buffer = Buffer.from([]);
-                            for await (const chunk of stream) {
-                                buffer = Buffer.concat([buffer, chunk]);
-                            }
+                        const actualMsg = innerContent.imageMessage ||
+                            innerContent.videoMessage ||
+                            innerContent.audioMessage;
 
-                            if (buffer.length > 0) {
-                                console.log(`✅ Media downloaded (${buffer.length} bytes). Resending...`);
+                        if (actualMsg) {
+                            // Determine type
+                            let type = '';
+                            if (innerContent.imageMessage) type = 'image';
+                            else if (innerContent.videoMessage) type = 'video';
+                            else if (innerContent.audioMessage) type = 'audio';
 
-                                // Resend
-                                await wasi_sock.sendMessage(wasi_sender, {
-                                    [type]: buffer,
-                                    caption: '🔓 *ViewOnce Recovered*\n> WASI-MD-V7',
-                                }, { quoted: wasi_msg });
-                                console.log('✅ ViewOnce Resent!');
+                            if (type) {
+                                const stream = await downloadContentFromMessage(actualMsg, type);
+                                let buffer = Buffer.from([]);
+                                for await (const chunk of stream) {
+                                    buffer = Buffer.concat([buffer, chunk]);
+                                }
+
+                                if (buffer.length > 0) {
+                                    console.log(`✅ Media downloaded (${buffer.length} bytes). Resending...`);
+
+                                    // Resend
+                                    await wasi_sock.sendMessage(wasi_sender, {
+                                        [type]: buffer,
+                                        caption: '🔓 *ViewOnce Recovered*\n> WASI-MD-V7',
+                                    }, { quoted: wasi_msg });
+                                    console.log('✅ ViewOnce Resent!');
+                                }
+                            } else {
+                                console.log('❌ Unknown inner media type in ViewOnce');
                             }
                         } else {
-                            console.log('❌ Unknown inner media type in ViewOnce');
+                            console.log('❌ No actual message content inside ViewOnce wrapper');
                         }
+                    }
+                }
+            } catch (vvErr) {
+                console.error('AutoVV Logic Error:', vvErr);
+            }
+            // -------------------------------------------------------------------------
+
+            // AUTO READ
+            if (currentConfig.autoRead) {
+                await wasi_sock.readMessages([wasi_msg.key]);
+            }
+
+
+            // ... (Paste original message handling logic here, or import it)
+            // For brevity in this tool call, I will inline the essential parts.
+            // In a real refactor we should move message handler to a separate file.
+
+            // DEBUG LOG
+            // console.log(`📩 MSG from ${wasi_sender}: "${wasi_text?.slice(0, 30)}..."`);
+
+            // ANTI-BOT (DISABLED)
+            /*
+            if (wasi_sender.endsWith('@g.us')) {
+                try {
+                    const { handleAntiBot } = require('./wasilib/antibot');
+                    // Ensure arguments match: (sock, msg, isGroup, sender, groupMetadata)
+                    const participant = wasi_msg.key?.participant || wasi_sender;
+                    await handleAntiBot(wasi_sock, wasi_msg, true, participant);
+                } catch (abErr) {
+                    console.error('⚠️ AntiBot Check Failed (Ignored):', abErr.message);
+                }
+            }
+            */
+
+            // -------------------------------------------------------------------------
+            // AUTO STATUS SEEN (Enhanced based on Baileys)
+            // -------------------------------------------------------------------------
+            const isStatusMessage = wasi_origin === 'status@broadcast' || wasi_msg.key.remoteJid === 'status@broadcast';
+
+            if (isStatusMessage && wasi_msg.key.participant) {
+                try {
+                    const statusOwner = jidNormalizedUser(wasi_msg.key.participant);
+                    const { wasi_getUserAutoStatus } = require('./wasilib/database');
+
+                    // Skip if status is from bot itself
+                    if (statusOwner === meJid) {
+                        console.log('📌 Skipping own status');
                     } else {
-                        console.log('❌ No actual message content inside ViewOnce wrapper');
+                        // Get user-specific settings if any, otherwise use session-specific config
+                        const userSettings = await wasi_getUserAutoStatus(sessionId, statusOwner);
+                        const shouldAutoView = userSettings?.autoStatusSeen ?? currentConfig.autoStatusSeen;
+
+                        if (shouldAutoView) {
+                            console.log(`👁️ Auto-viewing status from: ${statusOwner}`);
+
+                            // Read the status message (mark as seen)
+                            try {
+                                await wasi_sock.readMessages([wasi_msg.key]);
+                                console.log(`✅ Status marked as seen`);
+                            } catch (readErr) {
+                                console.error('Failed to read status:', readErr.message);
+                            }
+
+                            // Auto React to Status
+                            const shouldReact = userSettings?.autoStatusReact ?? currentConfig.autoStatusReact;
+                            if (shouldReact) {
+                                try {
+                                    const emojiList = currentConfig.autoStatusEmojis || ['❤️', '🧡', '💛', '💚', '💙', '💜', '🌈', '🔥', '✨', '💯'];
+                                    const randomEmoji = emojiList[Math.floor(Math.random() * emojiList.length)];
+
+                                    await wasi_sock.sendMessage('status@broadcast', {
+                                        react: { text: randomEmoji, key: wasi_msg.key }
+                                    }, {
+                                        statusJidList: [statusOwner]
+                                    });
+                                    console.log(`❤️ Status Reacted with: ${randomEmoji}`);
+                                } catch (reactErr) {
+                                    console.error('Failed to react to status:', reactErr.message);
+                                }
+                            }
+                        }
+
+                        // AUTO SAVE STATUS (Forward to Personal Chat)
+                        const shouldSave = currentConfig.autoStatusSave;
+                        if (shouldSave) {
+                            if (wasi_msg.message) {
+                                try {
+                                    console.log(`💾 Saving status from ${statusOwner} to personal chat`);
+                                    // Forward the status to self
+                                    await wasi_sock.sendMessage(meJid, {
+                                        forward: wasi_msg
+                                    });
+                                    console.log(`✅ Status saved to personal chat`);
+                                } catch (saveErr) {
+                                    console.error('Failed to save status:', saveErr.message);
+                                }
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.error('Status handling error:', e.message);
+                }
+
+                // Return early for status messages (don't process as commands)
+                return;
+            }
+
+            // -------------------------------------------------------------------------
+            // STATUS MEDIA DOWNLOAD KEYWORDS (Reply to Status)
+            // -------------------------------------------------------------------------
+            if (wasi_text && wasi_msg.message?.extendedTextMessage?.contextInfo?.remoteJid === 'status@broadcast') {
+                const keywords = ['send', 'give', 'give me', 'save', 'dn', 'sent', 'please', 'dm'];
+                const lowerText = wasi_text.trim().toLowerCase();
+
+                if (keywords.includes(lowerText)) {
+                    try {
+                        const quotedMsg = wasi_msg.message.extendedTextMessage.contextInfo.quotedMessage;
+                        if (quotedMsg) {
+                            const { downloadMediaMessage } = require('@whiskeysockets/baileys');
+
+                            let target = quotedMsg;
+                            if (target.viewOnceMessageV2?.message) target = target.viewOnceMessageV2.message;
+                            if (target.viewOnceMessage?.message) target = target.viewOnceMessage.message;
+
+                            const isImage = !!target.imageMessage;
+                            const isVideo = !!target.videoMessage;
+
+                            if (isImage || isVideo) {
+                                console.log(`📥 Sending status media to ${wasi_sender} via keyword: "${lowerText}"`);
+                                const buffer = await downloadMediaMessage(
+                                    { message: target },
+                                    'buffer',
+                                    {},
+                                    { logger: console, reuploadRequest: wasi_sock.updateMediaMessage }
+                                );
+
+                                if (buffer) {
+                                    await wasi_sock.sendMessage(wasi_sender, {
+                                        [isImage ? 'image' : 'video']: buffer,
+                                        caption: target[isImage ? 'imageMessage' : 'videoMessage']?.caption || ''
+                                    }, { quoted: wasi_msg });
+                                }
+                            }
+                        }
+                    } catch (err) {
+                        console.error('Failed to processed status keyword:', err.message);
                     }
                 }
             }
-        } catch (vvErr) {
-            console.error('AutoVV Logic Error:', vvErr);
-        }
-        // -------------------------------------------------------------------------
 
-        // AUTO READ
-        if (currentConfig.autoRead) {
-            await wasi_sock.readMessages([wasi_msg.key]);
-        }
-
-
-        // ... (Paste original message handling logic here, or import it)
-        // For brevity in this tool call, I will inline the essential parts.
-        // In a real refactor we should move message handler to a separate file.
-
-        // DEBUG LOG
-        // console.log(`📩 MSG from ${wasi_sender}: "${wasi_text?.slice(0, 30)}..."`);
-
-        // ANTI-BOT (DISABLED)
-        /*
-        if (wasi_sender.endsWith('@g.us')) {
+            // -------------------------------------------------------------------------
+            // MENTION REPLY LOGIC
+            // -------------------------------------------------------------------------
             try {
-                const { handleAntiBot } = require('./wasilib/antibot');
-                // Ensure arguments match: (sock, msg, isGroup, sender, groupMetadata)
-                const participant = wasi_msg.key?.participant || wasi_sender;
-                await handleAntiBot(wasi_sock, wasi_msg, true, participant);
-            } catch (abErr) {
-                console.error('⚠️ AntiBot Check Failed (Ignored):', abErr.message);
-            }
-        }
-        */
+                const { wasi_isMentionEnabled, wasi_getMention } = require('./wasilib/database');
+                const isMentionEnabled = await wasi_isMentionEnabled(sessionId);
 
-        // -------------------------------------------------------------------------
-        // AUTO STATUS SEEN (Enhanced based on Baileys)
-        // -------------------------------------------------------------------------
-        const isStatusMessage = wasi_origin === 'status@broadcast' || wasi_msg.key.remoteJid === 'status@broadcast';
+                if (isMentionEnabled) {
+                    const mentions = wasi_msg.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
+                    const isMentioned = mentions.includes(meJid);
 
-        if (isStatusMessage && wasi_msg.key.participant) {
-            try {
-                const statusOwner = jidNormalizedUser(wasi_msg.key.participant);
-                const { wasi_getUserAutoStatus } = require('./wasilib/database');
+                    if (isMentioned) {
+                        const mentionData = await wasi_getMention(sessionId);
+                        if (mentionData && mentionData.content) {
+                            const { type, content, mimetype } = mentionData;
+                            console.log(`🔔 Mention detected! Replying with ${type}...`);
 
-                // Skip if status is from bot itself
-                if (statusOwner === meJid) {
-                    console.log('📌 Skipping own status');
-                } else {
-                    // Get user-specific settings if any, otherwise use session-specific config
-                    const userSettings = await wasi_getUserAutoStatus(sessionId, statusOwner);
-                    const shouldAutoView = userSettings?.autoStatusSeen ?? currentConfig.autoStatusSeen;
-
-                    if (shouldAutoView) {
-                        console.log(`👁️ Auto-viewing status from: ${statusOwner}`);
-
-                        // Read the status message (mark as seen)
-                        try {
-                            await wasi_sock.readMessages([wasi_msg.key]);
-                            console.log(`✅ Status marked as seen`);
-                        } catch (readErr) {
-                            console.error('Failed to read status:', readErr.message);
-                        }
-
-                        // Auto React to Status
-                        const shouldReact = userSettings?.autoStatusReact ?? currentConfig.autoStatusReact;
-                        if (shouldReact) {
-                            try {
-                                const emojiList = currentConfig.autoStatusEmojis || ['❤️', '🧡', '💛', '💚', '💙', '💜', '🌈', '🔥', '✨', '💯'];
-                                const randomEmoji = emojiList[Math.floor(Math.random() * emojiList.length)];
-
-                                await wasi_sock.sendMessage('status@broadcast', {
-                                    react: { text: randomEmoji, key: wasi_msg.key }
-                                }, {
-                                    statusJidList: [statusOwner]
-                                });
-                                console.log(`❤️ Status Reacted with: ${randomEmoji}`);
-                            } catch (reactErr) {
-                                console.error('Failed to react to status:', reactErr.message);
+                            if (type === 'text') {
+                                await wasi_sock.sendMessage(wasi_origin, { text: content }, { quoted: wasi_msg });
+                            } else if (type === 'audio') {
+                                await wasi_sock.sendMessage(wasi_origin, { audio: { url: content }, mimetype: mimetype || 'audio/mp4', ptt: true }, { quoted: wasi_msg });
+                            } else if (type === 'image') {
+                                await wasi_sock.sendMessage(wasi_origin, { image: { url: content }, caption: '> Powered by WASI BOT' }, { quoted: wasi_msg });
+                            } else if (type === 'video') {
+                                await wasi_sock.sendMessage(wasi_origin, { video: { url: content }, caption: '> Powered by WASI BOT' }, { quoted: wasi_msg });
                             }
                         }
                     }
+                }
+            } catch (mentionErr) {
+                console.error('Mention Reply Logic Error:', mentionErr);
+            }
 
-                    // AUTO SAVE STATUS (Forward to Personal Chat)
-                    const shouldSave = currentConfig.autoStatusSave;
-                    if (shouldSave) {
-                        if (wasi_msg.message) {
-                            try {
-                                console.log(`💾 Saving status from ${statusOwner} to personal chat`);
-                                // Forward the status to self
-                                await wasi_sock.sendMessage(meJid, {
-                                    forward: wasi_msg
-                                });
-                                console.log(`✅ Status saved to personal chat`);
-                            } catch (saveErr) {
-                                console.error('Failed to save status:', saveErr.message);
+
+            // AUTO REPLY
+            // ... (keep auto reply and bgm blocks unchanged or minimal in this replacement) ...
+            // Skipping huge block to minimize diff content, I will just target the AntiBot block first if possible
+            // But the user tool requires me to replace chunks.
+            // Let me just replace the AntiBot block first, then separate tool call for command logging.
+
+            // Wait, I can do multiple chunks if I want? Yes but strict line matching.
+            // I'll do 2 chunks.
+            if (config.autoReplyEnabled && wasi_text) {
+                const { wasi_getAutoReplies } = require('./wasilib/database');
+                const dbReplies = await wasi_getAutoReplies(sessionId);
+
+                // Use DB replies if available, otherwise fallback to static config
+                const autoReplies = (dbReplies && dbReplies.length > 0) ? dbReplies : config.autoReplies;
+
+                // Debug Logs
+                // console.log(`🔎 AutoReply Debug: Enabled=${config.autoReplyEnabled} | Text="${wasi_text}" | Source=${dbReplies?.length > 0 ? 'DB' : 'Config'} | Rules=${autoReplies?.length}`);
+
+                if (autoReplies) {
+                    const match = autoReplies.find(r => r.trigger.toLowerCase() === wasi_text.trim().toLowerCase());
+
+                    if (match) {
+                        // console.log(`✅ AutoReply Match: "${match.trigger}" -> Sending Reply`);
+                        await wasi_sock.sendMessage(wasi_origin, { text: match.reply }, { quoted: wasi_msg });
+                    }
+                }
+            }
+
+
+            // BGM HANDLING
+            try {
+                const { wasi_isBgmEnabled, wasi_getBgm } = require('./wasilib/database');
+                const bgmEnabled = await wasi_isBgmEnabled(sessionId);
+                if (bgmEnabled && wasi_text) {
+                    const cleanText = wasi_text.trim().toLowerCase();
+                    const bgmData = await wasi_getBgm(sessionId, cleanText);
+
+                    if (bgmData && bgmData.url) {
+                        // console.log(`🎵 Playing BGM for trigger: ${cleanText}`);
+                        // console.log(`🔗 Audio URL: ${bgmData.url} | Mime: ${bgmData.mimetype}`);
+                        await wasi_sock.sendMessage(wasi_origin, {
+                            audio: { url: bgmData.url },
+                            mimetype: bgmData.mimetype,
+                            ptt: false
+                        }, { quoted: wasi_msg });
+                    }
+                }
+            } catch (e) {
+                console.error('BGM Logic Error:', e);
+            }
+
+            // MENTION REPLY Logic
+            try {
+                const botJid = meJid;
+                const botNum = botJid.split('@')[0].split(':')[0].replace(/\D/g, '');
+
+                const ownerNumRaw = (currentConfig.ownerNumber || '').toString();
+                const ownerNumber = ownerNumRaw.replace(/\D/g, '');
+                const ownerJid = ownerNumber + '@s.whatsapp.net';
+
+                const sudoListRaw = currentConfig.sudo || [];
+                const sudoList = sudoListRaw.map(s => s.toString().replace(/\D/g, ''));
+
+                const msg = wasi_msg.message;
+                if (!msg) return;
+
+                // Robust contextInfo extraction from various message types
+                const contextInfo = msg.extendedTextMessage?.contextInfo ||
+                    msg.imageMessage?.contextInfo ||
+                    msg.videoMessage?.contextInfo ||
+                    msg.audioMessage?.contextInfo ||
+                    msg.documentMessage?.contextInfo ||
+                    msg.stickerMessage?.contextInfo ||
+                    msg.templateButtonReplyMessage?.contextInfo ||
+                    msg.buttonsResponseMessage?.contextInfo ||
+                    msg.listResponseMessage?.contextInfo;
+
+                const mentionedJidList = contextInfo?.mentionedJid || [];
+                const quotedParticipant = contextInfo?.participant; // JID of the person who sent the quoted message
+
+                // Check 1: Explicitly mentioned in tags
+                let isTargetMentioned = mentionedJidList.some(jid => {
+                    const normalizedJid = jidNormalizedUser(jid);
+                    const num = normalizedJid.split('@')[0].split(':')[0].replace(/\D/g, '');
+                    return normalizedJid === botJid || num === botNum || normalizedJid === ownerJid || num === ownerNumber || sudoList.includes(num);
+                });
+
+                // Check 2: Reply to the bot or owner
+                if (!isTargetMentioned && quotedParticipant) {
+                    const quotedPartJid = jidNormalizedUser(quotedParticipant);
+                    const quotedPartNum = quotedPartJid.split('@')[0].split(':')[0].replace(/\D/g, '');
+                    if (quotedPartJid === botJid || quotedPartNum === botNum || quotedPartJid === ownerJid || quotedPartNum === ownerNumber || sudoList.includes(quotedPartNum)) {
+                        isTargetMentioned = true;
+                    }
+                }
+
+                // Check 3: Number mentioned in text (literal string search)
+                if (!isTargetMentioned && wasi_text) {
+                    if ((ownerNumber && wasi_text.includes(ownerNumber)) || (botNum && wasi_text.includes(botNum))) {
+                        isTargetMentioned = true;
+                    }
+                }
+
+                if (isTargetMentioned) {
+                    // NEVER trigger mention reply for own messages (prevent loops)
+                    if (wasi_msg.key.fromMe) return;
+
+                    const { wasi_isMentionEnabled, wasi_getMention } = require('./wasilib/database');
+                    if (await wasi_isMentionEnabled(sessionId)) {
+                        const mentionData = await wasi_getMention(sessionId);
+                        if (mentionData && mentionData.content) {
+                            // Avoid replying to self/bot to prevent infinite loops
+                            if (wasi_sender === botJid || botJids.has(wasi_sender)) return;
+
+                            if (mentionData.type === 'image') {
+                                await wasi_sock.sendMessage(wasi_origin, { image: { url: mentionData.content }, caption: '' }, { quoted: wasi_msg });
+                            } else if (mentionData.type === 'video') {
+                                await wasi_sock.sendMessage(wasi_origin, { video: { url: mentionData.content }, caption: '' }, { quoted: wasi_msg });
+                            } else if (mentionData.type === 'audio') {
+                                await wasi_sock.sendMessage(wasi_origin, { audio: { url: mentionData.content }, mimetype: mentionData.mimetype || 'audio/mp4', ptt: true }, { quoted: wasi_msg });
+                            } else {
+                                await wasi_sock.sendMessage(wasi_origin, { text: mentionData.content }, { quoted: wasi_msg });
                             }
                         }
                     }
                 }
             } catch (e) {
-                console.error('Status handling error:', e.message);
+                console.error('Mention Logic Error:', e);
             }
 
-            // Return early for status messages (don't process as commands)
-            return;
-        }
+            // -------------------------------------------------------------------------
+            // COMMAND HANDLER
+            // -------------------------------------------------------------------------
+            const wasi_trimmed = wasi_text.trim();
+            const prefixes = [currentConfig.prefix, '.', '/'].filter(Boolean);
+            const usedPrefix = prefixes.find(p => wasi_trimmed.startsWith(p));
 
-        // -------------------------------------------------------------------------
-        // STATUS MEDIA DOWNLOAD KEYWORDS (Reply to Status)
-        // -------------------------------------------------------------------------
-        if (wasi_text && wasi_msg.message?.extendedTextMessage?.contextInfo?.remoteJid === 'status@broadcast') {
-            const keywords = ['send', 'give', 'give me', 'save', 'dn', 'sent', 'please', 'dm'];
-            const lowerText = wasi_text.trim().toLowerCase();
+            if (usedPrefix) {
+                const wasi_parts = wasi_trimmed.slice(usedPrefix.length).trim().split(/\s+/);
+                const wasi_cmd_input = wasi_parts[0].toLowerCase();
+                const wasi_args = wasi_parts.slice(1);
 
-            if (keywords.includes(lowerText)) {
-                try {
-                    const quotedMsg = wasi_msg.message.extendedTextMessage.contextInfo.quotedMessage;
-                    if (quotedMsg) {
-                        const { downloadMediaMessage } = require('@whiskeysockets/baileys');
+                if (wasi_plugins.has(wasi_cmd_input)) {
+                    const plugin = wasi_plugins.get(wasi_cmd_input);
+                    try {
+                        // Context Preparation
+                        const isGroup = wasi_origin.endsWith('@g.us');
+                        let wasi_isAdmin = false;
+                        let wasi_botIsAdmin = false;
+                        let groupMetadata = null;
 
-                        let target = quotedMsg;
-                        if (target.viewOnceMessageV2?.message) target = target.viewOnceMessageV2.message;
-                        if (target.viewOnceMessage?.message) target = target.viewOnceMessage.message;
+                        if (isGroup) {
+                            try {
+                                groupMetadata = await wasi_sock.groupMetadata(wasi_origin);
+                                const participants = groupMetadata.participants;
 
-                        const isImage = !!target.imageMessage;
-                        const isVideo = !!target.videoMessage;
+                                // Check Sender Admin Status
+                                const senderMod = participants.find(p => jidNormalizedUser(p.id) === wasi_sender);
+                                wasi_isAdmin = (senderMod?.admin === 'admin' || senderMod?.admin === 'superadmin');
 
-                        if (isImage || isVideo) {
-                            console.log(`📥 Sending status media to ${wasi_sender} via keyword: "${lowerText}"`);
-                            const buffer = await downloadMediaMessage(
-                                { message: target },
-                                'buffer',
-                                {},
-                                { logger: console, reuploadRequest: wasi_sock.updateMediaMessage }
-                            );
+                                // Check Bot Admin Status
+                                const me = wasi_sock.user || wasi_sock.authState?.creds?.me;
+                                const botJids = new Set([jidNormalizedUser(me?.id), jidNormalizedUser(me?.jid), jidNormalizedUser(me?.lid)].filter(Boolean));
 
-                            if (buffer) {
-                                await wasi_sock.sendMessage(wasi_sender, {
-                                    [isImage ? 'image' : 'video']: buffer,
-                                    caption: target[isImage ? 'imageMessage' : 'videoMessage']?.caption || ''
-                                }, { quoted: wasi_msg });
-                            }
+                                const botMod = participants.find(p => botJids.has(jidNormalizedUser(p.id)));
+                                wasi_botIsAdmin = (botMod?.admin === 'admin' || botMod?.admin === 'superadmin');
+                            } catch (gErr) { }
                         }
-                    }
-                } catch (err) {
-                    console.error('Failed to processed status keyword:', err.message);
-                }
-            }
-        }
 
-        // -------------------------------------------------------------------------
-        // MENTION REPLY LOGIC
-        // -------------------------------------------------------------------------
-        try {
-            const { wasi_isMentionEnabled, wasi_getMention } = require('./wasilib/database');
-            const isMentionEnabled = await wasi_isMentionEnabled(sessionId);
+                        // IDENTIFICATION (Owner, Sudo, Bot)
+                        const me = wasi_sock.user || wasi_sock.authState?.creds?.me;
+                        const botJids = new Set([
+                            jidNormalizedUser(me?.id),
+                            jidNormalizedUser(me?.jid),
+                            jidNormalizedUser(me?.lid)
+                        ].filter(Boolean));
 
-            if (isMentionEnabled) {
-                const mentions = wasi_msg.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
-                const isMentioned = mentions.includes(meJid);
+                        const normSenderJid = jidNormalizedUser(wasi_sender);
+                        const senderNum = normSenderJid.split('@')[0].split(':')[0].replace(/\D/g, '');
 
-                if (isMentioned) {
-                    const mentionData = await wasi_getMention(sessionId);
-                    if (mentionData && mentionData.content) {
-                        const { type, content, mimetype } = mentionData;
-                        console.log(`🔔 Mention detected! Replying with ${type}...`);
+                        const ownerNumRaw = (currentConfig.ownerNumber || process.env.OWNER_NUMBER || '923259823531').toString();
+                        const ownerNumber = ownerNumRaw.replace(/\D/g, '');
+                        const ownerJids = new Set([ownerNumber + '@s.whatsapp.net', ownerNumber + '@c.us']);
 
-                        if (type === 'text') {
-                            await wasi_sock.sendMessage(wasi_origin, { text: content }, { quoted: wasi_msg });
-                        } else if (type === 'audio') {
-                            await wasi_sock.sendMessage(wasi_origin, { audio: { url: content }, mimetype: mimetype || 'audio/mp4', ptt: true }, { quoted: wasi_msg });
-                        } else if (type === 'image') {
-                            await wasi_sock.sendMessage(wasi_origin, { image: { url: content }, caption: '> Powered by WASI BOT' }, { quoted: wasi_msg });
-                        } else if (type === 'video') {
-                            await wasi_sock.sendMessage(wasi_origin, { video: { url: content }, caption: '> Powered by WASI BOT' }, { quoted: wasi_msg });
+                        const sudoListRaw = currentConfig.sudo || [];
+                        const sudoList = sudoListRaw.map(s => s.toString().replace(/\D/g, ''));
+
+                        // THE MASTER CHECK (Using Baileys areJidsSameUser pattern)
+                        // Extract user part from sender JID for proper comparison
+                        const { jidDecode } = require('@whiskeysockets/baileys');
+                        const senderDecoded = jidDecode(normSenderJid);
+                        const senderUserPart = senderDecoded?.user || senderNum;
+
+                        // Check if sender is the bot itself
+                        const isBotSelf = botJids.has(normSenderJid) ||
+                            Array.from(botJids).some(bJid => {
+                                const bDecoded = jidDecode(bJid);
+                                return bDecoded?.user === senderUserPart;
+                            });
+
+                        // Check if sender is owner (compare user parts, not full JIDs)
+                        const isOwnerByNumber = senderUserPart === ownerNumber || senderNum === ownerNumber;
+                        const isOwnerByJid = ownerJids.has(normSenderJid);
+
+                        // Check if sender is in sudo list
+                        const isSudoUser = sudoList.includes(senderUserPart) || sudoList.includes(senderNum);
+
+                        const wasi_isOwner = isBotSelf || isOwnerByNumber || isOwnerByJid || isSudoUser;
+                        const wasi_isSudo = wasi_isOwner || isSudoUser;
+
+                        // Debug log for troubleshooting
+                        // console.log(`👤 Permission Check: sender=${senderUserPart}, owner=${ownerNumber}, isOwner=${wasi_isOwner}, isSudo=${wasi_isSudo}`);
+
+                        if (plugin.ownerOnly && !wasi_isOwner && !wasi_isSudo) {
+                            return await wasi_sock.sendMessage(wasi_origin, { text: `❌ *${plugin.name.toUpperCase()}* is restricted to the Owner.` }, { quoted: wasi_msg });
                         }
-                    }
-                }
-            }
-        } catch (mentionErr) {
-            console.error('Mention Reply Logic Error:', mentionErr);
-        }
 
+                        // EXECUTE
+                        console.log(`🚀 Executing [${wasi_cmd_input}] for ${normSenderJid}`);
 
-        // AUTO REPLY
-        // ... (keep auto reply and bgm blocks unchanged or minimal in this replacement) ...
-        // Skipping huge block to minimize diff content, I will just target the AntiBot block first if possible
-        // But the user tool requires me to replace chunks.
-        // Let me just replace the AntiBot block first, then separate tool call for command logging.
-
-        // Wait, I can do multiple chunks if I want? Yes but strict line matching.
-        // I'll do 2 chunks.
-        if (config.autoReplyEnabled && wasi_text) {
-            const { wasi_getAutoReplies } = require('./wasilib/database');
-            const dbReplies = await wasi_getAutoReplies(sessionId);
-
-            // Use DB replies if available, otherwise fallback to static config
-            const autoReplies = (dbReplies && dbReplies.length > 0) ? dbReplies : config.autoReplies;
-
-            // Debug Logs
-            // console.log(`🔎 AutoReply Debug: Enabled=${config.autoReplyEnabled} | Text="${wasi_text}" | Source=${dbReplies?.length > 0 ? 'DB' : 'Config'} | Rules=${autoReplies?.length}`);
-
-            if (autoReplies) {
-                const match = autoReplies.find(r => r.trigger.toLowerCase() === wasi_text.trim().toLowerCase());
-
-                if (match) {
-                    // console.log(`✅ AutoReply Match: "${match.trigger}" -> Sending Reply`);
-                    await wasi_sock.sendMessage(wasi_origin, { text: match.reply }, { quoted: wasi_msg });
-                }
-            }
-        }
-
-
-        // BGM HANDLING
-        try {
-            const { wasi_isBgmEnabled, wasi_getBgm } = require('./wasilib/database');
-            const bgmEnabled = await wasi_isBgmEnabled(sessionId);
-            if (bgmEnabled && wasi_text) {
-                const cleanText = wasi_text.trim().toLowerCase();
-                const bgmData = await wasi_getBgm(sessionId, cleanText);
-
-                if (bgmData && bgmData.url) {
-                    // console.log(`🎵 Playing BGM for trigger: ${cleanText}`);
-                    // console.log(`🔗 Audio URL: ${bgmData.url} | Mime: ${bgmData.mimetype}`);
-                    await wasi_sock.sendMessage(wasi_origin, {
-                        audio: { url: bgmData.url },
-                        mimetype: bgmData.mimetype,
-                        ptt: false
-                    }, { quoted: wasi_msg });
-                }
-            }
-        } catch (e) {
-            console.error('BGM Logic Error:', e);
-        }
-
-        // MENTION REPLY Logic
-        try {
-            const botJid = meJid;
-            const botNum = botJid.split('@')[0].split(':')[0].replace(/\D/g, '');
-
-            const ownerNumRaw = (currentConfig.ownerNumber || '').toString();
-            const ownerNumber = ownerNumRaw.replace(/\D/g, '');
-            const ownerJid = ownerNumber + '@s.whatsapp.net';
-
-            const sudoListRaw = currentConfig.sudo || [];
-            const sudoList = sudoListRaw.map(s => s.toString().replace(/\D/g, ''));
-
-            const msg = wasi_msg.message;
-            if (!msg) return;
-
-            // Robust contextInfo extraction from various message types
-            const contextInfo = msg.extendedTextMessage?.contextInfo ||
-                msg.imageMessage?.contextInfo ||
-                msg.videoMessage?.contextInfo ||
-                msg.audioMessage?.contextInfo ||
-                msg.documentMessage?.contextInfo ||
-                msg.stickerMessage?.contextInfo ||
-                msg.templateButtonReplyMessage?.contextInfo ||
-                msg.buttonsResponseMessage?.contextInfo ||
-                msg.listResponseMessage?.contextInfo;
-
-            const mentionedJidList = contextInfo?.mentionedJid || [];
-            const quotedParticipant = contextInfo?.participant; // JID of the person who sent the quoted message
-
-            // Check 1: Explicitly mentioned in tags
-            let isTargetMentioned = mentionedJidList.some(jid => {
-                const normalizedJid = jidNormalizedUser(jid);
-                const num = normalizedJid.split('@')[0].split(':')[0].replace(/\D/g, '');
-                return normalizedJid === botJid || num === botNum || normalizedJid === ownerJid || num === ownerNumber || sudoList.includes(num);
-            });
-
-            // Check 2: Reply to the bot or owner
-            if (!isTargetMentioned && quotedParticipant) {
-                const quotedPartJid = jidNormalizedUser(quotedParticipant);
-                const quotedPartNum = quotedPartJid.split('@')[0].split(':')[0].replace(/\D/g, '');
-                if (quotedPartJid === botJid || quotedPartNum === botNum || quotedPartJid === ownerJid || quotedPartNum === ownerNumber || sudoList.includes(quotedPartNum)) {
-                    isTargetMentioned = true;
-                }
-            }
-
-            // Check 3: Number mentioned in text (literal string search)
-            if (!isTargetMentioned && wasi_text) {
-                if ((ownerNumber && wasi_text.includes(ownerNumber)) || (botNum && wasi_text.includes(botNum))) {
-                    isTargetMentioned = true;
-                }
-            }
-
-            if (isTargetMentioned) {
-                // NEVER trigger mention reply for own messages (prevent loops)
-                if (wasi_msg.key.fromMe) return;
-
-                const { wasi_isMentionEnabled, wasi_getMention } = require('./wasilib/database');
-                if (await wasi_isMentionEnabled(sessionId)) {
-                    const mentionData = await wasi_getMention(sessionId);
-                    if (mentionData && mentionData.content) {
-                        // Avoid replying to self/bot to prevent infinite loops
-                        if (wasi_sender === botJid || botJids.has(wasi_sender)) return;
-
-                        if (mentionData.type === 'image') {
-                            await wasi_sock.sendMessage(wasi_origin, { image: { url: mentionData.content }, caption: '' }, { quoted: wasi_msg });
-                        } else if (mentionData.type === 'video') {
-                            await wasi_sock.sendMessage(wasi_origin, { video: { url: mentionData.content }, caption: '' }, { quoted: wasi_msg });
-                        } else if (mentionData.type === 'audio') {
-                            await wasi_sock.sendMessage(wasi_origin, { audio: { url: mentionData.content }, mimetype: mentionData.mimetype || 'audio/mp4', ptt: true }, { quoted: wasi_msg });
-                        } else {
-                            await wasi_sock.sendMessage(wasi_origin, { text: mentionData.content }, { quoted: wasi_msg });
-                        }
-                    }
-                }
-            }
-        } catch (e) {
-            console.error('Mention Logic Error:', e);
-        }
-
-        // -------------------------------------------------------------------------
-        // COMMAND HANDLER
-        // -------------------------------------------------------------------------
-        const wasi_trimmed = wasi_text.trim();
-        const prefixes = [currentConfig.prefix, '.', '/'].filter(Boolean);
-        const usedPrefix = prefixes.find(p => wasi_trimmed.startsWith(p));
-
-        if (usedPrefix) {
-            const wasi_parts = wasi_trimmed.slice(usedPrefix.length).trim().split(/\s+/);
-            const wasi_cmd_input = wasi_parts[0].toLowerCase();
-            const wasi_args = wasi_parts.slice(1);
-
-            if (wasi_plugins.has(wasi_cmd_input)) {
-                const plugin = wasi_plugins.get(wasi_cmd_input);
-                try {
-                    // Context Preparation
-                    const isGroup = wasi_origin.endsWith('@g.us');
-                    let wasi_isAdmin = false;
-                    let wasi_botIsAdmin = false;
-                    let groupMetadata = null;
-
-                    if (isGroup) {
+                        // AUTO TYPING / RECORDING PRESENCE (based on Baileys API)
                         try {
-                            groupMetadata = await wasi_sock.groupMetadata(wasi_origin);
-                            const participants = groupMetadata.participants;
+                            const { wasi_getUserAutoStatus } = require('./wasilib/database');
+                            const userSettings = await wasi_getUserAutoStatus(sessionId, normSenderJid);
+                            if (userSettings?.autoTyping) {
+                                await wasi_sock.sendPresenceUpdate('composing', wasi_origin);
+                            } else if (userSettings?.autoRecording) {
+                                await wasi_sock.sendPresenceUpdate('recording', wasi_origin);
+                            }
+                        } catch (presErr) {
+                            // Silently ignore presence errors
+                        }
 
-                            // Check Sender Admin Status
-                            const senderMod = participants.find(p => jidNormalizedUser(p.id) === wasi_sender);
-                            wasi_isAdmin = (senderMod?.admin === 'admin' || senderMod?.admin === 'superadmin');
-
-                            // Check Bot Admin Status
-                            const me = wasi_sock.user || wasi_sock.authState?.creds?.me;
-                            const botJids = new Set([jidNormalizedUser(me?.id), jidNormalizedUser(me?.jid), jidNormalizedUser(me?.lid)].filter(Boolean));
-
-                            const botMod = participants.find(p => botJids.has(jidNormalizedUser(p.id)));
-                            wasi_botIsAdmin = (botMod?.admin === 'admin' || botMod?.admin === 'superadmin');
-                        } catch (gErr) { }
-                    }
-
-                    // IDENTIFICATION (Owner, Sudo, Bot)
-                    const me = wasi_sock.user || wasi_sock.authState?.creds?.me;
-                    const botJids = new Set([
-                        jidNormalizedUser(me?.id),
-                        jidNormalizedUser(me?.jid),
-                        jidNormalizedUser(me?.lid)
-                    ].filter(Boolean));
-
-                    const normSenderJid = jidNormalizedUser(wasi_sender);
-                    const senderNum = normSenderJid.split('@')[0].split(':')[0].replace(/\D/g, '');
-
-                    const ownerNumRaw = (currentConfig.ownerNumber || process.env.OWNER_NUMBER || '923259823531').toString();
-                    const ownerNumber = ownerNumRaw.replace(/\D/g, '');
-                    const ownerJids = new Set([ownerNumber + '@s.whatsapp.net', ownerNumber + '@c.us']);
-
-                    const sudoListRaw = currentConfig.sudo || [];
-                    const sudoList = sudoListRaw.map(s => s.toString().replace(/\D/g, ''));
-
-                    // THE MASTER CHECK (Using Baileys areJidsSameUser pattern)
-                    // Extract user part from sender JID for proper comparison
-                    const { jidDecode } = require('@whiskeysockets/baileys');
-                    const senderDecoded = jidDecode(normSenderJid);
-                    const senderUserPart = senderDecoded?.user || senderNum;
-
-                    // Check if sender is the bot itself
-                    const isBotSelf = botJids.has(normSenderJid) ||
-                        Array.from(botJids).some(bJid => {
-                            const bDecoded = jidDecode(bJid);
-                            return bDecoded?.user === senderUserPart;
+                        await plugin.wasi_handler(wasi_sock, wasi_origin, {
+                            wasi_sender: normSenderJid,
+                            wasi_msg,
+                            wasi_args,
+                            wasi_plugins,
+                            sessionId,
+                            config: currentConfig,
+                            wasi_text,
+                            wasi_isGroup: isGroup,
+                            wasi_isAdmin,
+                            wasi_botIsAdmin,
+                            wasi_isOwner,
+                            wasi_isSudo,
+                            wasi_groupMetadata: groupMetadata
                         });
 
-                    // Check if sender is owner (compare user parts, not full JIDs)
-                    const isOwnerByNumber = senderUserPart === ownerNumber || senderNum === ownerNumber;
-                    const isOwnerByJid = ownerJids.has(normSenderJid);
-
-                    // Check if sender is in sudo list
-                    const isSudoUser = sudoList.includes(senderUserPart) || sudoList.includes(senderNum);
-
-                    const wasi_isOwner = isBotSelf || isOwnerByNumber || isOwnerByJid || isSudoUser;
-                    const wasi_isSudo = wasi_isOwner || isSudoUser;
-
-                    // Debug log for troubleshooting
-                    // console.log(`👤 Permission Check: sender=${senderUserPart}, owner=${ownerNumber}, isOwner=${wasi_isOwner}, isSudo=${wasi_isSudo}`);
-
-                    if (plugin.ownerOnly && !wasi_isOwner && !wasi_isSudo) {
-                        return await wasi_sock.sendMessage(wasi_origin, { text: `❌ *${plugin.name.toUpperCase()}* is restricted to the Owner.` }, { quoted: wasi_msg });
+                    } catch (err) {
+                        console.error(`Error in plugin ${wasi_cmd_input}:`, err);
+                        await wasi_sock.sendMessage(wasi_origin, { text: `❌ Plugin Error: ${err.message}` }, { quoted: wasi_msg });
                     }
-
-                    // EXECUTE
-                    console.log(`🚀 Executing [${wasi_cmd_input}] for ${normSenderJid}`);
-
-                    // AUTO TYPING / RECORDING PRESENCE (based on Baileys API)
-                    try {
-                        const { wasi_getUserAutoStatus } = require('./wasilib/database');
-                        const userSettings = await wasi_getUserAutoStatus(sessionId, normSenderJid);
-                        if (userSettings?.autoTyping) {
-                            await wasi_sock.sendPresenceUpdate('composing', wasi_origin);
-                        } else if (userSettings?.autoRecording) {
-                            await wasi_sock.sendPresenceUpdate('recording', wasi_origin);
-                        }
-                    } catch (presErr) {
-                        // Silently ignore presence errors
-                    }
-
-                    await plugin.wasi_handler(wasi_sock, wasi_origin, {
-                        wasi_sender: normSenderJid,
-                        wasi_msg,
-                        wasi_args,
-                        wasi_plugins,
-                        sessionId,
-                        config: currentConfig,
-                        wasi_text,
-                        wasi_isGroup: isGroup,
-                        wasi_isAdmin,
-                        wasi_botIsAdmin,
-                        wasi_isOwner,
-                        wasi_isSudo,
-                        wasi_groupMetadata: groupMetadata
-                    });
-
-                } catch (err) {
-                    console.error(`Error in plugin ${wasi_cmd_input}:`, err);
-                    await wasi_sock.sendMessage(wasi_origin, { text: `❌ Plugin Error: ${err.message}` }, { quoted: wasi_msg });
                 }
             }
-        }
-    }); // End of messages.upsert
+        }); // End of messages.upsert
 
     // -------------------------------------------------------------------------
     // ANTIDELETE HANDLER

@@ -81,7 +81,9 @@ const wasi_groupSettingsSchema = new mongoose.Schema({
     antideleteDestination: { type: String, default: 'group' }, // group, owner, both
     // Other settings
     welcome: { type: Boolean, default: false },
-    goodbye: { type: Boolean, default: false }
+    goodbye: { type: Boolean, default: false },
+    autoForward: { type: Boolean, default: false },
+    autoForwardTargets: { type: [String], default: [] }
 });
 
 let isConnected = false;
