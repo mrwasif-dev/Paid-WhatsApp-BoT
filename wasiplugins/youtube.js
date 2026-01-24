@@ -100,6 +100,10 @@ module.exports = {
                 cookies: cookiesFile || undefined
             };
 
+            // Force User Agent matching the cookies to bypass bot detection
+            // Mozilla/5.0 (Windows NT 10.0; Win64; x64) is usually safe
+            options.addHeader.push('User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+
             if (isAudio) {
                 options.extractAudio = true;
                 options.audioFormat = 'mp3';
