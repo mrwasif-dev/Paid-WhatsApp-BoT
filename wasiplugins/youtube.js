@@ -92,17 +92,16 @@ module.exports = {
                 noCheckCertificates: true,
                 noWarnings: true,
                 addHeader: [
-                    'referer:youtube.com',
-                    `user-agent:${context.config?.ytUserAgent || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}`
+                    'referer:https://www.youtube.com/',
+                    'User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
                 ],
-                userAgent: context.config?.ytUserAgent || undefined,
+                // userAgent: undefined, // Let addHeader handle it to avoid duplication
                 ffmpegLocation: ffmpegPath || undefined,
-                cookies: cookiesFile || undefined
+                cookies: cookiesFile || undefined,
+                // Additional Anti-Bot Args
+                geoBypass: true,
+                geoBypassCountry: 'US'
             };
-
-            // Force User Agent matching the cookies to bypass bot detection
-            // Mozilla/5.0 (Windows NT 10.0; Win64; x64) is usually safe
-            options.addHeader.push('User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
 
             if (isAudio) {
                 options.extractAudio = true;
