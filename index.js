@@ -677,6 +677,25 @@ async function setupMessageHandler(wasi_sock, sessionId) {
         if (messageTimestamp) {
             const messageTime = typeof messageTimestamp === 'number' ? messageTimestamp : (messageTimestamp.low || messageTimestamp);
             const currentTime = Math.floor(Date.now() / 1000);
+
+            // --- XP SYSTEM ---
+            if (!wasi_msg.key.fromMe) {
+                try {
+                    const { wasi_addXP } = require('./wasilib/database');
+                    // Award 1-5 XP per message
+                    const xpAmount = Math.floor(Math.random() * 5) + 1;
+                    const newLevel = await wasi_addXP(sessionId, wasi_sender, xpAmount);
+
+                    if (newLevel) {
+                        // Level Up Notification
+                        await wasi_sock.sendMessage(wasi_origin, {
+                            text: `🎉 *LEVEL UP!* 🎉\n\nCongrats @${wasi_sender.split('@')[0]}, you reached *Level ${newLevel}*! 🆙`,
+                            mentions: [wasi_sender]
+                        }, { quoted: wasi_msg });
+                    }
+                } catch (xpErr) { console.error('XP Error:', xpErr.message); }
+            }
+
             // Relaxed timeout to 5 minutes to handle Heroku lag/sleep
             if (currentTime - messageTime > 300) return;
         }

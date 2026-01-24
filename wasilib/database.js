@@ -24,6 +24,13 @@ const wasi_autoReplySchema = new mongoose.Schema({
     reply: { type: String, required: true }
 });
 
+const wasi_rankSchema = new mongoose.Schema({
+    jid: { type: String, required: true, unique: true },
+    xp: { type: Number, default: 0 },
+    level: { type: Number, default: 0 },
+    role: { type: String, default: 'Novice' }
+});
+
 const wasi_sessionIndexSchema = new mongoose.Schema({
     sessionId: { type: String, required: true, unique: true },
     createdAt: { type: Date, default: Date.now }
@@ -111,6 +118,7 @@ function getModel(sessionId, type) {
         case 'MentionConfig': return mongoose.model(modelName, wasi_mentionConfigSchema, collectionName);
         case 'BotConfig': return mongoose.model(modelName, wasi_botConfigSchema, collectionName);
         case 'GroupSettings': return mongoose.model(modelName, wasi_groupSettingsSchema, collectionName);
+        case 'Rank': return mongoose.model(modelName, wasi_rankSchema, collectionName);
         default: throw new Error(`Unknown model type: ${type}`);
     }
 }
@@ -507,6 +515,64 @@ async function wasi_deleteAutoReply(sessionId, trigger) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// RANK / XP SYSTEM
+// ---------------------------------------------------------------------------
+
+async function wasi_getXP(sessionId, jid) {
+    if (!isConnected) return { xp: 0, level: 0, role: 'Novice' };
+    try {
+        const Model = getModel(sessionId, 'Rank');
+        let user = await Model.findOne({ jid });
+        if (!user) user = await Model.create({ jid, xp: 0, level: 0, role: 'Novice' });
+        return user;
+    } catch (e) {
+        console.error('DB Error getXP:', e);
+        return { xp: 0, level: 0, role: 'Novice' };
+    }
+}
+
+async function wasi_addXP(sessionId, jid, amount) {
+    if (!isConnected) return false;
+    try {
+        const Model = getModel(sessionId, 'Rank');
+        let user = await Model.findOne({ jid });
+        if (!user) user = await Model.create({ jid, xp: 0, level: 0 });
+
+        user.xp += amount;
+        // Simple Level Up Formula: Level = sqrt(XP / 100)
+        // Or XP needed = Level * Level * 100
+        const newLevel = Math.floor(Math.sqrt(user.xp / 100));
+
+        let leveledUp = false;
+        if (newLevel > user.level) {
+            user.level = newLevel;
+            leveledUp = true;
+            // Update Roles based on Level (Example)
+            if (newLevel >= 50) user.role = 'Titan';
+            else if (newLevel >= 25) user.role = 'Legend';
+            else if (newLevel >= 10) user.role = 'Pro';
+            else if (newLevel >= 5) user.role = 'Apprentice';
+        }
+
+        await user.save();
+        return leveledUp ? newLevel : false;
+    } catch (e) {
+        console.error('DB Error addXP:', e);
+        return false;
+    }
+}
+
+async function wasi_getLeaderboard(sessionId, limit = 10) {
+    if (!isConnected) return [];
+    try {
+        const Model = getModel(sessionId, 'Rank');
+        return await Model.find({}).sort({ xp: -1 }).limit(limit);
+    } catch (e) {
+        return [];
+    }
+}
+
 module.exports = {
     wasi_connectDatabase,
     wasi_isDbConnected,
@@ -535,5 +601,8 @@ module.exports = {
     wasi_toggleMention,
     wasi_isMentionEnabled,
     wasi_getGroupSettings,
-    wasi_updateGroupSettings
+    wasi_updateGroupSettings,
+    wasi_getXP,
+    wasi_addXP,
+    wasi_getLeaderboard
 };
