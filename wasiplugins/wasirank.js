@@ -1,4 +1,5 @@
 const { wasi_getXP, wasi_getLeaderboard } = require('../wasilib/database');
+const canvacord = require('canvacord');
 
 module.exports = {
     name: 'wasirank',
@@ -52,10 +53,38 @@ module.exports = {
         // We can generate a fancy image using canvas, but for stability, let's use a nice text + thumbnail layout first.
         // Or pull a rank card API. Vreden has one.
 
-        const rankCardUrl = `https://api.vreden.my.id/api/v1/canvas/rank?avatar=${encodeURIComponent(ppUrl)}&username=${encodeURIComponent(target.split('@')[0])}&bg=${encodeURIComponent('https://images.unsplash.com/photo-1579546929518-9e396f3cc809?ixlib=rb-1.2.1&q=80&fm=jpg&crop=entropy&cs=tinysrgb&w=1080&fit=max')}&level=${data.level}&xp=${data.xp}&neededxp=${(data.level + 1) ** 2 * 100}&discriminator=0000`;
+        // Generate rank card using canvacord
+        const neededXP = (data.level + 1) ** 2 * 100;
+
+        const rank = new canvacord.Rank()
+            .setAvatar(ppUrl)
+            .setCurrentXP(data.xp)
+            .setRequiredXP(neededXP)
+            .setLevel(data.level)
+            .setStatus('online')
+            .setProgressBar('#007BFF', 'COLOR')
+            .setUsername(target.split('@')[0])
+            .setDiscriminator('0000');
+
+        // Build the card buffer
+        let dataBuffer;
+        try {
+            dataBuffer = await rank.build();
+        } catch (err) {
+            console.error('Rank card generation failed:', err);
+            // Fallback to text only if image fails
+            return await sock.sendMessage(from, {
+                text: `👤 *USER PROFILE* (Image Failed)\n\n` +
+                    `📛 *Name:* @${target.split('@')[0]}\n` +
+                    `🛡️ *Role:* ${data.role}\n` +
+                    `🆙 *Level:* ${data.level}\n` +
+                    `✨ *XP:* ${data.xp}\n`,
+                mentions: [target]
+            }, { quoted: wasi_msg });
+        }
 
         await sock.sendMessage(from, {
-            image: { url: rankCardUrl },
+            image: dataBuffer,
             caption: `👤 *USER PROFILE*\n\n` +
                 `📛 *Name:* @${target.split('@')[0]}\n` +
                 `🛡️ *Role:* ${data.role}\n` +

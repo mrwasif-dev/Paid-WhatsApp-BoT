@@ -33,6 +33,7 @@
     "@whiskeysockets/baileys": "^7.0.0-rc.9",
     "axios": "^1.13.2",
     "better-sqlite3": "^12.6.0",
+    "canvacord": "^5.4.10",
     "catbox": "^10.0.6",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
