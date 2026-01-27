@@ -41,6 +41,7 @@ This bot uses a `Dockerfile` for stable deployment.
         heroku login
         heroku container:login
         ```
+[![Deploy to Heroku](https://www.herokucdn.com/deploy/button.svg)](https://heroku.com/deploy?template=https://github.com/Itxxwasi/WASI-MD-V7)
 
 2.  **Create App**
     ```bash
