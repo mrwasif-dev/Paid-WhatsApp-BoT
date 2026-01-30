@@ -2,86 +2,80 @@ const { wasi_updateGroupSettings, wasi_getGroupSettings } = require('../wasilib/
 
 module.exports = {
     name: 'autoforward',
-    description: 'Auto-forward every incoming message from this group to set targets',
+    description: 'Auto-forward messages from multiple Source JIDs to Target JIDs (works in any chat)',
     aliases: ['af', 'autof'],
-    category: 'Group',
+    category: 'Utilities',
     wasi_handler: async (sock, from, context) => {
-        const { wasi_args, wasi_isAdmin, wasi_isOwner, wasi_isSudo, wasi_isGroup, sessionId } = context;
-
-        if (!wasi_isGroup) {
-            return await sock.sendMessage(from, { text: '❌ This command is only for groups.' });
-        }
+        const { wasi_args, wasi_isAdmin, wasi_isOwner, wasi_isSudo, sessionId } = context;
 
         if (!wasi_isAdmin && !wasi_isOwner && !wasi_isSudo) {
-            return await sock.sendMessage(from, { text: '❌ You need to be an Admin to use this command.' });
+            return await sock.sendMessage(from, { text: '🙅‍♂️ You need admin/owner privileges to configure Auto-Forward.' });
         }
 
         const action = wasi_args[0]?.toLowerCase();
         const current = await wasi_getGroupSettings(sessionId, from) || {};
 
         if (!action) {
-            const status = current.autoForward ? '🟢 ON' : '🔴 OFF';
-            const targets = current.autoForwardTargets || [];
-
-            let text = `🔄 *AUTO-FORWARD SETTINGS*\n\n`;
-            text += `📌 *Status:* ${status}\n`;
-            text += `🎯 *Targets:* ${targets.length > 0 ? targets.join(', ') : 'None'}\n\n`;
-            text += `*Commands:*\n`;
-            text += `• \`.autoforward on\` - Enable\n`;
-            text += `• \`.autoforward off\` - Disable\n`;
-            text += `• \`.autoforward set jid1, jid2\` - Set target JIDs\n`;
-            text += `• \`.autoforward add jid\` - Add single target JID\n`;
-            text += `• \`.autoforward clear\` - Clear all targets\n\n`;
-            text += `> _Every message in this group will be relayed to these targets._`;
+            let text = `📡 *AUTO-FORWARD SETUP*\n\n`;
+            text += `💡 Configure multiple Source and Target JIDs.\n\n`;
+            text += `🔧 *Commands:*\n`;
+            text += `• \`.autoforward on\` - Enable Auto-Forward\n`;
+            text += `• \`.autoforward off\` - Disable Auto-Forward\n`;
+            text += `• \`.autoforward set <sourceJIDs> = <targetJIDs>\` - Set sources and targets (comma-separated)\n`;
+            text += `• \`.autoforward clear\` - Clear all sources and targets\n\n`;
+            text += `💡 Example:\n`;
+            text += `\`.autoforward set 12345@s.whatsapp.net,67890@s.whatsapp.net = 11111@s.whatsapp.net,22222@s.whatsapp.net\``;
 
             return await sock.sendMessage(from, { text });
         }
 
         if (action === 'on') {
-            if (!current.autoForwardTargets || current.autoForwardTargets.length === 0) {
-                return await sock.sendMessage(from, { text: '⚠️ Please set target JIDs first using `.autoforward set <jids>`' });
+            if (!current.sourceJIDs || current.sourceJIDs.length === 0 || !current.autoForwardTargets || current.autoForwardTargets.length === 0) {
+                return await sock.sendMessage(from, { text: '⚠️ Please configure Source and Target JIDs first using `.autoforward set <sourceJIDs> = <targetJIDs>`' });
             }
             await wasi_updateGroupSettings(sessionId, from, { autoForward: true });
-            return await sock.sendMessage(from, { text: '✅ *Auto-Forward* enabled for this group.' });
+            return await sock.sendMessage(from, { text: '✅ Auto-Forward is now *enabled*.' });
         }
 
         if (action === 'off') {
             await wasi_updateGroupSettings(sessionId, from, { autoForward: false });
-            return await sock.sendMessage(from, { text: '✅ *Auto-Forward* disabled for this group.' });
+            return await sock.sendMessage(from, { text: '🛑 Auto-Forward has been *disabled*.' });
         }
 
         if (action === 'set') {
-            const input = wasi_args.slice(1).join(' ');
-            if (!input) return await sock.sendMessage(from, { text: '❌ Usage: `.autoforward set jid1, jid2`' });
+            const input = wasi_args.slice(1).join(' ').trim();
 
-            const targets = input.split(',').map(j => {
+            if (!input.includes('=')) {
+                return await sock.sendMessage(from, { text: '❌ Invalid format! Use: `.autoforward set <sourceJIDs> = <targetJIDs>`' });
+            }
+
+            const [sourcesPart, targetsPart] = input.split('=').map(s => s.trim());
+
+            // Format Source JIDs
+            const sources = sourcesPart.split(',').map(j => {
                 let jid = j.trim();
                 if (jid && !jid.includes('@')) jid += '@s.whatsapp.net';
                 return jid;
             }).filter(j => j.length > 5);
 
-            await wasi_updateGroupSettings(sessionId, from, { autoForwardTargets: targets });
-            return await sock.sendMessage(from, { text: `✅ Targets set: ${targets.length} JIDs.` });
-        }
+            // Format Target JIDs
+            const targets = targetsPart.split(',').map(j => {
+                let jid = j.trim();
+                if (jid && !jid.includes('@')) jid += '@s.whatsapp.net';
+                return jid;
+            }).filter(j => j.length > 5);
 
-        if (action === 'add') {
-            let jid = wasi_args[1]?.trim();
-            if (!jid) return await sock.sendMessage(from, { text: '❌ Usage: `.autoforward add <jid>`' });
-            if (!jid.includes('@')) jid += '@s.whatsapp.net';
+            await wasi_updateGroupSettings(sessionId, from, {
+                sourceJIDs: sources,
+                autoForwardTargets: targets
+            });
 
-            const targets = current.autoForwardTargets || [];
-            if (!targets.includes(jid)) {
-                targets.push(jid);
-                await wasi_updateGroupSettings(sessionId, from, { autoForwardTargets: targets });
-                return await sock.sendMessage(from, { text: `✅ Added target: ${jid}` });
-            } else {
-                return await sock.sendMessage(from, { text: '⚠️ JID already in targets.' });
-            }
+            return await sock.sendMessage(from, { text: `🎯 Sources: ${sources.join(', ')}\n✅ Targets: ${targets.join(', ')}` });
         }
 
         if (action === 'clear') {
-            await wasi_updateGroupSettings(sessionId, from, { autoForwardTargets: [], autoForward: false });
-            return await sock.sendMessage(from, { text: '✅ Auto-Forward targets cleared and feature disabled.' });
+            await wasi_updateGroupSettings(sessionId, from, { sourceJIDs: [], autoForwardTargets: [], autoForward: false });
+            return await sock.sendMessage(from, { text: '🧹 All Source and Target JIDs cleared. Auto-Forward disabled.' });
         }
 
         return await sock.sendMessage(from, { text: '❌ Unknown action. Use `.autoforward` for help.' });
