@@ -14,7 +14,6 @@ module.exports = {
         }
 
         // 1b. Robust Unwrap (Handle View Once & nested structures)
-        // If it's a view once message, we want to forward the inner media as a normal message
         if (quoted.viewOnceMessageV2) {
             quoted = quoted.viewOnceMessageV2.message;
         } else if (quoted.viewOnceMessage) {
@@ -46,7 +45,6 @@ module.exports = {
             }
         };
 
-        // Inject contextInfo into the ACTUAL message content
         const mType = Object.keys(quoted).find(k => k.endsWith('Message') || k === 'conversation' || k === 'stickerMessage');
         if (mType && quoted[mType] && typeof quoted[mType] === 'object') {
             quoted[mType].contextInfo = {
@@ -55,8 +53,6 @@ module.exports = {
             };
         }
 
-        await wasi_sock.sendMessage(wasi_sender, { text: `🚀 *Relaying message to ${targetJids.length} targets...*` });
-
         // 4. Relay Loop
         let successCount = 0;
         let failCount = 0;
@@ -64,20 +60,16 @@ module.exports = {
 
         for (const jid of targetJids) {
             try {
-                // Formatting JID helper
                 let target = jid;
                 if (!target.includes('@')) {
                     target = target + '@s.whatsapp.net';
                 }
 
-                // Use relayMessage for "stronger" forwarding (matches original message perfectly)
-                // This bypasses some restrictions of sendMessage({forward: ...})
                 await wasi_sock.relayMessage(target, quoted, {
                     messageId: wasi_sock.generateMessageTag()
                 });
 
                 successCount++;
-                // Small delay to prevent flood block
                 await new Promise(r => setTimeout(r, 800));
 
             } catch (error) {
@@ -87,16 +79,14 @@ module.exports = {
             }
         }
 
-        // 5. Final Report
-        let report = `✅ *Forwarding Processed*\n\n`;
-        report += `📤 *Sent:* ${successCount}\n`;
-        report += `❌ *Failed:* ${failCount}\n`;
-        report += `✨ *Mode:* Native Relay`;
-
+        // 5. Final Report (صرف فیل ہونے پر)
         if (failCount > 0) {
+            let report = `⚠️ *کچھ JIDs پر بھیجنا ناکام رہا*\n\n`;
+            report += `❌ *Failed:* ${failCount}\n`;
+            report += `✨ *Mode:* Native Relay`;
             report += `\n\n*Failed List:*\n${failedJids.map(j => `> ${j}`).join('\n')}`;
-        }
 
-        await wasi_sock.sendMessage(wasi_sender, { text: report });
+            await wasi_sock.sendMessage(wasi_sender, { text: report });
+        }
     }
 };
