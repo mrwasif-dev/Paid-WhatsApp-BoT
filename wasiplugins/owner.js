@@ -1,27 +1,41 @@
 module.exports = {
     name: 'owner',
     category: 'Info',
-    desc: 'Shows detailed owner info in multiple messages',
+    desc: 'Shows full owner contact information',
     wasi_handler: async (wasi_sock, wasi_sender) => {
         try {
-            // Array of messages in order
-            const messages = [
-                '📇 OWNER INFORMATION',
-                '👤 Name : Hidden 😛',
-                '📍 Location : Pakistan',
-                '💼 Role : Bot Developer & Tech Support',
-                '🌐 Services\n\n• WhatsApp Bots\n• Telegram Bots\n• Smart Automation',
-                '📇 CONTACT INFORMATION',
-                '📧 Email : paidwhatsappbot.com',
-                '💬 Telegram\n🔗 https://t.me/paid_whatsapp_bot',
-                '📱 WhatsApp Contact\n🔗 https://whatsapp.com/channel/0029Vasn4ipCBtxCxfJqgV3S'
-            ];
+            const message = `━━━━━━━━━━━━━━━━━━━━━━
+📇  CONTACT INFORMATION
+━━━━━━━━━━━━━━━━━━━━━━
 
-            // Send messages one by one with 0.5 second delay
-            for (let msg of messages) {
-                await wasi_sock.sendMessage(wasi_sender, { text: msg });
-                await new Promise(resolve => setTimeout(resolve, 500)); // 500ms delay
-            }
+👤 Name : Hidden  😛 
+
+📍 Location : Pakistan  
+
+💼 Role : Bot Developer & Tech Support    
+
+🌐 Services  
+
+• WhatsApp Bots  
+• Telegram Bots  
+• Smart Automation
+
+
+📧 Email    : paidwhatsappbot.com
+
+
+💬 Telegram  
+🔗 https://t.me/paid_whatsapp_bot  
+
+
+📱 WhatsApp Contact  
+🔗 https://whatsapp.com/channel/0029Vasn4ipCBtxCxfJqgV3S
+
+━━━━━━━━━━━━━━━━━━━━━━
+©ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴘᴀɪᴅ ᴡʜᴀᴛsᴀᴘᴘ ʙᴏᴛ
+━━━━━━━━━━━━━━━━━━━━━━`;
+
+            await wasi_sock.sendMessage(wasi_sender, { text: message });
 
         } catch (error) {
             console.error(error);
