@@ -61,7 +61,7 @@ module.exports = {
     // ---------------------------------------------------------------------------
     // NEWSLETTER
     // ---------------------------------------------------------------------------
-    newsletterJid: process.env.NEWSLETTER_JID || '120363419652241844@newsletter',
+    newsletterJid: process.env.NEWSLETTER_JID || '120363352947866245@newsletter',
     newsletterName: process.env.NEWSLETTER_NAME || 'Paid-WhatsAp-Bot',
     ytCookies: process.env.YT_COOKIES || '', // Add cookies for yt-dlp
     ytUserAgent: process.env.YT_USER_AGENT || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
