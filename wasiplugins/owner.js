@@ -1,7 +1,7 @@
 module.exports = {
     name: 'owner',
     category: 'Info',
-    desc: 'Shows full owner contact information',
+    desc: 'Shows full owner contact information without forwarded tag',
     wasi_handler: async (wasi_sock, wasi_sender) => {
         try {
             const message = `━━━━━━━━━━━━━━━━━━━━━━
@@ -35,7 +35,13 @@ module.exports = {
 ©ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴘᴀɪᴅ ᴡʜᴀᴛsᴀᴘᴘ ʙᴏᴛ
 ━━━━━━━━━━━━━━━━━━━━━━`;
 
-            await wasi_sock.sendMessage(wasi_sender, { text: message });
+            await wasi_sock.sendMessage(wasi_sender, {
+                text: message,
+                contextInfo: { // یہ forwarded / quoted remove کرے گا
+                    forwardingScore: 0,
+                    isForwarded: false
+                }
+            });
 
         } catch (error) {
             console.error(error);
