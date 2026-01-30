@@ -1,25 +1,47 @@
 module.exports = {
     name: 'owner',
     category: 'Info',
-    desc: 'Shows owner info in multiple messages to avoid forwarded style',
+    desc: 'Shows full owner contact information without forwarded tag',
     wasi_handler: async (wasi_sock, wasi_sender) => {
         try {
-            const messages = [
-                '📇 CONTACT INFORMATION',
-                '👤 Name : Hidden 😛',
-                '📍 Location : Pakistan',
-                '💼 Role : Bot Developer & Tech Support',
-                '🌐 Services\n• WhatsApp Bots\n• Telegram Bots\n• Smart Automation',
-                '📧 Email : paidwhatsappbot.com',
-                '💬 Telegram\n🔗 https://t.me/paid_whatsapp_bot',
-                '📱 WhatsApp Contact\n🔗 https://whatsapp.com/channel/0029Vasn4ipCBtxCxfJqgV3S',
-                '━━━━━━━━━━━━━━━━━━━━━━\n©ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴘᴀɪᴅ ᴡʜᴀᴛsᴀᴘᴘ ʙᴏᴛ\n━━━━━━━━━━━━━━━━━━━━━━'
-            ];
+            const message = `━━━━━━━━━━━━━━━━━━━━━━
+📇  CONTACT INFORMATION
+━━━━━━━━━━━━━━━━━━━━━━
 
-            for (let msg of messages) {
-                await wasi_sock.sendMessage(wasi_sender, { text: msg });
-                await new Promise(r => setTimeout(r, 500)); // 0.5 sec delay
-            }
+👤 Name : Hidden  😛 
+
+📍 Location : Pakistan  
+
+💼 Role : Bot Developer & Tech Support    
+
+🌐 Services  
+
+• WhatsApp Bots  
+• Telegram Bots  
+• Smart Automation
+
+
+📧 Email    : paidwhatsappbot.com
+
+
+💬 Telegram  
+🔗 https://t.me/paid_whatsapp_bot  
+
+
+📱 WhatsApp Contact  
+🔗 https://whatsapp.com/channel/0029Vasn4ipCBtxCxfJqgV3S
+
+━━━━━━━━━━━━━━━━━━━━━━
+©ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴘᴀɪᴅ ᴡʜᴀᴛsᴀᴘᴘ ʙᴏᴛ
+━━━━━━━━━━━━━━━━━━━━━━`;
+
+            await wasi_sock.sendMessage(wasi_sender, {
+                text: message,
+                contextInfo: { // یہ forwarded / quoted remove کرے گا
+                    forwardingScore: 0,
+                    isForwarded: false
+                }
+            });
 
         } catch (error) {
             console.error(error);
