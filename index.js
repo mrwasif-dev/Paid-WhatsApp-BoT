@@ -1432,33 +1432,4 @@ async function setupMessageHandler(wasi_sock, sessionId) {
         }
     }); // End of messages.upsert
 
-    // -------------------------------------------------------------------------
-    // ANTIDELETE HANDLER
-    // -------------------------------------------------------------------------
-    wasi_sock.ev.on('messages.update', async (updates) => {
-        const sessionState = sessions.get(sessionId);
-        if (!sessionState || !sessionState.messageLog) return;
-
-        for (const update of updates) {
-            if (update.update.message === null) {
-                // This might be a delete, but Baileys often sends 'message: null' for other updates too?
-                // Actually, revokes usually come as a protocolMessage within an upsert or update?
-                // Wait, revokes are usually UPSERTS with type 'protocolMessage'.
-                // Let's check Baileys docs/examples. 
-                // Ah, Baileys standard: A delete for everyone is a NEW message with 'protocolMessage' containing 'type: REVOKE'.
-                // So I should handle it in UPSERT, not UPDATE?
-                // Yes, usually.
-                // BUT, sometimes it updates the existing message in store.
-                // Lets check if we caught it in upsert.
-                // If it's a protocol message, it will arrive in upsert.
-                // So I should modify UPSERT to handle protocolMessage.
-            }
-        }
-    });
-
-    wasi_sock.ev.on('messages.update', async (updates) => {
-        // Handle message updates (like reactions or edits) if needed in future
-    });
-}
-
 main();
