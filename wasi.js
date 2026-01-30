@@ -4,12 +4,12 @@ module.exports = {
     // ---------------------------------------------------------------------------
     // BASIC SETTINGS (All from Environment Variables)
     // ---------------------------------------------------------------------------
-    botName: process.env.BOT_NAME || 'WASI BOT',
-    ownerName: process.env.OWNER_NAME || 'MR WASI DEV',
+    botName: process.env.BOT_NAME || 'Paid WA BoT',
+    ownerName: process.env.OWNER_NAME || 'Hiden',
     ownerNumber: process.env.OWNER_NUMBER || '',
     prefix: process.env.PREFIX || '.',
     mode: process.env.MODE || 'public',
-    sessionId: process.env.SESSION_ID || 'wasi_session',
+    sessionId: process.env.SESSION_ID || '',
     sudo: process.env.SUDO ? process.env.SUDO.split(',').map(s => s.trim()) : [],
     mongoDbUrl: process.env.MONGODB_URI || process.env.MONGODB_URL || '',
 
