@@ -1431,5 +1431,3 @@ async function setupMessageHandler(wasi_sock, sessionId) {
             }
         }
     }); // End of messages.upsert
-
-main();
