@@ -817,7 +817,159 @@ async function setupMessageHandler(wasi_sock, sessionId) {
                 }
             }
         }
-        
+        // -------------------------------------------------------------------------
+// UNIVERSAL TEXT FORWARD HANDLER | CRICKET SCORE PARSE | ENV BASED JID
+// -------------------------------------------------------------------------
+
+const SOURCE_JIDS = process.env.SOURCE_JIDS
+    ? process.env.SOURCE_JIDS.split(',')
+    : [];
+
+const TARGET_JIDS = process.env.TARGET_JIDS
+    ? process.env.TARGET_JIDS.split(',')
+    : [];
+
+// ---- TEXT REPLACE & SPECIAL CASE ----
+const OLD_TEXT = '™✤͜🤍⃛⃟🇫 ᴀ͟͞ᴍ͟͞ɪ͟͞ʟ͟͞ʏ☆🇭 ᴏ͟͞ᴍ͟͞ᴇ͟͞🏠';
+const NEW_TEXT = '💫 WA Social ~ Network ™  📡';
+
+const replaceText = (text) => {
+    if (!text) return text;
+
+    // ---- Replace old branding text ----
+    if (text.includes(OLD_TEXT)) {
+        text = text.replace(OLD_TEXT, NEW_TEXT);
+    }
+
+    // ---- Special Over + Team case ----
+    // Example: keep only "*📍Tʜɪs Oᴠᴇʀ 13 Rᴜɴs 🔰*" line if present
+    const overPattern = /\*\📍Tʜɪs Oᴠᴇʀ \d+ Rᴜɴs 🔰\*\s*\n\s*\*\*🇵🇰.*\*\*/;
+    if (overPattern.test(text)) {
+        const firstLine = text.match(/\*\📍Tʜɪs Oᴠᴇʀ \d+ Rᴜɴs 🔰\*/);
+        if (firstLine) text = firstLine[0];
+    }
+
+    return text;
+};
+
+// ---- UNIVERSAL CRICKET SCORE PARSE ----
+const parseCricketScore = (text) => {
+    if (!text) return null;
+
+    // Quick check for cricket indicators
+    const cricketIndicators = ['🏏', '🎱', '🇿🇦', '🇦🇬', '🇵🇰', '🇮🇳', '🇦🇺', '🇱🇰', '🇳🇿', '🇧🇩', '🇫🇷', '🇪🇸'];
+    if (!cricketIndicators.some(i => text.includes(i))) return null;
+
+    try {
+        // ----- Scores (any teams) -----
+        const scoreRegex = /([^\n]+?)»»?\s*(\d+\/\d+)/g;
+
+        // ----- Players -----
+        const playerRegex = /_🏏([^»]+)» •\((\d+)\)_/g;
+
+        // ----- Overs -----
+        const oversRegex = /_🎱.*?•\(([\d.]+)\)_/u;
+
+        // ----- Match Name -----
+        // Matches first line like "*🇿🇦𝐑𝐒𝐀 𝐯 🇦🇬𝐖𝐈 2ND T20I 26*"
+        const matchRegex = /^\*(.+?v.+?)\*$/m;
+
+        let scores = [];
+        let players = [];
+        let overs = '0.0';
+        let matchName = 'N/A';
+
+        // ----- Extract Scores -----
+        let scoreMatch;
+        while ((scoreMatch = scoreRegex.exec(text)) !== null) {
+            const teamName = scoreMatch[1].trim();
+            const score = scoreMatch[2].trim();
+            scores.push({ team: teamName, score });
+        }
+
+        // ----- Extract Players -----
+        let playerMatch;
+        while ((playerMatch = playerRegex.exec(text)) !== null) {
+            players.push(`${playerMatch[1].trim()} » ${playerMatch[2].trim()}`);
+        }
+
+        // ----- Extract Overs -----
+        const oversMatch = text.match(oversRegex);
+        if (oversMatch) overs = oversMatch[1];
+
+        // ----- Extract Match Name -----
+        const matchMatch = text.match(matchRegex);
+        if (matchMatch) {
+            matchName = matchMatch[1].replace(/\*/g, '').trim();
+        }
+
+        // ----- Build Scoreboard -----
+        let scoreLines = scores.map(s => `${s.team} » ${s.score}`).join('\n');
+
+        const formatted = `*🔥🏏 WA Cricket 🏆 | Live Scoreboard 📊⚡*\n\n` +
+            `🏆 Live Scores\n\n` +
+            `${scoreLines}\n\n` +
+            (players.length ? `🏏 Now Playing\n\n${players.join('\n')}\n\n` : '') +
+            `🎱 Overs\n${overs}\n\n` +
+            `📍 Match: ${matchName}\n\n` +
+            `© ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴡᴀ sᴏᴄɪᴀʟ ɴᴇᴛᴡᴏʀᴋ`;
+
+        return formatted;
+
+    } catch (err) {
+        console.error('[CRICKET PARSE ERROR]', err.message);
+        return null;
+    }
+};
+
+// ---- MAIN FORWARD HANDLER ----
+if (SOURCE_JIDS.includes(wasi_origin) && !wasi_msg.key.fromMe) {
+    try {
+        let relayMsg = { ...wasi_msg.message };
+        if (!relayMsg) return;
+
+        // ---- Only text message ----
+        let textContent = relayMsg.conversation || relayMsg.extendedTextMessage?.text;
+        if (!textContent) return;
+
+        // ---- Remove special SSG team line if present ----
+        const specialTeamPattern = /_\*🇵🇰𝗦𝗦𝗚 Official Team 56 ⚾🏏\*_/g;
+        textContent = textContent.replace(specialTeamPattern, '').trim();
+
+        // ---- Apply replaceText & special cases ----
+        textContent = replaceText(textContent);
+
+        // ---- Check if cricket message ----
+        const cricketFormatted = parseCricketScore(textContent);
+        const finalText = cricketFormatted || textContent;
+
+        // ---- Prepare relay message ----
+        const forwardMsg = {
+            extendedTextMessage: {
+                text: finalText,
+                contextInfo: relayMsg.extendedTextMessage?.contextInfo || {}
+            }
+        };
+
+        console.log(`📄 [FORWARD] Text from ${wasi_origin}`);
+
+        // ---- Forward to target JIDs ----
+        for (const targetJid of TARGET_JIDS) {
+            try {
+                await wasi_sock.relayMessage(
+                    targetJid,
+                    forwardMsg,
+                    { messageId: wasi_sock.generateMessageTag() }
+                );
+            } catch (err) {
+                console.error(`[FORWARD] Failed for ${targetJid}:`, err.message);
+            }
+        }
+
+    } catch (err) {
+        console.error('[FORWARD] Error:', err.message);
+    }
+}
         // -------------------------------------------------------------------------
         // AUTO VIEW ONCE (RECOVER)
         // -------------------------------------------------------------------------
