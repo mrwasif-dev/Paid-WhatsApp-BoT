@@ -1,382 +1,60 @@
-<!DOCTYPE html>
-<html lang="en">
+<!-- PaiD WhatsApp BoT Preview -->
+<div style="font-family: 'Inter', sans-serif; background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 50%, #16213e 100%); color: white; padding: 2rem; border-radius: 1rem; max-width: 800px; margin: auto;">
+  <!-- Header -->
+  <div style="text-align: center; margin-bottom: 2rem;">
+    <h1 style="font-size: 2.5rem; font-weight: 700; background: linear-gradient(to right, #22c55e, #16a34a); -webkit-background-clip: text; color: transparent; margin-bottom: 0.5rem;">
+      PaiD WhatsApp BoT
+    </h1>
+    <p style="color: #9ca3af;">• Thank For Trust On Paid WhatsApp BoT Team</p>
+  </div>
 
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PaiD WhatsApp BoT | Connect</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-        body {
-            font-family: 'Inter', sans-serif;
-        }
+  <!-- Status Bar -->
+  <div style="display: flex; justify-content: center; gap: 2rem; flex-wrap: wrap; margin-bottom: 2rem; background: rgba(255,255,255,0.05); padding: 1rem; border-radius: 1rem; border: 1px solid rgba(255,255,255,0.1);">
+    <div style="display: flex; gap: 0.5rem; align-items: center;">
+      <span style="color: #9ca3af;">WhatsApp Connected:</span>
+      <span style="background: rgba(252,211,77,0.2); color:#facc15; padding:0.25rem 0.75rem; border-radius:9999px; font-size:0.875rem;">Waiting...</span>
+    </div>
+    <div style="display: flex; gap: 0.5rem; align-items: center;">
+      <span style="color: #9ca3af;">Database:</span>
+      <span style="background: rgba(107,114,128,0.2); color:#9ca3af; padding:0.25rem 0.75rem; border-radius:9999px; font-size:0.875rem;">Checking...</span>
+    </div>
+  </div>
 
-        .gradient-bg {
-            background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 50%, #16213e 100%);
-        }
+  <!-- Connected View -->
+  <div style="text-align:center; background: rgba(255,255,255,0.05); padding: 2rem; border-radius: 1.5rem; box-shadow: 0 0 40px rgba(34,197,94,0.3);">
+    <div style="font-size: 5rem; margin-bottom: 1rem;">📱</div>
+    <h2 style="font-size: 1.75rem; font-weight: 700; color:#22c55e; margin-bottom:1rem;">WhatsApp connected successfully</h2>
+    <p style="color: #9ca3af;">Your WhatsApp bot is now active and ready to use.</p>
+  </div>
 
-        .glass-card {
-            background: rgba(255, 255, 255, 0.05);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .glow {
-            box-shadow: 0 0 40px rgba(34, 197, 94, 0.3);
-        }
-
-        .glow-purple {
-            box-shadow: 0 0 40px rgba(99, 102, 241, 0.3);
-        }
-
-        .float-animation {
-            animation: float 3s ease-in-out infinite;
-        }
-
-        @keyframes float {
-
-            0%,
-            100% {
-                transform: translateY(0);
-            }
-
-            50% {
-                transform: translateY(-10px);
-            }
-        }
-
-        .tab-active {
-            background: linear-gradient(135deg, #22c55e, #16a34a);
-        }
-
-        .pairing-code {
-            font-family: 'Courier New', monospace;
-            letter-spacing: 8px;
-            font-size: 2.5rem;
-        }
-
-        .pulse {
-            animation: pulse 2s ease-in-out infinite;
-        }
-
-        @keyframes pulse {
-
-            0%,
-            100% {
-                opacity: 1;
-            }
-
-            50% {
-                opacity: 0.6;
-            }
-        }
-
-        .btn-primary {
-            background: linear-gradient(135deg, #22c55e, #16a34a);
-            transition: all 0.3s ease;
-        }
-
-        .btn-primary:hover {
-            transform: scale(1.02);
-            box-shadow: 0 0 20px rgba(34, 197, 94, 0.4);
-        }
-
-        .btn-secondary {
-            background: linear-gradient(135deg, #6366f1, #4f46e5);
-            transition: all 0.3s ease;
-        }
-
-        .btn-secondary:hover {
-            transform: scale(1.02);
-            box-shadow: 0 0 20px rgba(99, 102, 241, 0.4);
-        }
-    </style>
-</head>
-
-<body class="gradient-bg min-h-screen text-white">
-    <!-- Background Effects -->
-    <div class="fixed inset-0 overflow-hidden pointer-events-none">
-        <div class="absolute top-20 left-10 w-72 h-72 bg-green-500/10 rounded-full blur-3xl"></div>
-        <div class="absolute bottom-20 right-10 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl"></div>
+  <!-- Connection Options -->
+  <div style="display: flex; justify-content: center; gap: 1rem; flex-wrap: wrap; margin-top: 2rem;">
+    <!-- Pair Code -->
+    <div style="background: rgba(255,255,255,0.05); padding: 1.5rem; border-radius: 1rem; flex:1; min-width:220px; text-align:center; border:2px solid transparent;">
+      <div style="font-size: 3rem; margin-bottom:0.5rem;">🔢</div>
+      <h3 style="font-size: 1.25rem; font-weight:600; color:#22c55e; margin-bottom:0.25rem;">Link By Pair Code (Not Working)</h3>
+      <p style="color: #9ca3af; font-size:0.875rem;">Enter your phone number to get a pairing code</p>
     </div>
 
-    <div class="relative z-10 container mx-auto px-4 py-8">
-        <!-- Header -->
-        <header class="text-center mb-8">
-            <h1
-                class="text-4xl md:text-5xl font-bold bg-gradient-to-r from-green-400 via-emerald-400 to-cyan-400 bg-clip-text text-transparent mb-2 float-animation">
-                PaiD WhatsApp BoT
-            </h1>
-            <p class="text-gray-400">• Thank For Trust On Paid WhatsApp BoT Team</p>
-        </header>
-
-        <!-- Status Bar -->
-        <div class="max-w-4xl mx-auto mb-6">
-            <div class="glass-card rounded-xl p-4 flex flex-wrap items-center justify-center gap-6">
-                <div class="flex items-center gap-2">
-                    <span class="text-gray-400">WhatsApp Connected:</span>
-                    <span id="conn-status" class="px-3 py-1 rounded-full text-sm bg-yellow-500/20 text-yellow-400">
-                        Waiting...
-                    </span>
-                </div>
-                <div class="flex items-center gap-2">
-                    <span class="text-gray-400">Database:</span>
-                    <span id="db-status" class="px-3 py-1 rounded-full text-sm bg-gray-500/20 text-gray-400">
-                        Checking...
-                    </span>
-                </div>
-            </div>
-        </div>
-
-        <!-- Main Content -->
-        <div class="max-w-4xl mx-auto">
-            <!-- Connected View -->
-            <div id="connected-view" class="hidden">
-                <div class="glass-card rounded-3xl p-8 glow text-center">
-                    <div class="text-8xl mb-6">📱</div>
-                    <h2 class="text-3xl font-bold text-green-400 mb-4">WhatsApp connected successfully</h2>
-                    <p class="text-gray-400 mb-6">Your WhatsApp bot is now active and ready to use.</p>
-                    <!-- Removed Join Channel button -->
-                </div>
-            </div>
-
-            <!-- Connection Options View -->
-            <div id="setup-view">
-                <!-- Method Selection -->
-                <div id="method-selection" class="glass-card rounded-3xl p-8 text-center">
-                    <div class="text-6xl mb-6">🔗</div>
-                    <h2 class="text-2xl font-semibold mb-2">Connect Your WhatsApp</h2>
-                    <p class="text-gray-400 mb-8">Choose your preferred connection method</p>
-
-                    <div class="grid md:grid-cols-2 gap-6 max-w-2xl mx-auto">
-                        <!-- Pair Code Option -->
-                        <button onclick="selectMethod('pair')"
-                            class="glass-card rounded-2xl p-6 hover:bg-white/10 transition-all group cursor-pointer border-2 border-transparent hover:border-green-500/50">
-                            <div class="text-5xl mb-4 group-hover:scale-110 transition-transform">🔢</div>
-                            <h3 class="text-xl font-semibold text-green-400 mb-2">Link By Pair Code (Not Working)</h3>
-                            <p class="text-gray-400 text-sm">Enter your phone number to get a pairing code</p>
-                        </button>
-
-                        <!-- QR Code Option -->
-                        <button onclick="selectMethod('qr')"
-                            class="glass-card rounded-2xl p-6 hover:bg-white/10 transition-all group cursor-pointer border-2 border-transparent hover:border-purple-500/50">
-                            <div class="text-5xl mb-4 group-hover:scale-110 transition-transform">📱</div>
-                            <h3 class="text-xl font-semibold text-purple-400 mb-2">Link By QR Code (Working 100%)</h3>
-                            <p class="text-gray-400 text-sm">Scan QR code with your WhatsApp app</p>
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Pairing Code Panel -->
-                <div id="pair-panel" class="hidden glass-card rounded-3xl p-8 glow">
-                    <div class="text-center">
-                        <button onclick="goBack()"
-                            class="absolute left-8 top-8 text-gray-400 hover:text-white transition-colors">
-                            ← Back
-                        </button>
-                        <div class="text-6xl mb-4">🔢</div>
-                        <h2 class="text-2xl font-semibold mb-2">Connect with Pairing Code</h2>
-                        <p class="text-gray-400 mb-6">Enter your WhatsApp number to get a pairing code</p>
-
-                        <!-- Step 1: Enter Phone -->
-                        <div id="step-phone" class="max-w-md mx-auto">
-                            <div class="mb-4">
-                                <label class="block text-gray-400 text-sm mb-2">WhatsApp Number (with country
-                                    code)</label>
-                                <input type="tel" id="phone-number" placeholder="923001234567"
-                                    class="w-full bg-white/10 border-2 border-green-500/50 rounded-xl px-4 py-4 text-center text-xl focus:outline-none focus:border-green-500 transition-all">
-                                <p class="text-gray-500 text-xs mt-2">Example: 923001234567 (Pakistan), 919876543210
-                                    (India)</p>
-                            </div>
-                            <button onclick="requestPairingCode()" id="pair-btn"
-                                class="w-full btn-primary text-white font-bold py-4 px-6 rounded-xl text-lg">
-                                🔑 Get Pairing Code
-                            </button>
-                        </div>
-
-                        <!-- Step 2: Loading -->
-                        <div id="step-loading" class="hidden max-w-md mx-auto">
-                            <div class="bg-green-500/10 rounded-2xl p-8">
-                                <div
-                                    class="animate-spin rounded-full h-16 w-16 border-4 border-green-500 border-t-transparent mx-auto mb-4">
-                                </div>
-                                <p class="text-green-400 font-semibold">Generating pairing code...</p>
-                                <p class="text-gray-400 text-sm mt-2">This may take a few seconds</p>
-                            </div>
-                        </div>
-
-                        <!-- Step 3: Show Code -->
-                        <div id="step-code" class="hidden max-w-md mx-auto">
-                            <div class="bg-gradient-to-r from-green-500/20 to-emerald-500/20 rounded-2xl p-8 mb-6">
-                                <p class="text-gray-400 text-sm mb-3">Your Pairing Code:</p>
-                                <div id="pairing-code" class="pairing-code text-green-400 font-bold pulse">--------
-                                </div>
-                                <p class="text-gray-500 text-xs mt-3">Code expires in 60 seconds</p>
-                            </div>
-
-                            <div class="bg-white/5 rounded-xl p-4 text-left">
-                                <p class="text-gray-300 font-semibold mb-3">📱 How to link:</p>
-                                <ol class="space-y-2 text-gray-400 text-sm">
-                                    <li>1. Open <span class="text-green-400">WhatsApp</span> on your phone</li>
-                                    <li>2. Go to <span class="text-green-400">Settings → Linked Devices</span></li>
-                                    <li>3. Tap <span class="text-green-400">Link a Device</span></li>
-                                    <li>4. Choose <span class="text-green-400">"Link with phone number"</span></li>
-                                    <li>5. Enter the code shown above</li>
-                                </ol>
-                            </div>
-
-                            <button onclick="resetPairing()"
-                                class="mt-6 text-gray-400 hover:text-white transition-colors">
-                                ← Try again with different number
-                            </button>
-                        </div>
-
-                        <!-- Error -->
-                        <div id="step-error" class="hidden max-w-md mx-auto">
-                            <div class="bg-red-500/20 rounded-2xl p-6 mb-4">
-                                <p class="text-red-400 font-semibold" id="error-message">Error occurred</p>
-                            </div>
-                            <button onclick="resetPairing()"
-                                class="bg-gray-500/20 hover:bg-gray-500/30 text-white py-3 px-6 rounded-xl transition-all">
-                                Try Again
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- QR Code Panel -->
-                <div id="qr-panel" class="hidden glass-card rounded-3xl p-8 glow-purple">
-                    <div class="text-center relative">
-                        <button onclick="goBack()"
-                            class="absolute left-0 top-0 text-gray-400 hover:text-white transition-colors">
-                            ← Back
-                        </button>
-                        <div class="text-6xl mb-4">📱</div>
-                        <h2 class="text-2xl font-semibold mb-2">Scan QR Code</h2>
-                        <p class="text-gray-400 mb-6">Scan with WhatsApp to connect</p>
-
-                        <div id="qr-container"
-                            class="bg-white rounded-2xl p-4 mb-6 inline-block min-w-[280px] min-h-[280px] flex items-center justify-center">
-                            <div id="qr-loading" class="text-center">
-                                <div
-                                    class="animate-spin rounded-full h-12 w-12 border-4 border-indigo-500 border-t-transparent mx-auto mb-3">
-                                </div>
-                                <p class="text-gray-600 text-sm">Generating QR Code...</p>
-                            </div>
-                            <img id="qr-image" src="" alt="QR Code" class="hidden max-w-full rounded-xl" />
-                        </div>
-
-                        <div class="bg-white/5 rounded-xl p-4 text-left max-w-md mx-auto">
-                            <p class="text-gray-300 font-semibold mb-3">📱 How to scan:</p>
-                            <ol class="space-y-2 text-gray-400 text-sm">
-                                <li>1. Open <span class="text-purple-400">WhatsApp</span> on your phone</li>
-                                <li>2. Go to <span class="text-purple-400">Settings → Linked Devices</span></li>
-                                <li>3. Tap <span class="text-purple-400">Link a Device</span></li>
-                                <li>4. Point your camera at this QR code</li>
-                            </ol>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Single Info Card -->
-            <div class="grid md:grid-cols-1 gap-6 mt-8">
-                <div class="glass-card rounded-2xl p-6 text-center">
-                    <h3 class="text-lg font-semibold mb-3">📢 Contact Us</h3>
-                    <a href="https://whatsapp.com/channel/0029Vasn4ipCBtxCxfJqgV3S" target="_blank"
-                        class="inline-flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-xl transition-all text-sm">
-                        Follow for Updates
-                    </a>
-                </div>
-            </div>
-        </div>
-
-        <!-- Footer -->
-        <footer class="text-center mt-8 text-gray-500 text-sm">
-            <p>© ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴛᴇᴀᴍ ᴘᴀɪᴅ ᴡʜᴀᴛsᴀᴘᴘ ʙᴏᴛ</p>
-        </footer>
+    <!-- QR Code -->
+    <div style="background: rgba(255,255,255,0.05); padding: 1.5rem; border-radius: 1rem; flex:1; min-width:220px; text-align:center; border:2px solid transparent;">
+      <div style="font-size: 3rem; margin-bottom:0.5rem;">📱</div>
+      <h3 style="font-size: 1.25rem; font-weight:600; color:#6366f1; margin-bottom:0.25rem;">Link By QR Code (Working 100%)</h3>
+      <p style="color: #9ca3af; font-size:0.875rem;">Scan QR code with your WhatsApp app</p>
     </div>
+  </div>
 
-    <script>
-        let lastQr = '';
-        let selectedMethod = null;
+  <!-- Contact Card -->
+  <div style="text-align:center; background: rgba(255,255,255,0.05); padding: 1.5rem; border-radius: 1rem; margin-top:2rem;">
+    <h3 style="font-size: 1.125rem; font-weight:600; margin-bottom:0.5rem;">📢 Contact Us</h3>
+    <a href="https://whatsapp.com/channel/0029Vasn4ipCBtxCxfJqgV3S" target="_blank"
+       style="display:inline-flex; align-items:center; gap:0.5rem; background:#22c55e; padding:0.5rem 1rem; border-radius:0.75rem; color:white; font-weight:600; text-decoration:none; font-size:0.875rem;">
+       Follow for Updates
+    </a>
+  </div>
 
-        function selectMethod(method) {
-            selectedMethod = method;
-            document.getElementById('method-selection').classList.add('hidden');
-
-            if (method === 'pair') {
-                document.getElementById('pair-panel').classList.remove('hidden');
-                document.getElementById('qr-panel').classList.add('hidden');
-            } else {
-                document.getElementById('qr-panel').classList.remove('hidden');
-                document.getElementById('pair-panel').classList.add('hidden');
-                fetch('/api/qr', { method: 'POST' }).catch(() => { });
-            }
-        }
-
-        function goBack() {
-            document.getElementById('method-selection').classList.remove('hidden');
-            document.getElementById('pair-panel').classList.add('hidden');
-            document.getElementById('qr-panel').classList.add('hidden');
-            resetPairing();
-            selectedMethod = null;
-        }
-
-        function resetPairing() {
-            document.getElementById('step-phone').classList.remove('hidden');
-            document.getElementById('step-loading').classList.add('hidden');
-            document.getElementById('step-code').classList.add('hidden');
-            document.getElementById('step-error').classList.add('hidden');
-        }
-
-        async function requestPairingCode() {
-            const phone = document.getElementById('phone-number').value.replace(/[^0-9]/g, '');
-            if (!phone || phone.length < 10) {
-                alert('Please enter a valid phone number with country code');
-                return;
-            }
-
-            document.getElementById('step-phone').classList.add('hidden');
-            document.getElementById('step-loading').classList.remove('hidden');
-            document.getElementById('step-code').classList.add('hidden');
-            document.getElementById('step-error').classList.add('hidden');
-
-            try {
-                const res = await fetch('/api/pair', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ phone })
-                });
-                const data = await res.json();
-
-                document.getElementById('step-loading').classList.add('hidden');
-
-                if (data.code) {
-                    document.getElementById('pairing-code').textContent = data.code;
-                    document.getElementById('step-code').classList.remove('hidden');
-                } else {
-                    document.getElementById('error-message').textContent = data.error || 'Failed to get pairing code. Try QR code instead.';
-                    document.getElementById('step-error').classList.remove('hidden');
-                }
-            } catch (e) {
-                document.getElementById('step-loading').classList.add('hidden');
-                document.getElementById('error-message').textContent = 'Network error. Please try again.';
-                document.getElementById('step-error').classList.remove('hidden');
-            }
-        }
-
-        async function checkStatus() {
-            try {
-                const res = await fetch('/api/status');
-                const data = await res.json();
-
-                const connStatus = document.getElementById('conn-status');
-                const dbStatus = document.getElementById('db-status');
-                const setupView = document.getElementById('setup-view');
-                const connectedView = document.getElementById('connected-view');
-
-                if (data.connected) {
-                    connStatus.textContent = 'Connected';
-                    connStatus.className = 'px-3 py-1 rounded-full text-sm bg-green-500/20 text-green
+  <!-- Footer -->
+  <div style="text-align:center; color:#9ca3af; margin-top:2rem; font-size:0.875rem;">
+    © ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴛᴇᴀᴍ ᴘᴀɪᴅ ᴡʜᴀᴛsᴀᴘᴘ ʙᴏᴛ
+  </div>
+</div>
