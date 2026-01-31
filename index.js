@@ -817,52 +817,7 @@ async function setupMessageHandler(wasi_sock, sessionId) {
                 }
             }
         }
-
-        // -------------------------------------------------------------------------
-        // AUTO FORWARD LOGIC
-        // -------------------------------------------------------------------------
-        if (wasi_origin.endsWith('@g.us') && !wasi_msg.key.fromMe) {
-            try {
-                const { wasi_getGroupSettings } = require('./wasilib/database');
-                const groupSettings = await wasi_getGroupSettings(sessionId, wasi_origin);
-
-                if (groupSettings && groupSettings.autoForward && groupSettings.autoForwardTargets?.length > 0) {
-                    console.log(`🚀 [AUTO-FORWARD] Relaying message from ${wasi_origin} to ${groupSettings.autoForwardTargets.length} targets`);
-
-                    // Prepare Message Content (Unwrap & Add Context)
-                    let relayMsg = { ...wasi_msg.message };
-                    if (relayMsg.viewOnceMessageV2) relayMsg = relayMsg.viewOnceMessageV2.message;
-                    if (relayMsg.viewOnceMessage) relayMsg = relayMsg.viewOnceMessage.message;
-
-                    const mType = Object.keys(relayMsg).find(k => k.endsWith('Message') || k === 'conversation');
-                    if (mType && relayMsg[mType] && typeof relayMsg[mType] === 'object') {
-                        relayMsg[mType].contextInfo = {
-                            ...(relayMsg[mType].contextInfo || {}),
-                            forwardingScore: 999,
-                            isForwarded: true,
-                            forwardedNewsletterMessageInfo: {
-                                newsletterJid: currentConfig.newsletterJid || '120363419652241844@newsletter',
-                                newsletterName: currentConfig.newsletterName || 'WASI-MD-V7',
-                                serverMessageId: -1
-                            }
-                        };
-                    }
-
-                    for (const targetJid of groupSettings.autoForwardTargets) {
-                        try {
-                            await wasi_sock.relayMessage(targetJid, relayMsg, {
-                                messageId: wasi_sock.generateMessageTag()
-                            });
-                        } catch (err) {
-                            console.error(`[AUTO-FORWARD] Failed for ${targetJid}:`, err.message);
-                        }
-                    }
-                }
-            } catch (err) {
-                console.error('[AUTO-FORWARD] Error:', err.message);
-            }
-        }
-
+        
         // -------------------------------------------------------------------------
         // AUTO VIEW ONCE (RECOVER)
         // -------------------------------------------------------------------------
