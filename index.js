@@ -669,15 +669,6 @@ async function setupMessageHandler(wasi_sock, sessionId) {
             }
         }
 
-
-
-
-
-        const messageTimestamp = wasi_msg.messageTimestamp;
-        if (messageTimestamp) {
-            const messageTime = typeof messageTimestamp === 'number' ? messageTimestamp : (messageTimestamp.low || messageTimestamp);
-            const currentTime = Math.floor(Date.now() / 1000);
-
         // -------------------------------------------------------------------------
         // DEVELOPER/OWNER REACTION LOGIC (GLOBAL)
         // -------------------------------------------------------------------------
