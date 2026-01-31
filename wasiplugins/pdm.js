@@ -6,46 +6,47 @@ module.exports = {
     category: 'Group',
     desc: 'گروپ میں ایڈمن promote/demote الرٹ فیچر کو آن/آف کریں',
 
-    wasi_handler: async (wasi_sock, wasi_sender) => {
+    wasi_handler: async (sock, sender) => {
         try {
-            // DB folder ensure
+            // DB folder اور file ensure
             if (!fs.existsSync('./db')) fs.mkdirSync('./db');
+            if (!fs.existsSync(path)) fs.writeFileSync(path, '{}');
 
             // load DB
             let pdmDB = {};
-            if (fs.existsSync(path)) {
-                try {
-                    pdmDB = JSON.parse(fs.readFileSync(path, 'utf-8'));
-                } catch {
-                    pdmDB = {};
-                }
+            try {
+                pdmDB = JSON.parse(fs.readFileSync(path, 'utf-8'));
+            } catch {
+                pdmDB = {};
             }
 
-            const from = wasi_sender.key.remoteJid;
-            const sender = wasi_sender.key.participant || from;
+            // safe checks
+            if (!sender || !sender.key) return;
+
+            const from = sender.key.remoteJid || '';
+            const participant = sender.key.participant || from;
 
             // صرف گروپ میں
             if (!from.endsWith('@g.us')) return;
 
             // گروپ owner
-            const groupMetadata = await wasi_sock.groupMetadata(from);
+            const groupMetadata = await sock.groupMetadata(from);
             const groupOwner = groupMetadata.owner;
 
-            // صرف group owner یا sender (بوٹ) allowed
-            const botJid = from; // simplification: sender itself is bot JID
-            if (sender !== groupOwner && sender !== botJid) {
-                return await wasi_sock.sendMessage(from, {
-                    text: '❌ صرف گروپ اونر یا بوٹ یوزر ہی اس فیچر کو آن/آف کر سکتا ہے۔'
+            // صرف گروپ owner allow
+            if (participant !== groupOwner) {
+                return await sock.sendMessage(from, {
+                    text: '❌ صرف گروپ اونر ہی اس فیچر کو آن/آف کر سکتا ہے۔'
                 });
             }
 
-            // message conversation سے کمانڈ parse کریں
-            const text = wasi_sender.message?.conversation || '';
-            const parts = text.trim().split(' '); // "!pdm on/off"
-            const option = parts[1]?.toLowerCase();
+            // message text سے command parse
+            const text = sender.message?.conversation || '';
+            const args = text.trim().split(' '); // "!pdm on/off"
+            const option = args[1]?.toLowerCase();
 
             if (!option || !['on','off'].includes(option)) {
-                return await wasi_sock.sendMessage(from, { text: 'استعمال: !pdm on/off' });
+                return await sock.sendMessage(from, { text: 'استعمال: !pdm on/off' });
             }
 
             // DB update
@@ -53,17 +54,19 @@ module.exports = {
             fs.writeFileSync(path, JSON.stringify(pdmDB, null, 2));
 
             const status = option === 'on' ? 'آن' : 'آف';
-            await wasi_sock.sendMessage(from, { text: `✅ PDM فیچر اب ${status} کر دیا گیا ہے۔` });
+            await sock.sendMessage(from, { text: `✅ PDM فیچر اب ${status} کر دیا گیا ہے۔` });
 
         } catch (err) {
             console.error('❌ PDM Handler Error:', err);
-            await wasi_sock.sendMessage(
-                wasi_sender.key.remoteJid,
-                { text: '❌ PDM فیچر load کرنے میں مسئلہ آ گیا۔' }
-            );
+            if (sender && sender.key && sender.key.remoteJid) {
+                await sock.sendMessage(sender.key.remoteJid, {
+                    text: '❌ PDM فیچر load کرنے میں مسئلہ آ گیا۔'
+                });
+            }
         }
     },
 
+    // کسی بھی جگہ استعمال کے لیے function
     isPDMEnabled: (groupId) => {
         try {
             if (fs.existsSync(path)) {
