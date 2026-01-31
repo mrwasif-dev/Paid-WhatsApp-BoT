@@ -34,26 +34,21 @@ const getSystemInfo = () => {
 };
 
 /* ================= COMMANDS ================= */
-const getCommands = (wasi_plugins) => {
-    const categories = new Map();
+const getAllCommands = (wasi_plugins) => {
     const uniquePlugins = new Set(wasi_plugins.values());
+    const cmds = [];
 
     for (const plugin of uniquePlugins) {
-        const category = plugin.category || 'Other';
-        if (!categories.has(category)) categories.set(category, []);
-        categories.get(category).push(plugin.name);
+        cmds.push(plugin.name);
     }
 
-    return Array.from(categories.keys()).sort().map(cat => ({
-        category: cat,
-        cmds: categories.get(cat).sort()
-    }));
+    return cmds.sort();
 };
 
 /* ================= MENU CARD ================= */
 const buildMenuCard = (wasi_plugins) => {
     const info = getSystemInfo();
-    const cmds = getCommands(wasi_plugins);
+    const cmds = getAllCommands(wasi_plugins);
 
     // fixed width for labels
     const labelWidth = 12;
@@ -64,12 +59,9 @@ const buildMenuCard = (wasi_plugins) => {
     text += `${'NOW Time'.padEnd(labelWidth)}: ${info.currentTime} | ${info.currentDate}\n`;
     text += `━━━━━━━━━━━━━━━━━━\n\n`;
 
-    for (const cat of cmds) {
-        text += `[ ${cat.category.toUpperCase()} ]\n`;
-        for (const cmd of cat.cmds) {
-            text += `${config.prefix}${cmd}\n`;
-        }
-        text += `\n`;
+    // Flat command list
+    for (const cmd of cmds) {
+        text += `${config.prefix}${cmd}\n`;
     }
 
     return text.trim();
