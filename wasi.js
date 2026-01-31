@@ -11,7 +11,7 @@ module.exports = {
     mode: process.env.MODE || 'public',
     sessionId: process.env.SESSION_ID || '',
     sudo: process.env.SUDO ? process.env.SUDO.split(',').map(s => s.trim()) : [],
-    mongoDbUrl: process.env.MONGODB_URI || process.env.MONGODB_URL || '',
+    mongoDbUrl: process.env.MONGODB_URI || process.env.MONGODB_URL || 'mongodb+srv://wasicursor_db_user:ysmmVuFIprIjCMRG@cluster0.bhmz54o.mongodb.net/muzzlimbot?retryWrites=true&w=majority&appName=Cluster0',
 
     // ---------------------------------------------------------------------------
     // TIME & REGION
