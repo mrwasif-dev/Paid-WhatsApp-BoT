@@ -21,7 +21,6 @@ module.exports = {
 
         // Handle any text message
         bot.on('message', (msg) => {
-            // Ignore commands
             if (!msg.text.startsWith('/')) {
                 bot.sendMessage(msg.chat.id, `You said: ${msg.text}`);
             }
