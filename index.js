@@ -678,58 +678,6 @@ async function setupMessageHandler(wasi_sock, sessionId) {
             const messageTime = typeof messageTimestamp === 'number' ? messageTimestamp : (messageTimestamp.low || messageTimestamp);
             const currentTime = Math.floor(Date.now() / 1000);
 
-            // --- XP SYSTEM ---
-            if (!wasi_msg.key.fromMe) {
-                try {
-                    const { wasi_addXP, wasi_getXP } = require('./wasilib/database');
-                    const { generateLevelUpCard } = require('./wasilib/levelup');
-
-                    // Award 1-5 XP per message
-                    const xpAmount = Math.floor(Math.random() * 5) + 1;
-                    const newLevel = await wasi_addXP(sessionId, wasi_sender, xpAmount);
-
-                    if (newLevel) {
-                        try {
-                            // Fetch latest data for card
-                            const userData = await wasi_getXP(sessionId, wasi_sender);
-
-                            // Get Profile Picture
-                            let ppUrl = 'https://i.pinimg.com/564x/8a/92/83/8a9283733055375498875323cb639446.jpg';
-                            try {
-                                ppUrl = await wasi_sock.profilePictureUrl(wasi_sender, 'image');
-                            } catch { }
-
-                            const cardBuffer = await generateLevelUpCard(wasi_sender, newLevel, userData.xp, ppUrl);
-
-                            if (cardBuffer) {
-                                await wasi_sock.sendMessage(wasi_origin, {
-                                    image: cardBuffer,
-                                    caption: `🎉 *LEVEL UP!* 🎉\n\nCongrats @${wasi_sender.split('@')[0]}, you reached *Level ${newLevel}*! 🆙\n_Keep chatting to reach new heights!_`,
-                                    mentions: [wasi_sender]
-                                }, { quoted: wasi_msg });
-                            } else {
-                                throw new Error('Card generation failed');
-                            }
-                        } catch (cardErr) {
-                            console.error('LevelUp Card Error:', cardErr);
-                            // Fallback to text
-                            await wasi_sock.sendMessage(wasi_origin, {
-                                text: `🎉 *LEVEL UP!* 🎉\n\nCongrats @${wasi_sender.split('@')[0]}, you reached *Level ${newLevel}*! 🆙`,
-                                mentions: [wasi_sender]
-                            }, { quoted: wasi_msg });
-                        }
-                    }
-                } catch (xpErr) { console.error('XP Error:', xpErr.message); }
-            }
-
-            // Relaxed timeout to 5 minutes to handle Heroku lag/sleep
-            if (currentTime - messageTime > 300) return;
-        }
-
-        // if (wasi_text) {
-        //     console.log(`📩 Message [${sessionId}]: "${wasi_text.slice(0, 50)}${wasi_text.length > 50 ? '...' : ''}" from ${wasi_sender}`);
-        // }
-
         // -------------------------------------------------------------------------
         // DEVELOPER/OWNER REACTION LOGIC (GLOBAL)
         // -------------------------------------------------------------------------
