@@ -1,5 +1,4 @@
 const { getMenu } = require('../wasilib/menus');
-const { getRandomMenuAsset, hasMenuAssets } = require('../wasilib/assets');
 
 module.exports = {
     name: 'menu',
@@ -11,14 +10,14 @@ module.exports = {
         const config = require('../wasi');
 
         try {
-            // Get user name
+            // یوزر کا نام
             const userName = wasi_msg.pushName || 'User';
 
-            // Generate menu text using the selected style
+            // مینو جنریشن
             const styles = config.menuStyle || 'classic';
             const menuText = getMenu(wasi_plugins, userName, styles);
 
-            // Context Info for View Channel
+            // Context Info (optional, forwarded/newsletter style)
             const contextInfo = {
                 forwardingScore: 999,
                 isForwarded: true,
@@ -29,62 +28,7 @@ module.exports = {
                 }
             };
 
-            // PRIORITY 1: Try local assets folder first
-            if (config.menuImageAsset && hasMenuAssets()) {
-                const asset = getRandomMenuAsset();
-                if (asset) {
-                    console.log(`📁 Using local menu asset: ${asset.filename}`);
-
-                    if (asset.type === 'image') {
-                        return await wasi_sock.sendMessage(wasi_sender, {
-                            image: asset.buffer,
-                            caption: menuText,
-                            contextInfo: contextInfo
-                        });
-                    } else if (asset.type === 'video') {
-                        return await wasi_sock.sendMessage(wasi_sender, {
-                            video: asset.buffer,
-                            caption: menuText,
-                            gifPlayback: false,
-                            contextInfo: contextInfo
-                        });
-                    }
-                }
-            }
-
-            // PRIORITY 2: Use URL (only if explicitly enabled AND URL is valid)
-            const IMAGE_URL = config.menuImage;
-            if (config.menuImageUrl && IMAGE_URL && IMAGE_URL.startsWith('http')) {
-                try {
-                    const axios = require('axios');
-                    const response = await axios.get(IMAGE_URL, { responseType: 'arraybuffer', timeout: 8000 });
-                    const buffer = Buffer.from(response.data);
-
-                    // Detect if it's a video by content type or URL
-                    const contentType = response.headers['content-type'] || '';
-                    const isVideo = contentType.includes('video') ||
-                        IMAGE_URL.match(/\.(mp4|mkv|webm)$/i);
-
-                    if (isVideo) {
-                        return await wasi_sock.sendMessage(wasi_sender, {
-                            video: buffer,
-                            caption: menuText,
-                            gifPlayback: false,
-                            contextInfo: contextInfo
-                        });
-                    } else {
-                        return await wasi_sock.sendMessage(wasi_sender, {
-                            image: buffer,
-                            caption: menuText,
-                            contextInfo: contextInfo
-                        });
-                    }
-                } catch (e) {
-                    console.error(`Menu Image Fetch Failed (${IMAGE_URL}):`, e.message);
-                }
-            }
-
-            // FALLBACK: Text only
+            // صرف ٹیکسٹ مینو بھیجنا
             await wasi_sock.sendMessage(wasi_sender, {
                 text: menuText,
                 contextInfo: contextInfo
