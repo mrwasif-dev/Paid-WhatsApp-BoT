@@ -55,11 +55,13 @@ const buildMenuCard = (wasi_plugins) => {
     const info = getSystemInfo();
     const cmds = getCommands(wasi_plugins);
 
-    let text = '';
+    // fixed width for labels
+    const labelWidth = 12;
 
-    text += `UPTIME     : ${info.uptime}\n`;
-    text += `STARTED AT : ${info.botStartTime} | ${info.botStartDate}\n`;
-    text += `NOW        : ${info.currentTime} | ${info.currentDate}\n`;
+    let text = '';
+    text += `${'UPTIME'.padEnd(labelWidth)}: ${info.uptime}\n`;
+    text += `${'STARTED AT'.padEnd(labelWidth)}: ${info.botStartTime} | ${info.botStartDate}\n`;
+    text += `${'NOW Time'.padEnd(labelWidth)}: ${info.currentTime} | ${info.currentDate}\n`;
     text += `━━━━━━━━━━━━━━━━━━\n\n`;
 
     for (const cat of cmds) {
