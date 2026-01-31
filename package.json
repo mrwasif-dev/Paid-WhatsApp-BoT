@@ -1,5 +1,5 @@
 {
-  "name": "wasi-md-v7",
+  "name": "paid-whatsapp-bot",
   "version": "7.0.0",
   "description": "WASI-MD WhatsApp Bot - A powerful modular WhatsApp bot",
   "main": "index.js",
@@ -14,7 +14,8 @@
     "whatsapp",
     "bot",
     "baileys",
-    "nodejs"
+    "nodejs",
+    "telegram"
   ],
   "author": "Waseem (@Itxxwasi)",
   "license": "MIT",
