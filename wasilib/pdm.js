@@ -5,9 +5,7 @@ module.exports = {
     name: 'pdm',
     category: 'Group',
     desc: 'گروپ میں ایڈمن promote/demote الرٹ فیچر کو آن/آف کریں',
-    aliases: ['pdm'],
-
-    wasi_handler: async (sock, msg, args) => {
+    wasi_handler: async (wasi_sock, wasi_sender, wasi_args) => {
         try {
             // ensure db folder exists
             if (!fs.existsSync('./db')) fs.mkdirSync('./db');
@@ -23,31 +21,34 @@ module.exports = {
                 }
             }
 
-            const from = msg.key.remoteJid;
-            const sender = msg.key.participant || msg.key.remoteJid;
+            const from = wasi_sender.remoteJid;
+            const sender = wasi_sender.participant || wasi_sender.remoteJid;
 
             // صرف گروپ میں
             if (!from.endsWith('@g.us')) return;
 
-            const groupMetadata = await sock.groupMetadata(from);
+            // گروپ metadata
+            const groupMetadata = await wasi_sock.groupMetadata(from);
             const groupOwner = groupMetadata.owner;
 
-            // auto-detect current bot user JID safely
+            // auto-detect bot jid safely
             let botJid = '';
             try {
-                botJid = (await sock.user)?.id || '';
+                botJid = (await wasi_sock.user)?.id || '';
             } catch {
                 botJid = '';
             }
 
             // صرف گروپ اونر یا bot user allow
             if (sender !== groupOwner && sender !== botJid) {
-                return sock.sendMessage(from, { text: '❌ صرف گروپ اونر یا بوٹ یوزر ہی اس فیچر کو آن/آف کر سکتا ہے۔' });
+                return await wasi_sock.sendMessage(from, { 
+                    text: '❌ صرف گروپ اونر یا بوٹ یوزر ہی اس فیچر کو آن/آف کر سکتا ہے۔' 
+                });
             }
 
-            const option = args[0]?.toLowerCase();
+            const option = wasi_args[0]?.toLowerCase();
             if (!option || !['on', 'off'].includes(option)) {
-                return sock.sendMessage(from, { text: 'استعمال: !pdm on/off' });
+                return await wasi_sock.sendMessage(from, { text: 'استعمال: !pdm on/off' });
             }
 
             // update DB
@@ -55,11 +56,11 @@ module.exports = {
             fs.writeFileSync(path, JSON.stringify(pdmDB, null, 2));
 
             const status = option === 'on' ? 'آن' : 'آف';
-            await sock.sendMessage(from, { text: `✅ PDM فیچر اب ${status} کر دیا گیا ہے۔` });
+            await wasi_sock.sendMessage(from, { text: `✅ PDM فیچر اب ${status} کر دیا گیا ہے۔` });
 
         } catch (err) {
             console.error('❌ PDM Handler Error:', err);
-            await sock.sendMessage(msg.key.remoteJid, { text: '❌ PDM فیچر load کرنے میں مسئلہ آ گیا۔' });
+            await wasi_sock.sendMessage(wasi_sender.remoteJid, { text: '❌ PDM فیچر load کرنے میں مسئلہ آ گیا۔' });
         }
     },
 
