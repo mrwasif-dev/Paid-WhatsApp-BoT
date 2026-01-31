@@ -26,13 +26,18 @@ module.exports = {
             const from = sender.key.remoteJid || '';
             if (!from.endsWith('@g.us')) return; // صرف گروپ میں
 
-            // message conversation سے command parse
+            // message text
             const text = sender.message?.conversation || '';
-            const args = text.trim().split(' '); // "!pdm on/off"
-            const option = args[1]?.toLowerCase();
+            const parts = text.trim().split(/ +/); // split by spaces
+            const cmd = parts[0].toLowerCase().replace(/^(\!|\.)/, ''); // remove ! or . prefix
+            const option = parts[1]?.toLowerCase();
 
+            // اگر command pdm نہیں ہے تو return
+            if (cmd !== 'pdm') return;
+
+            // اگر option غلط یا missing ہو
             if (!option || !['on','off'].includes(option)) {
-                return await sock.sendMessage(from, { text: 'استعمال: !pdm on/off' });
+                return await sock.sendMessage(from, { text: 'استعمال: .pdm on/off' });
             }
 
             // DB update
