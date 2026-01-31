@@ -8,7 +8,7 @@ module.exports = {
 
     wasi_handler: async (wasi_sock, wasi_sender) => {
         try {
-            // DB folder check
+            // DB folder ensure
             if (!fs.existsSync('./db')) fs.mkdirSync('./db');
 
             // load DB
@@ -31,26 +31,24 @@ module.exports = {
             const groupMetadata = await wasi_sock.groupMetadata(from);
             const groupOwner = groupMetadata.owner;
 
-            // bot user detect
-            const botJid = (await wasi_sock.user).id || '';
-
-            // صرف group owner یا bot
+            // صرف group owner یا sender (بوٹ) allowed
+            const botJid = from; // simplification: sender itself is bot JID
             if (sender !== groupOwner && sender !== botJid) {
                 return await wasi_sock.sendMessage(from, {
                     text: '❌ صرف گروپ اونر یا بوٹ یوزر ہی اس فیچر کو آن/آف کر سکتا ہے۔'
                 });
             }
 
-            // command parse (message text)
+            // message conversation سے کمانڈ parse کریں
             const text = wasi_sender.message?.conversation || '';
-            const args = text.trim().split(' ');
-            const option = args[1]?.toLowerCase(); // "!pdm on/off"
+            const parts = text.trim().split(' '); // "!pdm on/off"
+            const option = parts[1]?.toLowerCase();
 
             if (!option || !['on','off'].includes(option)) {
                 return await wasi_sock.sendMessage(from, { text: 'استعمال: !pdm on/off' });
             }
 
-            // update DB
+            // DB update
             pdmDB[from] = option === 'on';
             fs.writeFileSync(path, JSON.stringify(pdmDB, null, 2));
 
@@ -58,7 +56,7 @@ module.exports = {
             await wasi_sock.sendMessage(from, { text: `✅ PDM فیچر اب ${status} کر دیا گیا ہے۔` });
 
         } catch (err) {
-            console.error('PDM Error:', err);
+            console.error('❌ PDM Handler Error:', err);
             await wasi_sock.sendMessage(
                 wasi_sender.key.remoteJid,
                 { text: '❌ PDM فیچر load کرنے میں مسئلہ آ گیا۔' }
