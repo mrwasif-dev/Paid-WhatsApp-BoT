@@ -20,27 +20,13 @@ module.exports = {
                 pdmDB = {};
             }
 
-            // safe checks
+            // safe check
             if (!sender || !sender.key) return;
 
             const from = sender.key.remoteJid || '';
-            const participant = sender.key.participant || from;
+            if (!from.endsWith('@g.us')) return; // صرف گروپ میں
 
-            // صرف گروپ میں
-            if (!from.endsWith('@g.us')) return;
-
-            // گروپ owner
-            const groupMetadata = await sock.groupMetadata(from);
-            const groupOwner = groupMetadata.owner;
-
-            // صرف گروپ owner allow
-            if (participant !== groupOwner) {
-                return await sock.sendMessage(from, {
-                    text: '❌ صرف گروپ اونر ہی اس فیچر کو آن/آف کر سکتا ہے۔'
-                });
-            }
-
-            // message text سے command parse
+            // message conversation سے command parse
             const text = sender.message?.conversation || '';
             const args = text.trim().split(' '); // "!pdm on/off"
             const option = args[1]?.toLowerCase();
@@ -66,7 +52,6 @@ module.exports = {
         }
     },
 
-    // کسی بھی جگہ استعمال کے لیے function
     isPDMEnabled: (groupId) => {
         try {
             if (fs.existsSync(path)) {
