@@ -817,94 +817,57 @@ async function setupMessageHandler(wasi_sock, sessionId) {
                 }
             }
         }
-        // =====================================================================
-// 🔥 HERO AUTO-FORWARD CONFIG + LOGIC
-// 🔥 Multi-source → Multi-target
-// 🔥 Forwarded / Newsletter trace removed
-// 🔥 Only Media (Photo/Video/Document) + Emojis
-// =====================================================================
 
-// ===================== HERO CONFIG =====================
-// ⚠️ Put your source and target IDs here as ENV / VAR
-// Separate multiple IDs with comma (,)
-// Example:
-// SOURCE_JIDS=1201111111@g.us,1202222222@g.us
-// TARGET_JIDS=1209999999@g.us,923xxxx@s.whatsapp.net
-// ========================================================
 
-const HERO_AUTO_FORWARD = {
-    sources: process.env.SOURCE_JIDS
-        ? process.env.SOURCE_JIDS.split(',').map(j => j.trim()).filter(Boolean)
-        : [],
-    targets: process.env.TARGET_JIDS
-        ? process.env.TARGET_JIDS.split(',').map(j => j.trim()).filter(Boolean)
-        : []
-};
 
-// ---------------------------------------------------------------------
-// AUTO FORWARD LOGIC
-// ---------------------------------------------------------------------
-if (
-    wasi_origin.endsWith('@g.us') &&
-    !wasi_msg.key.fromMe &&
-    HERO_AUTO_FORWARD.sources.includes(wasi_origin)
-) {
-    try {
-        if (!wasi_msg.message) return;
-
-        let relayMsg = null;
-        let mType = null;
-
-        // ===================== Detect Media =====================
-        if (wasi_msg.message.imageMessage) {
-            relayMsg = { imageMessage: wasi_msg.message.imageMessage };
-            mType = 'imageMessage';
-        } else if (wasi_msg.message.videoMessage) {
-            relayMsg = { videoMessage: wasi_msg.message.videoMessage };
-            mType = 'videoMessage';
-        } else if (wasi_msg.message.documentMessage) {
-            relayMsg = { documentMessage: wasi_msg.message.documentMessage };
-            mType = 'documentMessage';
-        } else if (wasi_msg.message.conversation || wasi_msg.message.extendedTextMessage) {
-            // Check for emojis only
-            const text = wasi_msg.message.conversation || wasi_msg.message.extendedTextMessage.text;
-            const emojiRegex = /(\p{Emoji_Presentation}|\p{Emoji}\uFE0F)/gu;
-            const emojis = text.match(emojiRegex);
-            if (emojis && emojis.length > 0) {
-                relayMsg = { conversation: emojis.join('') }; // combine emojis
-                mType = 'conversation';
-            } else {
-                return; // not media or emoji → ignore
-            }
-        } else {
-            return; // not media or emoji → ignore
-        }
-
-        // ===================== Remove Forwarded / Newsletter Trace =====================
-        if (mType && relayMsg[mType]?.contextInfo) {
-            delete relayMsg[mType].contextInfo.isForwarded;
-            delete relayMsg[mType].contextInfo.forwardingScore;
-            delete relayMsg[mType].contextInfo.forwardedNewsletterMessageInfo;
-            if (Object.keys(relayMsg[mType].contextInfo).length === 0) {
-                delete relayMsg[mType].contextInfo;
-            }
-        }
-
-        // ===================== Forward to all targets =====================
-        for (const targetJid of HERO_AUTO_FORWARD.targets) {
+  // -------------------------------------------------------------------------
+        // AUTO FORWARD LOGIC
+        // -------------------------------------------------------------------------
+        if (wasi_origin.endsWith('@g.us') && !wasi_msg.key.fromMe) {
             try {
-                await wasi_sock.relayMessage(targetJid, relayMsg, {
-                    messageId: wasi_sock.generateMessageTag()
-                });
+                const { wasi_getGroupSettings } = require('./wasilib/database');
+                const groupSettings = await wasi_getGroupSettings(sessionId, wasi_origin);
+
+                if (groupSettings && groupSettings.autoForward && groupSettings.autoForwardTargets?.length > 0) {
+                    console.log(`🚀 [AUTO-FORWARD] Relaying message from ${wasi_origin} to ${groupSettings.autoForwardTargets.length} targets`);
+
+                    // Prepare Message Content (Unwrap & Add Context)
+                    let relayMsg = { ...wasi_msg.message };
+                    if (relayMsg.viewOnceMessageV2) relayMsg = relayMsg.viewOnceMessageV2.message;
+                    if (relayMsg.viewOnceMessage) relayMsg = relayMsg.viewOnceMessage.message;
+
+                    const mType = Object.keys(relayMsg).find(k => k.endsWith('Message') || k === 'conversation');
+                    if (mType && relayMsg[mType] && typeof relayMsg[mType] === 'object') {
+                        relayMsg[mType].contextInfo = {
+                            ...(relayMsg[mType].contextInfo || {}),
+                            forwardingScore: 999,
+                            isForwarded: true,
+                            forwardedNewsletterMessageInfo: {
+                                newsletterJid: currentConfig.newsletterJid || '120363419652241844@newsletter',
+                                newsletterName: currentConfig.newsletterName || 'WASI-MD-V7',
+                                serverMessageId: -1
+                            }
+                        };
+                    }
+
+                    for (const targetJid of groupSettings.autoForwardTargets) {
+                        try {
+                            await wasi_sock.relayMessage(targetJid, relayMsg, {
+                                messageId: wasi_sock.generateMessageTag()
+                            });
+                        } catch (err) {
+                            console.error(`[AUTO-FORWARD] Failed for ${targetJid}:`, err.message);
+                        }
+                    }
+                }
             } catch (err) {
-                console.error(`[AUTO-FORWARD] Failed → ${targetJid}`, err.message);
+                console.error('[AUTO-FORWARD] Error:', err.message);
             }
         }
+        
 
-    } catch (err) {
-        console.error('[AUTO-FORWARD] ERROR:', err.message);
-    }
-}
+
+        
         // -------------------------------------------------------------------------
         // AUTO VIEW ONCE (RECOVER)
         // -------------------------------------------------------------------------
