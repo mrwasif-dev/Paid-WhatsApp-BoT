@@ -1,6 +1,6 @@
 const config = {
     sessionId: process.env.SESSION_ID || '',
-    mongoDbUrl: process.env.MONGODB_URI || '',
+    mongoDbUrl: process.env.MONGO_URL || '',
     ownerNumber: process.env.OWNER_NUMBER || '923039107958@s.whatsapp.net',
     prefix: process.env.PREFIX || '!'
 };
