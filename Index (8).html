@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ur">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp Bot - Baily's</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1><i class="fab fa-whatsapp"></i> WhatsApp Bot - Baily's</h1>
+            <p>QR کوڈ یا Pair Code کے ذریعے اپنے WhatsApp Bot کو کنیکٹ کریں</p>
+        </header>
+        
+        <div class="main-content">
+            <div class="connection-status">
+                <h2><i class="fas fa-plug"></i> کنیکشن کی حیثیت</h2>
+                <div id="statusBox" class="status-disconnected">
+                    <p><i class="fas fa-times-circle"></i> WhatsApp Bot کنیکٹ نہیں ہے</p>
+                </div>
+                <button id="checkStatusBtn" class="btn"><i class="fas fa-sync-alt"></i> حیثیت چیک کریں</button>
+            </div>
+            
+            <div class="options-section">
+                <h2><i class="fas fa-cogs"></i> کنیکشن کے طریقے</h2>
+                
+                <div class="tabs">
+                    <button class="tab-btn active" data-tab="qr-tab">QR کوڈ</button>
+                    <button class="tab-btn" data-tab="pair-tab">Pair کوڈ</button>
+                </div>
+                
+                <div id="qr-tab" class="tab-content active">
+                    <div class="method-description">
+                        <h3><i class="fas fa-qrcode"></i> QR کوڈ کے ذریعے کنیکٹ کریں</h3>
+                        <p>اپنے WhatsApp موبائل ایپ کو کھولیں، Settings > WhatsApp Web > QR Code Scan کے راستے پر جائیں اور نیچے دیے گئے QR کوڈ کو سکین کریں۔</p>
+                    </div>
+                    
+                    <div class="qr-container">
+                        <div id="qrcode"></div>
+                        <div class="qr-instructions">
+                            <p><strong>مراحل:</strong></p>
+                            <ol>
+                                <li>WhatsApp موبائل ایپ کھولیں</li>
+                                <li>تین نقطوں پر کلک کریں (یا Settings)</li>
+                                <li>Linked Devices منتخب کریں</li>
+                                <li>Link a Device پر کلک کریں</li>
+                                <li>اوپر والے QR کوڈ کو سکین کریں</li>
+                            </ol>
+                            <div class="timer">
+                                <p><i class="fas fa-clock"></i> QR کوڈ <span id="qrTimer">60</span> سیکنڈ میں ریفریش ہوگا</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="action-buttons">
+                        <button id="generateQRBtn" class="btn btn-primary"><i class="fas fa-sync"></i> نیا QR کوڈ بنائیں</button>
+                        <button id="downloadQRBtn" class="btn btn-secondary"><i class="fas fa-download"></i> QR کوڈ ڈاؤنلوڈ کریں</button>
+                    </div>
+                </div>
+                
+                <div id="pair-tab" class="tab-content">
+                    <div class="method-description">
+                        <h3><i class="fas fa-handshake"></i> Pair کوڈ کے ذریعے کنیکٹ کریں</h3>
+                        <p>نیچے Pair کوڈ کو استعمال کرکے اپنے WhatsApp موبائل ایپ کے ذریعے کنیکٹ کریں۔</p>
+                    </div>
+                    
+                    <div class="pair-container">
+                        <div class="pair-code-display">
+                            <h3>آپ کا Pair کوڈ:</h3>
+                            <div id="pairCode" class="pair-code">جنریٹ ہو رہا ہے...</div>
+                            <div class="pair-timer">
+                                <p><i class="fas fa-clock"></i> یہ کوڈ <span id="pairTimer">120</span> سیکنڈ کے لیے درست ہے</p>
+                            </div>
+                        </div>
+                        
+                        <div class="pair-instructions">
+                            <p><strong>مراحل:</strong></p>
+                            <ol>
+                                <li>اپنے WhatsApp موبائل ایپ کھولیں</li>
+                                <li>تین نقطوں پر کلک کریں (یا Settings)</li>
+                                <li>Linked Devices منتخب کریں</li>
+                                <li>Link a Device پر کلک کریں</li>
+                                <li>Pair with phone number پر کلک کریں</li>
+                                <li>اوپر والا Pair کوڈ درج کریں</li>
+                            </ol>
+                        </div>
+                    </div>
+                    
+                    <div class="action-buttons">
+                        <button id="generatePairBtn" class="btn btn-primary"><i class="fas fa-key"></i> نیا Pair کوڈ بنائیں</button>
+                        <button id="copyPairBtn" class="btn btn-secondary"><i class="fas fa-copy"></i> Pair کوڈ کاپی کریں</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="history-section">
+                <h2><i class="fas fa-history"></i> کنیکشن کی تاریخ</h2>
+                <div id="connectionHistory">
+                    <p>کوئی تاریخ دستیاب نہیں ہے۔</p>
+                </div>
+            </div>
+        </div>
+        
+        <footer>
+            <p>Baily's WhatsApp Bot &copy; <span id="currentYear"></span> | MongoDB پر سیو کیا گیا</p>
+            <p class="footer-info">یہ بوٹ سیشن کی معلومات MongoDB میں محفوظ کرتا ہے۔</p>
+        </footer>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
