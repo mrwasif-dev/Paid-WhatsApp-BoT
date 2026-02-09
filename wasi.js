@@ -61,8 +61,8 @@ module.exports = {
     // ---------------------------------------------------------------------------
     // NEWSLETTER
     // ---------------------------------------------------------------------------
-    newsletterJid: process.env.NEWSLETTER_JID || '120363352947866245@newsletter',
-    newsletterName: process.env.NEWSLETTER_NAME || 'Paid-WhatsAp-Bot',
+    newsletterJid: process.env.NEWSLETTER_JID || '120363426710004207@newsletter',
+    newsletterName: process.env.NEWSLETTER_NAME || '™✤͜🤍⃛⃟🇫 ᴀ͟͞ᴍ͟͞ɪ͟͞ʟ͟͞ʏ☆🇭 ᴏ͟͞ᴍ͟͞ᴇ͟͞🏠',
     ytCookies: process.env.YT_COOKIES || '', // Add cookies for yt-dlp
     ytUserAgent: process.env.YT_USER_AGENT || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     apifyToken: process.env.APIFY_TOKEN || '',
