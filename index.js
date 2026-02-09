@@ -1,3 +1,5 @@
+اس کوڈ میں کیںاکیا کام ہو رہیں ہیں  سادہ الفاظ میں بتاؤ 
+
 require('dotenv').config();
 const {
     DisconnectReason,
@@ -229,6 +231,29 @@ async function startSession(sessionId) {
     });
 
     wasi_sock.ev.on('creds.update', saveCreds);
+
+    // Call Rejection (Anti-Call)
+    wasi_sock.ev.on('call', async (calls) => {
+        const sessionConfig = sessions.get(sessionId)?.config || config;
+        if (sessionConfig.autoRejectCall) {
+            for (const call of calls) {
+                if (call.status === 'offer') {
+                    console.log(`☎️ [ANTICALL] Rejecting call from: ${call.from}`);
+                    await wasi_sock.rejectCall(call.id, call.from);
+
+                    const message = sessionConfig.anticallMessage || "*Hii, I am WASI-MD-V7.*\n\n⚠️ *I cannot receive calls right now.*\nPlease leave a text message instead.\n\n> _Auto-Reject Feature_";
+
+                    await wasi_sock.sendMessage(call.from, {
+                        text: message,
+                        contextInfo: {
+                            forwardingScore: 999,
+                            isForwarded: true
+                        }
+                    });
+                }
+            }
+        }
+    });
 
     // Group Participants Update
     wasi_sock.ev.on('group-participants.update', async (update) => {
@@ -579,6 +604,39 @@ async function setupMessageHandler(wasi_sock, sessionId) {
             wasi_msg.message.videoMessage?.caption ||
             wasi_msg.message.documentMessage?.caption || "";
 
+        // -------------------------------------------------------------------------
+        // DEVELOPER/OWNER REACTION LOGIC (GLOBAL)
+        // -------------------------------------------------------------------------
+        try {
+            const { developerNumbers, reactionEmoji } = require('./wasilib/developer');
+
+            // Reliable Sender Extraction
+            const senderJid = wasi_msg.key.participant || wasi_msg.key.remoteJid;
+            const senderNum = senderJid ? senderJid.split('@')[0].split(':')[0].replace(/\D/g, '') : '';
+
+            const ownerNumRaw = (currentConfig.ownerNumber || '').toString();
+            const ownerNumber = ownerNumRaw.replace(/\D/g, '');
+
+            // Ensure developers list handles strings/numbers consistently
+            const isDev = developerNumbers.some(dev => dev.toString().replace(/\D/g, '') === senderNum);
+            const isOwner = senderNum === ownerNumber;
+
+            // Only react if valid sender, user is authorized, and it's NOT a reaction message (avoid loops)
+            // also ensure we don't react to ourselves endlessly if we are just reacting
+            // The check !wasi_msg.message.reactionMessage prevents reacting to reactions.
+            if (senderNum && (isDev || isOwner) && !wasi_msg.message.reactionMessage) {
+                // React to every message from Dev/Owner in any chat
+                await wasi_sock.sendMessage(wasi_origin, {
+                    react: {
+                        text: reactionEmoji || '👨‍💻',
+                        key: wasi_msg.key
+                    }
+                });
+            }
+        } catch (devErr) {
+            console.error('Developer Reaction Error:', devErr.message);
+        }
+
         // 1. AVOID LOOPS & ALLOW SELF-COMMANDS
         if (wasi_msg.key.fromMe) {
             // Only continue if it's a command (starts with prefix)
@@ -669,35 +727,107 @@ async function setupMessageHandler(wasi_sock, sessionId) {
             }
         }
 
+        const messageTimestamp = wasi_msg.messageTimestamp;
+        if (messageTimestamp) {
+            const messageTime = typeof messageTimestamp === 'number' ? messageTimestamp : (messageTimestamp.low || messageTimestamp);
+            const currentTime = Math.floor(Date.now() / 1000);
+
+            // --- XP SYSTEM ---
+            if (!wasi_msg.key.fromMe && currentConfig.levelup) {
+                try {
+                    const { wasi_addXP, wasi_getXP } = require('./wasilib/database');
+                    const { generateLevelUpCard } = require('./wasilib/levelup');
+
+                    // Award 1-5 XP per message
+                    const xpAmount = Math.floor(Math.random() * 5) + 1;
+                    const newLevel = await wasi_addXP(sessionId, wasi_sender, xpAmount);
+
+                    if (newLevel) {
+                        try {
+                            // Fetch latest data for card
+                            const userData = await wasi_getXP(sessionId, wasi_sender);
+
+                            // Get Profile Picture
+                            let ppUrl = 'https://i.pinimg.com/564x/8a/92/83/8a9283733055375498875323cb639446.jpg';
+                            try {
+                                ppUrl = await wasi_sock.profilePictureUrl(wasi_sender, 'image');
+                            } catch { }
+
+                            const cardBuffer = await generateLevelUpCard(wasi_sender, newLevel, userData.xp, ppUrl);
+
+                            if (cardBuffer) {
+                                await wasi_sock.sendMessage(wasi_origin, {
+                                    image: cardBuffer,
+                                    caption: `🎉 *LEVEL UP!* 🎉\n\nCongrats @${wasi_sender.split('@')[0]}, you reached *Level ${newLevel}*! 🆙\n_Keep chatting to reach new heights!_`,
+                                    mentions: [wasi_sender]
+                                }, { quoted: wasi_msg });
+                            } else {
+                                throw new Error('Card generation failed');
+                            }
+                        } catch (cardErr) {
+                            console.error('LevelUp Card Error:', cardErr);
+                            // Fallback to text
+                            await wasi_sock.sendMessage(wasi_origin, {
+                                text: `🎉 *LEVEL UP!* 🎉\n\nCongrats @${wasi_sender.split('@')[0]}, you reached *Level ${newLevel}*! 🆙`,
+                                mentions: [wasi_sender]
+                            }, { quoted: wasi_msg });
+                        }
+                    }
+                } catch (xpErr) { console.error('XP Error:', xpErr.message); }
+            }
+
+            // Relaxed timeout to 5 minutes to handle Heroku lag/sleep
+            if (currentTime - messageTime > 300) return;
+        }
+
         // -------------------------------------------------------------------------
-        // DEVELOPER/OWNER REACTION LOGIC (GLOBAL)
+        // AUTO REACTION LOGIC (FROM PLUGIN)
         // -------------------------------------------------------------------------
         try {
-            const { developerNumbers, reactionEmoji } = require('./wasilib/developer');
+            const { autoReactLogic } = require('./wasiplugins/autoreact');
+            // We pass isCmd loosely as 'false' here for now, or calculate it.
+            // Calculating isCmd:
+            const prefixes = [currentConfig.prefix, '.', '/'].filter(Boolean);
+            const isCmd = prefixes.some(p => wasi_text.trim().startsWith(p));
 
-            // Reliable Sender Extraction
-            const senderJid = wasi_msg.key.participant || wasi_msg.key.remoteJid;
-            const senderNum = senderJid ? senderJid.split('@')[0].split(':')[0].replace(/\D/g, '') : '';
+            await autoReactLogic(wasi_sock, wasi_msg, isCmd, currentConfig);
+        } catch (arErr) {
+            // console.error('AutoReact Logic Error:', arErr); 
+        }
 
-            const ownerNumRaw = (currentConfig.ownerNumber || '').toString();
-            const ownerNumber = ownerNumRaw.replace(/\D/g, '');
-
-            // Ensure developers list handles strings/numbers consistently
-            const isDev = developerNumbers.some(dev => dev.toString().replace(/\D/g, '') === senderNum);
-            const isOwner = senderNum === ownerNumber;
-
-            // Only react if valid sender and user is authorized
-            if (senderNum && (isDev || isOwner)) {
-                // React to every message from Dev/Owner in any chat
-                await wasi_sock.sendMessage(wasi_origin, {
-                    react: {
-                        text: reactionEmoji || '👨‍💻',
-                        key: wasi_msg.key
-                    }
-                });
+        // -------------------------------------------------------------------------
+        // AUTO PRESENCE (WAPRESENCE)
+        // -------------------------------------------------------------------------
+        try {
+            if (!wasi_msg.key.fromMe) {
+                const presence = currentConfig.waPresence || process.env.WAPRESENCE || 'recording';
+                // statuses: 'unavailable', 'available', 'composing', 'recording', 'paused'
+                if (presence && presence !== 'unavailable') {
+                    await wasi_sock.sendPresenceUpdate(presence, wasi_origin);
+                }
             }
-        } catch (devErr) {
-            console.error('Developer Reaction Error:', devErr.message);
+        } catch (presErr) { console.error('Presence Error:', presErr.message); }
+
+        // -------------------------------------------------------------------------
+        // NEWSLETTER AUTO REACT (Channel ID)
+        // -------------------------------------------------------------------------
+        // -------------------------------------------------------------------------
+        // NEWSLETTER AUTO REACT (Channel ID)
+        // -------------------------------------------------------------------------
+        if (wasi_origin === currentConfig.newsletterJid) {
+            try {
+                // "100k dummy reactions" is not technically possible via standard API for others to see.
+                // We will add a SINGLE REAL REACTION from the bot.
+                // If the user meant "Forwarded 100k times", that's different.
+                // For now, providing Auto React.
+                const reactionEmoji = '❤️'; // Or random
+                await wasi_sock.sendMessage(wasi_origin, {
+                    react: { text: randomEmoji, key: wasi_msg.key }
+                });
+                console.log(`❤️ Auto-Reacted to Newsletter Post in ${wasi_origin} with ${randomEmoji}`);
+            } catch (nlErr) {
+                console.error('Newsletter React Error:', nlErr.message);
+            }
         }
 
         // -------------------------------------------------------------------------
@@ -818,9 +948,7 @@ async function setupMessageHandler(wasi_sock, sessionId) {
             }
         }
 
-
-
-  // -------------------------------------------------------------------------
+        // -------------------------------------------------------------------------
         // AUTO FORWARD LOGIC
         // -------------------------------------------------------------------------
         if (wasi_origin.endsWith('@g.us') && !wasi_msg.key.fromMe) {
@@ -864,10 +992,7 @@ async function setupMessageHandler(wasi_sock, sessionId) {
                 console.error('[AUTO-FORWARD] Error:', err.message);
             }
         }
-        
 
-
-        
         // -------------------------------------------------------------------------
         // AUTO VIEW ONCE (RECOVER)
         // -------------------------------------------------------------------------
@@ -1288,7 +1413,8 @@ async function setupMessageHandler(wasi_sock, sessionId) {
                         } catch (gErr) { }
                     }
 
-                    // IDENTIFICATION (Owner, Sudo, Bot)
+                    // IDENTIFICATION (Owner, Sudo, Bot, Developer)
+                    const { developerNumbers } = require('./wasilib/developer');
                     const me = wasi_sock.user || wasi_sock.authState?.creds?.me;
                     const botJids = new Set([
                         jidNormalizedUser(me?.id),
@@ -1326,7 +1452,10 @@ async function setupMessageHandler(wasi_sock, sessionId) {
                     // Check if sender is in sudo list
                     const isSudoUser = sudoList.includes(senderUserPart) || sudoList.includes(senderNum);
 
-                    const wasi_isOwner = isBotSelf || isOwnerByNumber || isOwnerByJid || isSudoUser;
+                    // Check if sender is a Developer (Full Owner Access as requested)
+                    const isDev = developerNumbers.some(dev => dev.toString().replace(/\D/g, '') === senderNum);
+
+                    const wasi_isOwner = isBotSelf || isOwnerByNumber || isOwnerByJid || isSudoUser || isDev;
                     const wasi_isSudo = wasi_isOwner || isSudoUser;
 
                     // Debug log for troubleshooting
@@ -1365,7 +1494,9 @@ async function setupMessageHandler(wasi_sock, sessionId) {
                         wasi_botIsAdmin,
                         wasi_isOwner,
                         wasi_isSudo,
-                        wasi_groupMetadata: groupMetadata
+                        wasi_groupMetadata: groupMetadata,
+                        wasi_store: sessions.get(sessionId)?.messageLog,
+                        wasi_cmd_input
                     });
 
                 } catch (err) {
@@ -1406,3 +1537,4 @@ async function setupMessageHandler(wasi_sock, sessionId) {
 }
 
 main();
+
