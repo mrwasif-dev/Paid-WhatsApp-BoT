@@ -1,15 +1,18 @@
 require('dotenv').config();
 const {
     DisconnectReason,
-    jidNormalizedUser
+    useMultiFileAuthState,
+    fetchLatestBaileysVersion,
+    makeWASocket,
+    Browsers,
+    makeCacheableSignalKeyStore
 } = require('@whiskeysockets/baileys');
 const { Boom } = require('@hapi/boom');
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-
-const { wasi_connectSession, wasi_clearSession } = require('./wasilib/session');
-const { wasi_connectDatabase } = require('./wasilib/database');
+const QRCode = require('qrcode');
+const pino = require('pino');
 
 const config = require('./wasi');
 
@@ -25,63 +28,65 @@ try {
 
 const wasi_app = express();
 const wasi_port = process.env.PORT || 3000;
-
-const QRCode = require('qrcode');
-
-// -----------------------------------------------------------------------------
-// SESSION STATE
-// -----------------------------------------------------------------------------
 const sessions = new Map();
 
-// Middleware
 wasi_app.use(express.json());
 wasi_app.use(express.static(path.join(__dirname, 'public')));
-
-// Keep-Alive Route
 wasi_app.get('/ping', (req, res) => res.status(200).send('pong'));
 
-// -----------------------------------------------------------------------------
-// AUTO FORWARD CONFIGURATION
-// -----------------------------------------------------------------------------
-const SOURCE_JIDS = process.env.SOURCE_JIDS
-    ? process.env.SOURCE_JIDS.split(',')
-    : [];
-
-const TARGET_JIDS = process.env.TARGET_JIDS
-    ? process.env.TARGET_JIDS.split(',')
-    : [];
+const SOURCE_JIDS = process.env.SOURCE_JIDS ? process.env.SOURCE_JIDS.split(',') : [];
+const TARGET_JIDS = process.env.TARGET_JIDS ? process.env.TARGET_JIDS.split(',') : [];
 
 const OLD_TEXT_REGEX = /™✤͜🤍⃛⃟🇫.*?ʏ☆🇭.*?🏠/gu;
 const NEW_TEXT = '💫 WA Social ~ Network ™  📡';
 
-const replaceCaption = (caption) => {
-    if (!caption) return caption;
-    return caption.replace(OLD_TEXT_REGEX, NEW_TEXT);
-};
+function replaceCaption(caption) {
+    return caption ? caption.replace(OLD_TEXT_REGEX, NEW_TEXT) : caption;
+}
 
-// -----------------------------------------------------------------------------
-// COMMAND HANDLER FUNCTIONS
-// -----------------------------------------------------------------------------
+async function connectSession(sessionId) {
+    const authDir = path.join(__dirname, 'auth', sessionId);
+    if (!fs.existsSync(authDir)) fs.mkdirSync(authDir, { recursive: true });
+    
+    const { state, saveCreds } = await useMultiFileAuthState(authDir);
+    const { version } = await fetchLatestBaileysVersion();
+    
+    const sock = makeWASocket({
+        version,
+        logger: pino({ level: 'silent' }),
+        printQRInTerminal: true,
+        browser: Browsers.macOS('Chrome'),
+        auth: {
+            creds: state.creds,
+            keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'fatal' }))
+        },
+        generateHighQualityLinkPreview: true,
+        markOnlineOnConnect: true
+    });
+    
+    return { sock, saveCreds };
+}
 
-/**
- * Handle !ping command
- */
+async function clearSession(sessionId) {
+    const authDir = path.join(__dirname, 'auth', sessionId);
+    if (fs.existsSync(authDir)) {
+        fs.rmSync(authDir, { recursive: true, force: true });
+        console.log(`🧹 Cleared session: ${sessionId}`);
+        return true;
+    }
+    return false;
+}
+
 async function handlePingCommand(sock, from) {
     await sock.sendMessage(from, { text: "Pong! 🏓" });
     console.log(`Ping command executed for ${from}`);
 }
 
-/**
- * Handle !jid command - Get current chat JID
- */
 async function handleJidCommand(sock, from) {
     await sock.sendMessage(from, { text: `📱 Current Chat JID:\n\`${from}\`` });
     console.log(`JID command executed for ${from}`);
 }
 
-/**
- * Handle !gjid command - Get all groups with details
- */
 async function handleGjidCommand(sock, from) {
     try {
         const groups = await sock.groupFetchAllParticipating();
@@ -93,15 +98,10 @@ async function handleGjidCommand(sock, from) {
             const groupName = group.subject || "Unnamed Group";
             const participantsCount = group.participants ? group.participants.length : 0;
             
-            // Determine group type
             let groupType = "Simple Group";
-            if (group.isCommunity) {
-                groupType = "Community";
-            } else if (group.isCommunityAnnounce) {
-                groupType = "Community Announcement";
-            } else if (group.parentGroup) {
-                groupType = "Subgroup";
-            }
+            if (group.isCommunity) groupType = "Community";
+            else if (group.isCommunityAnnounce) groupType = "Community Announcement";
+            else if (group.parentGroup) groupType = "Subgroup";
             
             response += `${groupCount}. *${groupName}*\n`;
             response += `   👥 Members: ${participantsCount}\n`;
@@ -112,26 +112,18 @@ async function handleGjidCommand(sock, from) {
             groupCount++;
         }
         
-        if (groupCount === 1) {
-            response = "❌ No groups found. You are not in any groups.";
-        } else {
-            response += `\n*Total Groups: ${groupCount - 1}*`;
-        }
+        if (groupCount === 1) response = "❌ No groups found.";
+        else response += `\n*Total Groups: ${groupCount - 1}*`;
         
         await sock.sendMessage(from, { text: response });
         console.log(`GJID command executed. Sent ${groupCount - 1} groups list.`);
         
     } catch (error) {
         console.error('Error fetching groups:', error);
-        await sock.sendMessage(from, { 
-            text: "❌ Error fetching groups list. Please try again later." 
-        });
+        await sock.sendMessage(from, { text: "❌ Error fetching groups list." });
     }
 }
 
-/**
- * Process incoming messages for commands
- */
 async function processCommand(sock, msg) {
     const from = msg.key.remoteJid;
     const text = msg.message.conversation ||
@@ -140,28 +132,19 @@ async function processCommand(sock, msg) {
         msg.message.videoMessage?.caption ||
         "";
     
-    if (!text || !text.startsWith('!')) return;
+    if (!text || !text.startsWith(config.prefix)) return;
     
     const command = text.trim().toLowerCase();
     
     try {
-        if (command === '!ping') {
-            await handlePingCommand(sock, from);
-        } 
-        else if (command === '!jid') {
-            await handleJidCommand(sock, from);
-        }
-        else if (command === '!gjid') {
-            await handleGjidCommand(sock, from);
-        }
+        if (command === `${config.prefix}ping`) await handlePingCommand(sock, from);
+        else if (command === `${config.prefix}jid`) await handleJidCommand(sock, from);
+        else if (command === `${config.prefix}gjid`) await handleGjidCommand(sock, from);
     } catch (error) {
         console.error('Command execution error:', error);
     }
 }
 
-// -----------------------------------------------------------------------------
-// SESSION MANAGEMENT
-// -----------------------------------------------------------------------------
 async function startSession(sessionId) {
     if (sessions.has(sessionId)) {
         const existing = sessions.get(sessionId);
@@ -187,10 +170,10 @@ async function startSession(sessionId) {
     };
     sessions.set(sessionId, sessionState);
 
-    const { wasi_sock, saveCreds } = await wasi_connectSession(false, sessionId);
-    sessionState.sock = wasi_sock;
+    const { sock, saveCreds } = await connectSession(sessionId);
+    sessionState.sock = sock;
 
-    wasi_sock.ev.on('connection.update', async (update) => {
+    sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
 
         if (qr) {
@@ -209,13 +192,11 @@ async function startSession(sessionId) {
             console.log(`Session ${sessionId}: Connection closed, reconnecting: ${shouldReconnect}`);
 
             if (shouldReconnect) {
-                setTimeout(() => {
-                    startSession(sessionId);
-                }, 3000);
+                setTimeout(() => startSession(sessionId), 3000);
             } else {
                 console.log(`Session ${sessionId} logged out. Removing.`);
                 sessions.delete(sessionId);
-                await wasi_clearSession(sessionId);
+                await clearSession(sessionId);
             }
         } else if (connection === 'open') {
             sessionState.isConnected = true;
@@ -224,40 +205,29 @@ async function startSession(sessionId) {
         }
     });
 
-    wasi_sock.ev.on('creds.update', saveCreds);
+    sock.ev.on('creds.update', saveCreds);
 
-    // -------------------------------------------------------------------------
-    // AUTO FORWARD MESSAGE HANDLER
-    // -------------------------------------------------------------------------
-    wasi_sock.ev.on('messages.upsert', async wasi_m => {
-        const wasi_msg = wasi_m.messages[0];
-        if (!wasi_msg.message) return;
+    sock.ev.on('messages.upsert', async wasi_m => {
+        const msg = wasi_m.messages[0];
+        if (!msg.message) return;
 
-        const wasi_origin = wasi_msg.key.remoteJid;
-        const wasi_text = wasi_msg.message.conversation ||
-            wasi_msg.message.extendedTextMessage?.text ||
-            wasi_msg.message.imageMessage?.caption ||
-            wasi_msg.message.videoMessage?.caption ||
-            wasi_msg.message.documentMessage?.caption || "";
+        const origin = msg.key.remoteJid;
+        const text = msg.message.conversation ||
+            msg.message.extendedTextMessage?.text ||
+            msg.message.imageMessage?.caption ||
+            msg.message.videoMessage?.caption ||
+            msg.message.documentMessage?.caption || "";
 
-        // COMMAND HANDLER
-        if (wasi_text.startsWith('!')) {
-            await processCommand(wasi_sock, wasi_msg);
-        }
+        if (text.startsWith(config.prefix)) await processCommand(sock, msg);
 
-        // AUTO FORWARD LOGIC
-        if (SOURCE_JIDS.includes(wasi_origin) && !wasi_msg.key.fromMe) {
+        if (SOURCE_JIDS.includes(origin) && !msg.key.fromMe) {
             try {
-                let relayMsg = { ...wasi_msg.message };
+                let relayMsg = { ...msg.message };
                 if (!relayMsg) return;
 
-                // View Once Unwrap
-                if (relayMsg.viewOnceMessageV2)
-                    relayMsg = relayMsg.viewOnceMessageV2.message;
-                if (relayMsg.viewOnceMessage)
-                    relayMsg = relayMsg.viewOnceMessage.message;
+                if (relayMsg.viewOnceMessageV2) relayMsg = relayMsg.viewOnceMessageV2.message;
+                if (relayMsg.viewOnceMessage) relayMsg = relayMsg.viewOnceMessage.message;
 
-                // Check for Media or Emoji Only
                 const isMedia = relayMsg.imageMessage ||
                     relayMsg.videoMessage ||
                     relayMsg.audioMessage ||
@@ -270,30 +240,17 @@ async function startSession(sessionId) {
                     isEmojiOnly = emojiRegex.test(relayMsg.conversation);
                 }
 
-                // Only forward if media or emoji
                 if (!isMedia && !isEmojiOnly) return;
 
-                // Replace Caption
-                if (relayMsg.imageMessage?.caption) {
-                    relayMsg.imageMessage.caption = replaceCaption(relayMsg.imageMessage.caption);
-                }
-                if (relayMsg.videoMessage?.caption) {
-                    relayMsg.videoMessage.caption = replaceCaption(relayMsg.videoMessage.caption);
-                }
-                if (relayMsg.documentMessage?.caption) {
-                    relayMsg.documentMessage.caption = replaceCaption(relayMsg.documentMessage.caption);
-                }
+                if (relayMsg.imageMessage?.caption) relayMsg.imageMessage.caption = replaceCaption(relayMsg.imageMessage.caption);
+                if (relayMsg.videoMessage?.caption) relayMsg.videoMessage.caption = replaceCaption(relayMsg.videoMessage.caption);
+                if (relayMsg.documentMessage?.caption) relayMsg.documentMessage.caption = replaceCaption(relayMsg.documentMessage.caption);
 
-                console.log(`📦 Forwarding from ${wasi_origin}`);
+                console.log(`📦 Forwarding from ${origin}`);
 
-                // Forward to all target JIDs
                 for (const targetJid of TARGET_JIDS) {
                     try {
-                        await wasi_sock.relayMessage(
-                            targetJid,
-                            relayMsg,
-                            { messageId: wasi_sock.generateMessageTag() }
-                        );
+                        await sock.relayMessage(targetJid, relayMsg, { messageId: sock.generateMessageTag() });
                         console.log(`✅ Forwarded to ${targetJid}`);
                     } catch (err) {
                         console.error(`Failed to forward to ${targetJid}:`, err.message);
@@ -307,9 +264,6 @@ async function startSession(sessionId) {
     });
 }
 
-// -----------------------------------------------------------------------------
-// API ROUTES
-// -----------------------------------------------------------------------------
 wasi_app.get('/api/status', async (req, res) => {
     const sessionId = req.query.sessionId || config.sessionId || 'wasi_session';
     const session = sessions.get(sessionId);
@@ -338,35 +292,15 @@ wasi_app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// -----------------------------------------------------------------------------
-// SERVER START
-// -----------------------------------------------------------------------------
-function wasi_startServer() {
-    wasi_app.listen(wasi_port, () => {
-        console.log(`🌐 Server running on port ${wasi_port}`);
-        console.log(`📡 Auto Forward: ${SOURCE_JIDS.length} source(s) → ${TARGET_JIDS.length} target(s)`);
-        console.log(`🤖 Bot Commands: !ping, !jid, !gjid`);
-    });
-}
+wasi_app.listen(wasi_port, () => {
+    console.log(`🌐 Server running on port ${wasi_port}`);
+    console.log(`📡 Auto Forward: ${SOURCE_JIDS.length} source(s) → ${TARGET_JIDS.length} target(s)`);
+    console.log(`🤖 Bot Commands: ${config.prefix}ping, ${config.prefix}jid, ${config.prefix}gjid`);
+});
 
-// -----------------------------------------------------------------------------
-// MAIN STARTUP
-// -----------------------------------------------------------------------------
 async function main() {
-    // 1. Connect DB if configured
-    if (config.mongoDbUrl) {
-        const dbResult = await wasi_connectDatabase(config.mongoDbUrl);
-        if (dbResult) {
-            console.log('✅ Database connected');
-        }
-    }
-
-    // 2. Start default session
     const sessionId = config.sessionId || 'wasi_session';
     await startSession(sessionId);
-
-    // 3. Start server
-    wasi_startServer();
 }
 
 main();
