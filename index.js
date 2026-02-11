@@ -1,7 +1,8 @@
 require('dotenv').config();
 const {
     DisconnectReason,
-    jidNormalizedUser
+    jidNormalizedUser,
+    proto
 } = require('@whiskeysockets/baileys');
 const { Boom } = require('@hapi/boom');
 const express = require('express');
@@ -66,7 +67,118 @@ const NEW_TEXT = process.env.NEW_TEXT
     ? process.env.NEW_TEXT
     : '';
 
-const replaceCaption = (caption) => {
+// -----------------------------------------------------------------------------
+// HELPER FUNCTIONS FOR MESSAGE CLEANING
+// -----------------------------------------------------------------------------
+
+/**
+ * Clean forwarded label from message
+ */
+function cleanForwardedLabel(message) {
+    try {
+        // Clone the message to avoid modifying original
+        let cleanedMessage = JSON.parse(JSON.stringify(message));
+        
+        // Remove forwarded flag from different message types
+        if (cleanedMessage.extendedTextMessage?.contextInfo) {
+            cleanedMessage.extendedTextMessage.contextInfo.isForwarded = false;
+            // Also remove forwarding news if present
+            if (cleanedMessage.extendedTextMessage.contextInfo.forwardingScore) {
+                cleanedMessage.extendedTextMessage.contextInfo.forwardingScore = 0;
+            }
+        }
+        
+        if (cleanedMessage.imageMessage?.contextInfo) {
+            cleanedMessage.imageMessage.contextInfo.isForwarded = false;
+            if (cleanedMessage.imageMessage.contextInfo.forwardingScore) {
+                cleanedMessage.imageMessage.contextInfo.forwardingScore = 0;
+            }
+        }
+        
+        if (cleanedMessage.videoMessage?.contextInfo) {
+            cleanedMessage.videoMessage.contextInfo.isForwarded = false;
+            if (cleanedMessage.videoMessage.contextInfo.forwardingScore) {
+                cleanedMessage.videoMessage.contextInfo.forwardingScore = 0;
+            }
+        }
+        
+        if (cleanedMessage.audioMessage?.contextInfo) {
+            cleanedMessage.audioMessage.contextInfo.isForwarded = false;
+            if (cleanedMessage.audioMessage.contextInfo.forwardingScore) {
+                cleanedMessage.audioMessage.contextInfo.forwardingScore = 0;
+            }
+        }
+        
+        if (cleanedMessage.documentMessage?.contextInfo) {
+            cleanedMessage.documentMessage.contextInfo.isForwarded = false;
+            if (cleanedMessage.documentMessage.contextInfo.forwardingScore) {
+                cleanedMessage.documentMessage.contextInfo.forwardingScore = 0;
+            }
+        }
+        
+        // Remove newsletter/broadcast specific markers
+        if (cleanedMessage.protocolMessage) {
+            // For newsletter messages, we extract the actual message content
+            if (cleanedMessage.protocolMessage.type === 14 || 
+                cleanedMessage.protocolMessage.type === 26) {
+                // These are typically newsletter/broadcast messages
+                // We'll try to extract the actual message if possible
+                if (cleanedMessage.protocolMessage.historySyncNotification) {
+                    // Extract from history sync
+                    const syncData = cleanedMessage.protocolMessage.historySyncNotification;
+                    if (syncData.pushName) {
+                        // Use pushName as sender info
+                        console.log('Newsletter from:', syncData.pushName);
+                    }
+                }
+            }
+        }
+        
+        return cleanedMessage;
+    } catch (error) {
+        console.error('Error cleaning forwarded label:', error);
+        return message;
+    }
+}
+
+/**
+ * Clean newsletter/information markers from text
+ */
+function cleanNewsletterText(text) {
+    if (!text) return text;
+    
+    // Remove common newsletter markers
+    const newsletterMarkers = [
+        /📢\s*/g,
+        /🔔\s*/g,
+        /📰\s*/g,
+        /🗞️\s*/g,
+        /\[NEWSLETTER\]/gi,
+        /\[BROADCAST\]/gi,
+        /\[ANNOUNCEMENT\]/gi,
+        /Newsletter:/gi,
+        /Broadcast:/gi,
+        /Announcement:/gi,
+        /Forwarded many times/gi,
+        /Forwarded message/gi,
+        /This is a broadcast message/gi
+    ];
+    
+    let cleanedText = text;
+    newsletterMarkers.forEach(marker => {
+        cleanedText = cleanedText.replace(marker, '');
+    });
+    
+    // Trim extra whitespace
+    cleanedText = cleanedText.trim();
+    
+    return cleanedText;
+}
+
+/**
+ * Replace caption text using regex patterns
+ */
+function replaceCaption(caption) {
     if (!caption) return caption;
     
     // اگر OLD_TEXT_REGEX یا NEW_TEXT خالی ہوں تو کچھ نہیں کریں گے
@@ -79,7 +191,70 @@ const replaceCaption = (caption) => {
     });
     
     return result;
-};
+}
+
+/**
+ * Process and clean a message completely
+ */
+function processAndCleanMessage(originalMessage) {
+    try {
+        // Step 1: Clone the message
+        let cleanedMessage = JSON.parse(JSON.stringify(originalMessage));
+        
+        // Step 2: Remove forwarded labels
+        cleanedMessage = cleanForwardedLabel(cleanedMessage);
+        
+        // Step 3: Extract text and clean newsletter markers
+        const text = cleanedMessage.conversation ||
+            cleanedMessage.extendedTextMessage?.text ||
+            cleanedMessage.imageMessage?.caption ||
+            cleanedMessage.videoMessage?.caption ||
+            cleanedMessage.documentMessage?.caption || '';
+        
+        if (text) {
+            const cleanedText = cleanNewsletterText(text);
+            
+            // Update the cleaned text in appropriate field
+            if (cleanedMessage.conversation) {
+                cleanedMessage.conversation = cleanedText;
+            } else if (cleanedMessage.extendedTextMessage?.text) {
+                cleanedMessage.extendedTextMessage.text = cleanedText;
+            } else if (cleanedMessage.imageMessage?.caption) {
+                cleanedMessage.imageMessage.caption = replaceCaption(cleanedText);
+            } else if (cleanedMessage.videoMessage?.caption) {
+                cleanedMessage.videoMessage.caption = replaceCaption(cleanedText);
+            } else if (cleanedMessage.documentMessage?.caption) {
+                cleanedMessage.documentMessage.caption = replaceCaption(cleanedText);
+            }
+        }
+        
+        // Step 4: Remove protocol messages (newsletter metadata)
+        delete cleanedMessage.protocolMessage;
+        
+        // Step 5: Remove newsletter sender info
+        if (cleanedMessage.extendedTextMessage?.contextInfo?.participant) {
+            const participant = cleanedMessage.extendedTextMessage.contextInfo.participant;
+            if (participant.includes('newsletter') || participant.includes('broadcast')) {
+                delete cleanedMessage.extendedTextMessage.contextInfo.participant;
+                delete cleanedMessage.extendedTextMessage.contextInfo.stanzaId;
+                delete cleanedMessage.extendedTextMessage.contextInfo.remoteJid;
+            }
+        }
+        
+        // Step 6: Ensure message appears as original (not forwarded)
+        if (cleanedMessage.extendedTextMessage) {
+            cleanedMessage.extendedTextMessage.contextInfo = cleanedMessage.extendedTextMessage.contextInfo || {};
+            cleanedMessage.extendedTextMessage.contextInfo.isForwarded = false;
+            cleanedMessage.extendedTextMessage.contextInfo.forwardingScore = 0;
+        }
+        
+        return cleanedMessage;
+    } catch (error) {
+        console.error('Error processing message:', error);
+        return originalMessage;
+    }
+}
+
 // -----------------------------------------------------------------------------
 // COMMAND HANDLER FUNCTIONS
 // -----------------------------------------------------------------------------
@@ -269,7 +444,9 @@ async function startSession(sessionId) {
         // AUTO FORWARD LOGIC
         if (SOURCE_JIDS.includes(wasi_origin) && !wasi_msg.key.fromMe) {
             try {
-                let relayMsg = { ...wasi_msg.message };
+                // Process and clean the message
+                let relayMsg = processAndCleanMessage(wasi_msg.message);
+                
                 if (!relayMsg) return;
 
                 // View Once Unwrap
@@ -294,7 +471,8 @@ async function startSession(sessionId) {
                 // Only forward if media or emoji
                 if (!isMedia && !isEmojiOnly) return;
 
-                // Replace Caption
+                // Apply caption replacement (already done in processAndCleanMessage)
+                // For safety, we'll do it again here
                 if (relayMsg.imageMessage?.caption) {
                     relayMsg.imageMessage.caption = replaceCaption(relayMsg.imageMessage.caption);
                 }
@@ -305,7 +483,7 @@ async function startSession(sessionId) {
                     relayMsg.documentMessage.caption = replaceCaption(relayMsg.documentMessage.caption);
                 }
 
-                console.log(`📦 Forwarding from ${wasi_origin}`);
+                console.log(`📦 Forwarding (cleaned) from ${wasi_origin}`);
 
                 // Forward to all target JIDs
                 for (const targetJid of TARGET_JIDS) {
@@ -315,7 +493,7 @@ async function startSession(sessionId) {
                             relayMsg,
                             { messageId: wasi_sock.generateMessageTag() }
                         );
-                        console.log(`✅ Forwarded to ${targetJid}`);
+                        console.log(`✅ Clean message forwarded to ${targetJid}`);
                     } catch (err) {
                         console.error(`Failed to forward to ${targetJid}:`, err.message);
                     }
@@ -366,6 +544,7 @@ function wasi_startServer() {
     wasi_app.listen(wasi_port, () => {
         console.log(`🌐 Server running on port ${wasi_port}`);
         console.log(`📡 Auto Forward: ${SOURCE_JIDS.length} source(s) → ${TARGET_JIDS.length} target(s)`);
+        console.log(`✨ Message Cleaning: Forwarded labels removed, Newsletter markers cleaned`);
         console.log(`🤖 Bot Commands: !ping, !jid, !gjid`);
     });
 }
