@@ -6,18 +6,3 @@ module.exports = {
 };
 
 
-const SOURCE_JIDS = process.env.SOURCE_JIDS
-    ? process.env.SOURCE_JIDS.split(',')
-    : [];
-
-const TARGET_JIDS = process.env.TARGET_JIDS
-    ? process.env.TARGET_JIDS.split(',')
-    : [];
-
-const OLD_TEXT_REGEX = /™✤͜🤍⃛⃟🇫.*?ʏ☆🇭.*?🏠/gu;
-const NEW_TEXT = '💫 WA Social ~ Network ™  📡';
-
-const replaceCaption = (caption) => {
-    if (!caption) return caption;
-    return caption.replace(OLD_TEXT_REGEX, NEW_TEXT);
-};
