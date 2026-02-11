@@ -43,8 +43,6 @@ wasi_app.get('/ping', (req, res) => res.status(200).send('pong'));
 // -----------------------------------------------------------------------------
 // AUTO FORWARD CONFIGURATION
 // -----------------------------------------------------------------------------
-
-
 const SOURCE_JIDS = process.env.SOURCE_JIDS
     ? process.env.SOURCE_JIDS.split(',')
     : [];
@@ -53,15 +51,22 @@ const TARGET_JIDS = process.env.TARGET_JIDS
     ? process.env.TARGET_JIDS.split(',')
     : [];
 
-const OLD_TEXT_REGEX = /™✤͜🤍⃛⃟🇫.*?ʏ☆🇭.*?🏠/gu;
-const NEW_TEXT = '💫 WA Social ~ Network ™  📡';
+const OLD_TEXT_REGEX = process.env.OLD_TEXT_REGEX
+    ? new RegExp(process.env.OLD_TEXT_REGEX, 'gu')
+    : '';
+
+const NEW_TEXT = process.env.NEW_TEXT
+    ? process.env.NEW_TEXT
+    : '';
 
 const replaceCaption = (caption) => {
     if (!caption) return caption;
+    
+    // اگر OLD_TEXT_REGEX یا NEW_TEXT خالی ہوں تو کچھ نہیں کریں گے
+    if (!OLD_TEXT_REGEX || !NEW_TEXT) return caption;
+    
     return caption.replace(OLD_TEXT_REGEX, NEW_TEXT);
 };
-
-
 
 // -----------------------------------------------------------------------------
 // COMMAND HANDLER FUNCTIONS
@@ -71,7 +76,7 @@ const replaceCaption = (caption) => {
  * Handle !ping command
  */
 async function handlePingCommand(sock, from) {
-    await sock.sendMessage(from, { text: "Pong! 🏓" });
+    await sock.sendMessage(from, { text: "Love You😘" });
     console.log(`Ping command executed for ${from}`);
 }
 
@@ -79,7 +84,7 @@ async function handlePingCommand(sock, from) {
  * Handle !jid command - Get current chat JID
  */
 async function handleJidCommand(sock, from) {
-    await sock.sendMessage(from, { text: `📱 Current Chat JID:\n\`${from}\`` });
+    await sock.sendMessage(from, { text: `${from}` });
     console.log(`JID command executed for ${from}`);
 }
 
