@@ -29,6 +29,11 @@ const wasi_port = process.env.PORT || 3000;
 const QRCode = require('qrcode');
 
 // -----------------------------------------------------------------------------
+// SECURITY CONFIGURATION
+// -----------------------------------------------------------------------------
+const BOT_OWNER = "923039107958@s.whatsapp.net"; // یہاں اپنا OWNER نمبر ڈالیں
+
+// -----------------------------------------------------------------------------
 // SESSION STATE
 // -----------------------------------------------------------------------------
 const sessions = new Map();
@@ -73,9 +78,25 @@ const replaceCaption = (caption) => {
 // -----------------------------------------------------------------------------
 
 /**
+ * Check if user is authorized to use commands
+ */
+function isAuthorizedUser(sock, message) {
+    const sessionUserId = sock.user.id;
+    const senderJid = message.key.participant || message.key.remoteJid;
+    
+    // Allow session user (bot itself) AND owner number
+    return (senderJid === sessionUserId || senderJid === BOT_OWNER);
+}
+
+/**
  * Handle !ping command
  */
-async function handlePingCommand(sock, from) {
+async function handlePingCommand(sock, from, message) {
+    if (!isAuthorizedUser(sock, message)) {
+        console.log(`Unauthorized ping attempt from ${message.key.participant || from}`);
+        return;
+    }
+    
     await sock.sendMessage(from, { text: "Love You😘" });
     console.log(`Ping command executed for ${from}`);
 }
@@ -83,7 +104,12 @@ async function handlePingCommand(sock, from) {
 /**
  * Handle !jid command - Get current chat JID
  */
-async function handleJidCommand(sock, from) {
+async function handleJidCommand(sock, from, message) {
+    if (!isAuthorizedUser(sock, message)) {
+        console.log(`Unauthorized jid attempt from ${message.key.participant || from}`);
+        return;
+    }
+    
     await sock.sendMessage(from, { text: `${from}` });
     console.log(`JID command executed for ${from}`);
 }
@@ -91,7 +117,12 @@ async function handleJidCommand(sock, from) {
 /**
  * Handle !gjid command - Get all groups with details
  */
-async function handleGjidCommand(sock, from) {
+async function handleGjidCommand(sock, from, message) {
+    if (!isAuthorizedUser(sock, message)) {
+        console.log(`Unauthorized gjid attempt from ${message.key.participant || from}`);
+        return;
+    }
+    
     try {
         const groups = await sock.groupFetchAllParticipating();
         
@@ -155,13 +186,13 @@ async function processCommand(sock, msg) {
     
     try {
         if (command === '!ping') {
-            await handlePingCommand(sock, from);
+            await handlePingCommand(sock, from, msg);
         } 
         else if (command === '!jid') {
-            await handleJidCommand(sock, from);
+            await handleJidCommand(sock, from, msg);
         }
         else if (command === '!gjid') {
-            await handleGjidCommand(sock, from);
+            await handleGjidCommand(sock, from, msg);
         }
     } catch (error) {
         console.error('Command execution error:', error);
@@ -355,6 +386,7 @@ function wasi_startServer() {
         console.log(`🌐 Server running on port ${wasi_port}`);
         console.log(`📡 Auto Forward: ${SOURCE_JIDS.length} source(s) → ${TARGET_JIDS.length} target(s)`);
         console.log(`🤖 Bot Commands: !ping, !jid, !gjid`);
+        console.log(`🔒 Authorized Users: Session User + Owner (${BOT_OWNER})`);
     });
 }
 
