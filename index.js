@@ -43,27 +43,43 @@ wasi_app.get('/ping', (req, res) => res.status(200).send('pong'));
 // -----------------------------------------------------------------------------
 // AUTO FORWARD CONFIGURATION
 // -----------------------------------------------------------------------------
-const SOURCE_JIDS = process.env.SOURCE_JIDS ? process.env.SOURCE_JIDS.split(',') : [];
-const TARGET_JIDS = process.env.TARGET_JIDS ? process.env.TARGET_JIDS.split(',') : [];
+const SOURCE_JIDS = process.env.SOURCE_JIDS
+    ? process.env.SOURCE_JIDS.split(',')
+    : [];
 
-const OLD_TEXTS = process.env.OLD_TEXTS ? process.env.OLD_TEXTS.split(',') : [];
-const NEW_TEXT = process.env.NEW_TEXT || '';
+const TARGET_JIDS = process.env.TARGET_JIDS
+    ? process.env.TARGET_JIDS.split(',')
+    : [];
+
+const OLD_TEXT_REGEX = process.env.OLD_TEXT_REGEX
+    ? process.env.OLD_TEXT_REGEX.split(',').map(pattern => {
+        try {
+            return pattern.trim() ? new RegExp(pattern.trim(), 'gu') : null;
+        } catch (e) {
+            console.error(`Invalid regex pattern: ${pattern}`, e);
+            return null;
+        }
+      }).filter(regex => regex !== null)
+    : [];
+
+const NEW_TEXT = process.env.NEW_TEXT
+    ? process.env.NEW_TEXT
+    : '';
 
 const replaceCaption = (caption) => {
-    if (!caption || !NEW_TEXT || OLD_TEXTS.length === 0) return caption;
+    if (!caption) return caption;
+    
+    // اگر OLD_TEXT_REGEX یا NEW_TEXT خالی ہوں تو کچھ نہیں کریں گے
+    if (!OLD_TEXT_REGEX.length || !NEW_TEXT) return caption;
     
     let result = caption;
     
-    OLD_TEXTS.forEach(oldText => {
-        if (oldText.trim()) {
-            const regex = new RegExp(oldText.trim(), 'gu');
-            result = result.replace(regex, NEW_TEXT);
-        }
+    OLD_TEXT_REGEX.forEach(regex => {
+        result = result.replace(regex, NEW_TEXT);
     });
     
     return result;
 };
-
 // -----------------------------------------------------------------------------
 // COMMAND HANDLER FUNCTIONS
 // -----------------------------------------------------------------------------
