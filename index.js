@@ -39,7 +39,6 @@ wasi_app.use(express.static(path.join(__dirname, 'public')));
 
 // Keep-Alive Route
 wasi_app.get('/ping', (req, res) => res.status(200).send('pong'));
-
 // -----------------------------------------------------------------------------
 // AUTO FORWARD CONFIGURATION
 // -----------------------------------------------------------------------------
@@ -51,9 +50,17 @@ const TARGET_JIDS = process.env.TARGET_JIDS
     ? process.env.TARGET_JIDS.split(',')
     : [];
 
-const OLD_TEXT_REGEX = process.env.OLD_TEXT_REGEX
-    ? new RegExp(process.env.OLD_TEXT_REGEX, 'gu')
-    : '';
+// متعدد OLD_TEXT_REGEX ویلیوز کو سپورٹ کرنے کے لیے
+const OLD_TEXT_REGEXES = process.env.OLD_TEXT_REGEXES
+    ? process.env.OLD_TEXT_REGEXES.split(',').map(pattern => {
+        try {
+            return pattern.trim() ? new RegExp(pattern.trim(), 'gu') : null;
+        } catch (e) {
+            console.error(`Invalid regex pattern: ${pattern}`, e);
+            return null;
+        }
+      }).filter(regex => regex !== null)
+    : [];
 
 const NEW_TEXT = process.env.NEW_TEXT
     ? process.env.NEW_TEXT
@@ -62,10 +69,17 @@ const NEW_TEXT = process.env.NEW_TEXT
 const replaceCaption = (caption) => {
     if (!caption) return caption;
     
-    // اگر OLD_TEXT_REGEX یا NEW_TEXT خالی ہوں تو کچھ نہیں کریں گے
-    if (!OLD_TEXT_REGEX || !NEW_TEXT) return caption;
+    // اگر OLD_TEXT_REGEXES یا NEW_TEXT خالی ہوں تو کچھ نہیں کریں گے
+    if (!OLD_TEXT_REGEXES.length || !NEW_TEXT) return caption;
     
-    return caption.replace(OLD_TEXT_REGEX, NEW_TEXT);
+    let result = caption;
+    
+    // ہر ریجیکس پیٹرن کو نیو ٹیکسٹ سے ریپلیس کریں
+    OLD_TEXT_REGEXES.forEach(regex => {
+        result = result.replace(regex, NEW_TEXT);
+    });
+    
+    return result;
 };
 
 // -----------------------------------------------------------------------------
@@ -169,162 +183,6 @@ async function processCommand(sock, msg) {
 }
 
 // -----------------------------------------------------------------------------
-// MESSAGE PROCESSING FUNCTIONS
-// -----------------------------------------------------------------------------
-
-/**
- * Extract original message without forward/newsletter tags
- */
-function extractOriginalMessage(msg) {
-    let messageToSend = {};
-    const message = msg.message;
-    
-    // Remove any contextInfo (which contains forwarding info)
-    const cleanMessage = { ...message };
-    
-    // Check and remove contextInfo from extendedTextMessage
-    if (cleanMessage.extendedTextMessage?.contextInfo) {
-        delete cleanMessage.extendedTextMessage.contextInfo;
-    }
-    
-    // Check and remove contextInfo from imageMessage
-    if (cleanMessage.imageMessage?.contextInfo) {
-        delete cleanMessage.imageMessage.contextInfo;
-    }
-    
-    // Check and remove contextInfo from videoMessage
-    if (cleanMessage.videoMessage?.contextInfo) {
-        delete cleanMessage.videoMessage.contextInfo;
-    }
-    
-    // Check and remove contextInfo from documentMessage
-    if (cleanMessage.documentMessage?.contextInfo) {
-        delete cleanMessage.documentMessage.contextInfo;
-    }
-    
-    // Check and remove contextInfo from audioMessage
-    if (cleanMessage.audioMessage?.contextInfo) {
-        delete cleanMessage.audioMessage.contextInfo;
-    }
-    
-    // Check and remove contextInfo from stickerMessage
-    if (cleanMessage.stickerMessage?.contextInfo) {
-        delete cleanMessage.stickerMessage.contextInfo;
-    }
-    
-    // Handle different message types
-    if (cleanMessage.conversation) {
-        messageToSend = { text: cleanMessage.conversation };
-    }
-    else if (cleanMessage.extendedTextMessage?.text) {
-        messageToSend = { 
-            text: cleanMessage.extendedTextMessage.text,
-            mentions: cleanMessage.extendedTextMessage.mentionedJid || []
-        };
-    }
-    else if (cleanMessage.imageMessage) {
-        messageToSend = {
-            image: cleanMessage.imageMessage,
-            caption: replaceCaption(cleanMessage.imageMessage.caption)
-        };
-    }
-    else if (cleanMessage.videoMessage) {
-        messageToSend = {
-            video: cleanMessage.videoMessage,
-            caption: replaceCaption(cleanMessage.videoMessage.caption)
-        };
-    }
-    else if (cleanMessage.audioMessage) {
-        messageToSend = {
-            audio: cleanMessage.audioMessage
-        };
-    }
-    else if (cleanMessage.documentMessage) {
-        messageToSend = {
-            document: cleanMessage.documentMessage,
-            caption: replaceCaption(cleanMessage.documentMessage.caption),
-            mimetype: cleanMessage.documentMessage.mimetype,
-            fileName: cleanMessage.documentMessage.fileName
-        };
-    }
-    else if (cleanMessage.stickerMessage) {
-        messageToSend = {
-            sticker: cleanMessage.stickerMessage
-        };
-    }
-    // Handle view once messages
-    else if (cleanMessage.viewOnceMessageV2?.message) {
-        const viewOnceMsg = cleanMessage.viewOnceMessageV2.message;
-        return extractOriginalMessage({ message: viewOnceMsg });
-    }
-    else if (cleanMessage.viewOnceMessage?.message) {
-        const viewOnceMsg = cleanMessage.viewOnceMessage.message;
-        return extractOriginalMessage({ message: viewOnceMsg });
-    }
-    
-    return messageToSend;
-}
-
-/**
- * Send message as new (not forwarded)
- */
-async function sendAsNewMessage(sock, targetJid, messageObj) {
-    try {
-        // Check if messageObj is valid
-        if (!messageObj || Object.keys(messageObj).length === 0) {
-            console.log('Empty message object, skipping');
-            return;
-        }
-        
-        // Send based on message type
-        if (messageObj.text) {
-            await sock.sendMessage(targetJid, { 
-                text: messageObj.text,
-                mentions: messageObj.mentions || []
-            });
-        }
-        else if (messageObj.image) {
-            await sock.sendMessage(targetJid, {
-                image: messageObj.image,
-                caption: messageObj.caption || '',
-                mimetype: messageObj.image.mimetype || 'image/jpeg'
-            });
-        }
-        else if (messageObj.video) {
-            await sock.sendMessage(targetJid, {
-                video: messageObj.video,
-                caption: messageObj.caption || '',
-                mimetype: messageObj.video.mimetype || 'video/mp4'
-            });
-        }
-        else if (messageObj.audio) {
-            await sock.sendMessage(targetJid, {
-                audio: messageObj.audio,
-                mimetype: messageObj.audio.mimetype || 'audio/mpeg',
-                ptt: messageObj.audio.ptt || false
-            });
-        }
-        else if (messageObj.document) {
-            await sock.sendMessage(targetJid, {
-                document: messageObj.document,
-                caption: messageObj.caption || '',
-                mimetype: messageObj.mimetype || 'application/octet-stream',
-                fileName: messageObj.fileName || 'document'
-            });
-        }
-        else if (messageObj.sticker) {
-            await sock.sendMessage(targetJid, {
-                sticker: messageObj.sticker
-            });
-        }
-        
-        console.log(`✅ Sent as new message to ${targetJid}`);
-    } catch (err) {
-        console.error(`Failed to send new message to ${targetJid}:`, err.message);
-    }
-}
-
-// -----------------------------------------------------------------------------
 // SESSION MANAGEMENT
 // -----------------------------------------------------------------------------
 async function startSession(sessionId) {
@@ -413,15 +271,16 @@ async function startSession(sessionId) {
         // AUTO FORWARD LOGIC
         if (SOURCE_JIDS.includes(wasi_origin) && !wasi_msg.key.fromMe) {
             try {
-                // Check for Media or Emoji Only (as per your existing logic)
                 let relayMsg = { ...wasi_msg.message };
-                
+                if (!relayMsg) return;
+
                 // View Once Unwrap
                 if (relayMsg.viewOnceMessageV2)
                     relayMsg = relayMsg.viewOnceMessageV2.message;
                 if (relayMsg.viewOnceMessage)
                     relayMsg = relayMsg.viewOnceMessage.message;
 
+                // Check for Media or Emoji Only
                 const isMedia = relayMsg.imageMessage ||
                     relayMsg.videoMessage ||
                     relayMsg.audioMessage ||
@@ -434,21 +293,33 @@ async function startSession(sessionId) {
                     isEmojiOnly = emojiRegex.test(relayMsg.conversation);
                 }
 
-                // Only forward if media or emoji (your existing condition)
+                // Only forward if media or emoji
                 if (!isMedia && !isEmojiOnly) return;
 
-                console.log(`📦 Processing message from ${wasi_origin}`);
+                // Replace Caption
+                if (relayMsg.imageMessage?.caption) {
+                    relayMsg.imageMessage.caption = replaceCaption(relayMsg.imageMessage.caption);
+                }
+                if (relayMsg.videoMessage?.caption) {
+                    relayMsg.videoMessage.caption = replaceCaption(relayMsg.videoMessage.caption);
+                }
+                if (relayMsg.documentMessage?.caption) {
+                    relayMsg.documentMessage.caption = replaceCaption(relayMsg.documentMessage.caption);
+                }
 
-                // Extract original message (removes forward tags, newsletter info, etc.)
-                const originalMessage = extractOriginalMessage(wasi_msg);
-                
-                // Send as new message to all target JIDs
+                console.log(`📦 Forwarding from ${wasi_origin}`);
+
+                // Forward to all target JIDs
                 for (const targetJid of TARGET_JIDS) {
                     try {
-                        await sendAsNewMessage(wasi_sock, targetJid, originalMessage);
-                        console.log(`✅ Message sent to ${targetJid} (without forward tags)`);
+                        await wasi_sock.relayMessage(
+                            targetJid,
+                            relayMsg,
+                            { messageId: wasi_sock.generateMessageTag() }
+                        );
+                        console.log(`✅ Forwarded to ${targetJid}`);
                     } catch (err) {
-                        console.error(`Failed to send to ${targetJid}:`, err.message);
+                        console.error(`Failed to forward to ${targetJid}:`, err.message);
                     }
                 }
 
@@ -498,7 +369,6 @@ function wasi_startServer() {
         console.log(`🌐 Server running on port ${wasi_port}`);
         console.log(`📡 Auto Forward: ${SOURCE_JIDS.length} source(s) → ${TARGET_JIDS.length} target(s)`);
         console.log(`🤖 Bot Commands: !ping, !jid, !gjid`);
-        console.log(`🔄 Forward tags will be removed from all forwarded messages`);
     });
 }
 
@@ -522,5 +392,3 @@ async function main() {
     wasi_startServer();
 }
 
-// Start the application
-main().catch(console.error);
