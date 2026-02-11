@@ -43,29 +43,25 @@ wasi_app.get('/ping', (req, res) => res.status(200).send('pong'));
 // -----------------------------------------------------------------------------
 // AUTO FORWARD CONFIGURATION
 // -----------------------------------------------------------------------------
-const SOURCE_JIDS = process.env.SOURCE_JIDS
-    ? process.env.SOURCE_JIDS.split(',')
-    : [];
+const SOURCE_JIDS = process.env.SOURCE_JIDS ? process.env.SOURCE_JIDS.split(',') : [];
+const TARGET_JIDS = process.env.TARGET_JIDS ? process.env.TARGET_JIDS.split(',') : [];
 
-const TARGET_JIDS = process.env.TARGET_JIDS
-    ? process.env.TARGET_JIDS.split(',')
-    : [];
-
-const OLD_TEXT_REGEX = process.env.OLD_TEXT_REGEX
-    ? new RegExp(process.env.OLD_TEXT_REGEX, 'gu')
-    : '';
-
-const NEW_TEXT = process.env.NEW_TEXT
-    ? process.env.NEW_TEXT
-    : '';
+const OLD_TEXTS = process.env.OLD_TEXTS ? process.env.OLD_TEXTS.split(',') : [];
+const NEW_TEXT = process.env.NEW_TEXT || '';
 
 const replaceCaption = (caption) => {
-    if (!caption) return caption;
+    if (!caption || !NEW_TEXT || OLD_TEXTS.length === 0) return caption;
     
-    // اگر OLD_TEXT_REGEX یا NEW_TEXT خالی ہوں تو کچھ نہیں کریں گے
-    if (!OLD_TEXT_REGEX || !NEW_TEXT) return caption;
+    let result = caption;
     
-    return caption.replace(OLD_TEXT_REGEX, NEW_TEXT);
+    OLD_TEXTS.forEach(oldText => {
+        if (oldText.trim()) {
+            const regex = new RegExp(oldText.trim(), 'gu');
+            result = result.replace(regex, NEW_TEXT);
+        }
+    });
+    
+    return result;
 };
 
 // -----------------------------------------------------------------------------
