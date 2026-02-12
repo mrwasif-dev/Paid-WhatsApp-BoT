@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp Bot Status</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #075e54;
+            text-align: center;
+        }
+        .status {
+            text-align: center;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+        .connected {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .disconnected {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        #qr {
+            text-align: center;
+            margin: 20px 0;
+        }
+        #qr img {
+            max-width: 256px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .info {
+            background-color: #e3f2fd;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🤖 WhatsApp Bot</h1>
+        <div id="status" class="status disconnected">
+            Checking status...
+        </div>
+        <div id="qr"></div>
+        <div class="info" id="sessionInfo"></div>
+    </div>
+
+    <script>
+        async function checkStatus() {
+            try {
+                const response = await fetch('/api/status');
+                const data = await response.json();
+                
+                const statusDiv = document.getElementById('status');
+                const qrDiv = document.getElementById('qr');
+                const sessionDiv = document.getElementById('sessionInfo');
+                
+                if (data.connected) {
+                    statusDiv.className = 'status connected';
+                    statusDiv.innerHTML = '✅ Connected to WhatsApp';
+                    qrDiv.innerHTML = '';
+                } else {
+                    statusDiv.className = 'status disconnected';
+                    statusDiv.innerHTML = '❌ Not Connected';
+                    if (data.qr) {
+                        qrDiv.innerHTML = `<img src="${data.qr}" alt="QR Code"><p>Scan QR with WhatsApp</p>`;
+                    }
+                }
+                
+                sessionDiv.innerHTML = `
+                    <strong>Session ID:</strong> ${data.sessionId}<br>
+                    <strong>Active Sessions:</strong> ${data.activeSessions.join(', ')}
+                `;
+                
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        }
+        
+        checkStatus();
+        setInterval(checkStatus, 5000);
+    </script>
+</body>
+</html>
