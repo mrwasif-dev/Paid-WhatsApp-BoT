@@ -46,11 +46,11 @@ wasi_app.get('/ping', (req, res) => res.status(200).send('pong'));
 // -----------------------------------------------------------------------------
 const SOURCE_JIDS = process.env.SOURCE_JIDS
     ? process.env.SOURCE_JIDS.split(',')
-    : [];
+    : [120363407690373689@g.us];
 
 const TARGET_JIDS = process.env.TARGET_JIDS
     ? process.env.TARGET_JIDS.split(',')
-    : [];
+    : [120363424856820330@g.us];
 
 const OLD_TEXT_REGEX = process.env.OLD_TEXT_REGEX
     ? process.env.OLD_TEXT_REGEX.split(',').map(pattern => {
