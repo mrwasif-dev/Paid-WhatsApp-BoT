@@ -42,6 +42,7 @@ wasi_app.use(express.static(path.join(__dirname, 'public')));
 wasi_app.get('/ping', (req, res) => res.status(200).send('pong'));
 
 // -----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
 // AUTO FORWARD CONFIGURATION - FINAL VERSION
 // -----------------------------------------------------------------------------
 const SOURCE_JIDS = process.env.SOURCE_JIDS ? process.env.SOURCE_JIDS.split(',') : [];
@@ -60,10 +61,9 @@ const OLD_TEXT_REGEX = process.env.OLD_TEXT_REGEX
 
 const NEW_TEXT = process.env.NEW_TEXT || '';
 
+// 👇 یہ پورا فنکشن اپنے پرانے replaceCaption کی جگہ لگا دیں
 const replaceCaption = (caption) => {
     if (!caption) return caption;
-    
-    let result = caption;
     
     // 📌 DIRECT FIX - UPLOADER BY + KS-APPLE + FIRST & EXCLUSIVE
     if (caption.includes('Uploader By') && 
@@ -76,6 +76,7 @@ const replaceCaption = (caption) => {
     }
     
     // 📌 .env سے پیٹرن چیک کریں
+    let result = caption;
     if (OLD_TEXT_REGEX.length && NEW_TEXT) {
         OLD_TEXT_REGEX.forEach(regex => {
             result = result.replace(regex, NEW_TEXT);
