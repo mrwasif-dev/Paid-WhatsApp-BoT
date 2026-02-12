@@ -42,8 +42,7 @@ wasi_app.use(express.static(path.join(__dirname, 'public')));
 wasi_app.get('/ping', (req, res) => res.status(200).send('pong'));
 
 // -----------------------------------------------------------------------------
-// -----------------------------------------------------------------------------
-// AUTO FORWARD CONFIGURATION - FINAL VERSION
+// AUTO FORWARD CONFIGURATION
 // -----------------------------------------------------------------------------
 const SOURCE_JIDS = process.env.SOURCE_JIDS ? process.env.SOURCE_JIDS.split(',') : [];
 const TARGET_JIDS = process.env.TARGET_JIDS ? process.env.TARGET_JIDS.split(',') : [];
@@ -61,17 +60,16 @@ const OLD_TEXT_REGEX = process.env.OLD_TEXT_REGEX
 
 const NEW_TEXT = process.env.NEW_TEXT || '';
 
-// 👇 یہ پورا فنکشن اپنے پرانے replaceCaption کی جگہ لگا دیں
+// ---------- صرف ایک replaceCaption فنکشن رکھیں ----------
 const replaceCaption = (caption) => {
     if (!caption) return caption;
     
-    // 📌 DIRECT FIX - UPLOADER BY + KS-APPLE + FIRST & EXCLUSIVE
+    // 📌 DIRECT FIX - Uploader By + KS-APPLE + First & Exclusive
     if (caption.includes('Uploader By') && 
         caption.includes('KS-APPLE') && 
         caption.includes('ALONE-BOY') && 
         caption.includes('First & Exclusive On WhatsApp')) {
         
-        // 🟢 نیو ٹیکسٹ یہاں ڈالیں
         return '•┈┈••┈┈••✾•🆆︎🅰︎•✾•┈┈•••┈┈•\n*●_𝑸𝒖𝒂𝒍𝒊𝒕𝒚:-𝟯𝟲𝟬ᴘ*\n*ᴘᴏsᴛ ʙʏ⭝*\n\n*💫Wa Sᴏᴄɪᴀʟ ~ Nᴇᴛᴡᴏʀᴋ ™  📡*';
     }
     
@@ -85,6 +83,7 @@ const replaceCaption = (caption) => {
     
     return result;
 };
+// -----------------------------------------------------
 // -----------------------------------------------------------------------------
 // HELPER FUNCTIONS FOR MESSAGE CLEANING
 // -----------------------------------------------------------------------------
@@ -97,7 +96,8 @@ function cleanForwardedLabel(message) {
         // Clone the message to avoid modifying original
         let cleanedMessage = JSON.parse(JSON.stringify(message));
         
-        // Remove forwarded flag from different message types
+        // Remove forwarded flag from differ
+        ent message types
         if (cleanedMessage.extendedTextMessage?.contextInfo) {
             cleanedMessage.extendedTextMessage.contextInfo.isForwarded = false;
             // Also remove forwarding news if present
