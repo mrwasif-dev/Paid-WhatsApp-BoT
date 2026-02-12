@@ -1,171 +1,51 @@
 {
-  "name": "wasi-md-v7",
-  "description": "WASI-MD WhatsApp Bot - A powerful modular WhatsApp bot",
-  "repository": "https://github.com/Itxxwasi/WASI-MD-V7",
-  "logo": "https://files.catbox.moe/ifruw6.jpg",
-  "keywords": [
-    "whatsapp",
-    "bot",
-    "baileys",
-    "nodejs"
-  ],
-
+  "name": "Auto Forward WhatsApp BoT",
+  "description": "Auto Forward Is Powerful WhatsApp Multi-Device Bot For Media Forward",
+  "keywords": ["whatsapp-bot", "multi-device", "baileys", "wasi-md", "web-dashboard"],
+  "repository": "https://github.com/mrwasif-dev/Paid-WhatsApp-BoT",
+  "logo": "https://avatars.githubusercontent.com/u/106463162?v=4",
   "env": {
-    "PORT": {
-      "description": "Server port",
-      "value": "3000"
+    "MONGODB_URI": {
+      "description": "MongoDB connection string for database",
+      "value": "",
+      "required": false
+    },
+    "NEW_TEXT": {
+      "description": "New text to replace with",
+      "value": "",
+      "required": false
+    },
+    "OLD_TEXT_REGEX": {
+      "description": "Regex patterns to replace (comma separated)",
+      "value": "",
+      "required": false
     },
     "SESSION_ID": {
-      "description": "Unique session identifier for this bot instance",
-      "value": "wasi_session"
-    },
-    "BOT_NAME": {
-      "description": "Bot display name",
-      "value": "WASI BOT"
-    },
-    "OWNER_NAME": {
-      "description": "Owner display name",
-      "value": "MR WASI DEV"
-    },
-    "OWNER_NUMBER": {
-      "description": "Owner WhatsApp number (without + or spaces)",
-      "required": true
-    },
-    "PREFIX": {
-      "description": "Command prefix (e.g. . or /)",
-      "value": "."
-    },
-    "MODE": {
-      "description": "Bot mode (public/private)",
-      "value": "public"
-    },
-    "MONGODB_URI": {
-      "description": "MongoDB connection string",
-      "required": true
-    },
-    "SUDO": {
-      "description": "Comma-separated list of sudo user numbers",
+      "description": "Session ID for bot authentication",
+      "value": "",
       "required": false
     },
-    "BOT_MENU_IMAGE_URL": {
-      "description": "Menu image URL",
+    "SOURCE_JIDS": {
+      "description": "Source JIDs to monitor (comma separated)",
+      "value": "",
       "required": false
     },
-    "TIME_ZONE": {
-      "description": "Time zone (e.g., Asia/Karachi)",
-      "value": "Asia/Karachi"
-    },
-    "FONT_STYLE": {
-      "description": "Font style for messages",
-      "value": "original"
-    },
-    "MENU_IMAGE_ASSET": {
-      "description": "Use local assets folder (true/false)",
-      "value": "true"
-    },
-    "MENU_IMAGE_URL": {
-      "description": "Use URL for menu image (true/false)",
-      "value": "false"
-    },
-    "MENU_STYLE": {
-      "description": "Menu style",
-      "value": "classic"
-    },
-    "AUTO_READ": {
-      "description": "Auto read messages",
-      "value": "false"
-    },
-    "AUTO_STATUS_SEEN": {
-      "description": "Auto view status",
-      "value": "true"
-    },
-    "AUTO_STATUS_REACT": {
-      "description": "Auto react to status",
-      "value": "true"
-    },
-    "AUTO_STATUS_SAVE": {
-      "description": "Auto save status",
-      "value": "false"
-    },
-    "AUTO_STATUS_MSG": {
-      "description": "Auto reply to status",
-      "value": "false"
-    },
-    "AUTO_TYPING": {
-      "description": "Typing indicator",
-      "value": "false"
-    },
-    "AUTO_RECORDING": {
-      "description": "Recording indicator",
-      "value": "false"
-    },
-    "ALWAYS_ONLINE": {
-      "description": "Always online status",
-      "value": "true"
-    },
-    "AUTO_WELCOME": {
-      "description": "Auto welcome new members",
-      "value": "false"
-    },
-    "AUTO_GOODBYE": {
-      "description": "Auto goodbye members",
-      "value": "false"
-    },
-    "WELCOME_MSG": {
-      "description": "Custom welcome message",
-      "required": false
-    },
-    "GOODBYE_MSG": {
-      "description": "Custom goodbye message",
-      "required": false
-    },
-    "NEWSLETTER_JID": {
-      "description": "Newsletter JID",
-      "value": "120363419652241844@newsletter"
-    },
-    "NEWSLETTER_NAME": {
-      "description": "Newsletter name",
-      "value": "WASI-MD-V7"
-    },
-    "YT_COOKIES": {
-      "description": "YouTube cookies (optional)",
-      "required": false
-    },
-    "YT_USER_AGENT": {
-      "description": "YouTube User-Agent",
-      "required": false
-    },
-    "APIFY_TOKEN": {
-      "description": "Apify token",
-      "required": false
-    },
-    "CLOUDINARY_CLOUD_NAME": {
-      "description": "Cloudinary cloud name",
-      "required": false
-    },
-    "CLOUDINARY_API_KEY": {
-      "description": "Cloudinary API key",
-      "required": false
-    },
-    "CLOUDINARY_API_SECRET": {
-      "description": "Cloudinary API secret",
+    "TARGET_JIDS": {
+      "description": "Target JIDs to send messages (comma separated)",
+      "value": "",
       "required": false
     }
   },
-
+  "formation": {
+    "web": {
+      "quantity": 1,
+      "size": "basic"
+    }
+  },
   "buildpacks": [
-    {
-      "url": "heroku/python"
-    },
     {
       "url": "heroku/nodejs"
     }
   ],
-
-  "formation": {
-    "web": {
-      "quantity": 1,
-      "size": "eco"
-    }
-  }
+  "stack": "container"
 }
