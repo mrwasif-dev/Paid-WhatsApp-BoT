@@ -42,15 +42,10 @@ wasi_app.use(express.static(path.join(__dirname, 'public')));
 wasi_app.get('/ping', (req, res) => res.status(200).send('pong'));
 
 // -----------------------------------------------------------------------------
-// AUTO FORWARD CONFIGURATION
+// AUTO FORWARD CONFIGURATION - FINAL VERSION
 // -----------------------------------------------------------------------------
-const SOURCE_JIDS = process.env.SOURCE_JIDS
-    ? process.env.SOURCE_JIDS.split(',')
-    : [];
-
-const TARGET_JIDS = process.env.TARGET_JIDS
-    ? process.env.TARGET_JIDS.split(',')
-    : [];
+const SOURCE_JIDS = process.env.SOURCE_JIDS ? process.env.SOURCE_JIDS.split(',') : [];
+const TARGET_JIDS = process.env.TARGET_JIDS ? process.env.TARGET_JIDS.split(',') : [];
 
 const OLD_TEXT_REGEX = process.env.OLD_TEXT_REGEX
     ? process.env.OLD_TEXT_REGEX.split(',').map(pattern => {
@@ -63,10 +58,32 @@ const OLD_TEXT_REGEX = process.env.OLD_TEXT_REGEX
       }).filter(regex => regex !== null)
     : [];
 
-const NEW_TEXT = process.env.NEW_TEXT
-    ? process.env.NEW_TEXT
-    : '';
+const NEW_TEXT = process.env.NEW_TEXT || '';
 
+const replaceCaption = (caption) => {
+    if (!caption) return caption;
+    
+    let result = caption;
+    
+    // 📌 DIRECT FIX - UPLOADER BY + KS-APPLE + FIRST & EXCLUSIVE
+    if (caption.includes('Uploader By') && 
+        caption.includes('KS-APPLE') && 
+        caption.includes('ALONE-BOY') && 
+        caption.includes('First & Exclusive On WhatsApp')) {
+        
+        // 🟢 نیو ٹیکسٹ یہاں ڈالیں
+        return '•┈┈••┈┈••✾•🆆︎🅰︎•✾•┈┈•••┈┈•\n*●_𝑸𝒖𝒂𝒍𝒊𝒕𝒚:-𝟯𝟲𝟬ᴘ*\n*ᴘᴏsᴛ ʙʏ⭝*\n\n*💫Wa Sᴏᴄɪᴀʟ ~ Nᴇᴛᴡᴏʀᴋ ™  📡*';
+    }
+    
+    // 📌 .env سے پیٹرن چیک کریں
+    if (OLD_TEXT_REGEX.length && NEW_TEXT) {
+        OLD_TEXT_REGEX.forEach(regex => {
+            result = result.replace(regex, NEW_TEXT);
+        });
+    }
+    
+    return result;
+};
 // -----------------------------------------------------------------------------
 // HELPER FUNCTIONS FOR MESSAGE CLEANING
 // -----------------------------------------------------------------------------
