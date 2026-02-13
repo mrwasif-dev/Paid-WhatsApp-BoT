@@ -1,447 +1,429 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HTML For My BoT</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes, viewport-fit=cover">
+    <title>Muzamil-MD • WhatsApp Bot</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --whatsapp: #25d366;
+            --whatsapp-dark: #128C7E;
+            --whatsapp-gradient: linear-gradient(145deg, #25d366, #128C7E);
+            --channel-gradient: linear-gradient(145deg, #25d366, #128C7E, #075e54);
+            --github: #24292e;
+            --owner-gradient: linear-gradient(145deg, #075e54, #128C7E, #25d366);
+            --bg-dark: #0b1a1e;
+            --bg-card: rgba(18, 34, 39, 0.95);
+            --text-primary: #e9f1f2;
+            --text-secondary: #8aa3a6;
+            --accent: #a8e6cf;
+            --border: rgba(37, 211, 102, 0.2);
+            --shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        }
         body {
-            font-family: 'Inter', sans-serif;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 12px;
+            position: relative;
+            -webkit-font-smoothing: antialiased;
         }
-
-        .gradient-bg {
-            background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 50%, #16213e 100%);
+        body::before {
+            content: '';
+            position: fixed;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(37, 211, 102, 0.05) 0%, transparent 70%);
+            animation: pulse 20s infinite;
+            pointer-events: none;
         }
-
-        .glass-card {
-            background: rgba(255, 255, 255, 0.05);
+        @keyframes pulse { 
+            0%,100% { transform: translate(-10%,-10%) scale(1); opacity: 0.5; } 
+            50% { transform: translate(0%,0%) scale(1.1); opacity: 0.8; } 
+        }
+        .container { max-width: 500px; width: 100%; position: relative; z-index: 10; }
+        .card {
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--border);
+            border-radius: 32px;
+            padding: 24px 20px;
+            box-shadow: var(--shadow);
+        }
+        .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; gap: 12px; }
+        .logo-area { display: flex; align-items: center; gap: 12px; }
+        .logo-icon {
+            width: 48px; height: 48px;
+            background: var(--whatsapp-gradient);
+            border-radius: 14px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 28px; color: white;
+            box-shadow: 0 8px 16px rgba(37, 211, 102, 0.2);
+        }
+        .logo-text h1 {
+            font-size: 22px; font-weight: 800;
+            background: linear-gradient(to right, #fff, var(--accent));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            margin-bottom: 2px; letter-spacing: -0.5px;
+        }
+        .logo-text span { font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; }
+        .status-container { display: flex; flex-direction: column; gap: 6px; }
+        .status-badge {
+            background: rgba(37, 211, 102, 0.1);
+            border: 1px solid var(--border);
+            border-radius: 100px;
+            padding: 8px 14px;
+            display: flex; align-items: center; gap: 8px;
+            font-size: 12px; font-weight: 600;
+            white-space: nowrap;
+        }
+        .status-dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: #ffaa33;
+            box-shadow: 0 0 8px #ffaa33;
+            animation: blink 1.5s infinite;
+        }
+        .status-dot.connected { background: var(--whatsapp); box-shadow: 0 0 12px var(--whatsapp); animation: none; }
+        .status-dot.disconnected { background: #ff4d4d; box-shadow: 0 0 8px #ff4d4d; animation: none; }
+        @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+        .qr-section {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 24px;
+            padding: 24px 16px;
+            margin-bottom: 24px;
+            text-align: center;
+            border: 1px dashed var(--border);
+        }
+        .qr-title { font-size: 16px; font-weight: 700; margin-bottom: 20px; color: var(--accent); display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .qr-wrapper { 
+            background: white; 
+            padding: 12px; 
+            border-radius: 16px; 
+            display: inline-block; 
+            box-shadow: 0 12px 24px rgba(0,0,0,0.3); 
+            margin-bottom: 16px;
+            animation: float 3s ease-in-out infinite;
+        }
+        .qr-wrapper img { 
+            max-width: 220px; 
+            width: 100%;
+            height: auto; 
+            border-radius: 8px; 
+            display: block; 
+        }
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-5px); }
+        }
+        .scan-hint {
+            background: rgba(37, 211, 102, 0.15);
+            padding: 12px 20px; border-radius: 100px;
+            font-size: 13px; display: inline-flex; align-items: center; gap: 8px;
+            color: var(--accent); border: 1px solid var(--border); font-weight: 500;
+        }
+        .no-qr { 
+            padding: 30px 20px; 
+            color: var(--text-secondary); 
+            font-size: 15px; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            gap: 12px; 
+        }
+        .no-qr i { font-size: 48px; color: var(--whatsapp); opacity: 0.6; }
+        .config-section { background: rgba(0, 0, 0, 0.25); border-radius: 24px; padding: 20px; margin-bottom: 24px; border: 1px solid rgba(255,255,255,0.03); }
+        .config-title { font-size: 16px; font-weight: 700; margin-bottom: 20px; color: var(--accent); display: flex; align-items: center; gap: 8px; }
+        .form-group { margin-bottom: 16px; }
+        .form-group label { display: block; margin-bottom: 6px; color: var(--accent); font-weight: 600; font-size: 13px; }
+        .form-control {
+            width: 100%; padding: 14px; border-radius: 16px;
+            background: rgba(0, 0, 0, 0.4); border: 1px solid var(--border);
+            color: white; font-family: 'Inter', monospace; font-size: 13px;
+            transition: all 0.2s ease; -webkit-appearance: none;
+        }
+        .form-control:focus { outline: none; border-color: var(--whatsapp); background: rgba(0, 0, 0, 0.5); }
+        .btn {
+            padding: 16px 20px; border-radius: 100px;
+            font-size: 15px; font-weight: 700;
+            display: flex; align-items: center; justify-content: center; gap: 10px;
+            text-decoration: none; transition: all 0.2s ease;
+            border: none; cursor: pointer; width: 100%;
+            letter-spacing: 0.3px; box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            color: white; -webkit-tap-highlight-color: transparent;
+        }
+        .btn:active { transform: scale(0.98); }
+        .btn-save { background: var(--whatsapp-gradient); margin-top: 8px; }
+        .social-grid { display: flex; flex-direction: column; gap: 12px; margin-top: 8px; }
+        .social-btn {
+            padding: 16px 20px; border-radius: 100px;
+            font-size: 15px; font-weight: 700;
+            display: flex; align-items: center; justify-content: center; gap: 12px;
+            text-decoration: none; transition: all 0.2s ease;
+            border: none; color: white; box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            -webkit-tap-highlight-color: transparent;
+            background: rgba(255, 255, 255, 0.1);
             backdrop-filter: blur(10px);
             border: 1px solid rgba(255, 255, 255, 0.1);
         }
-
-        .glow {
-            box-shadow: 0 0 40px rgba(34, 197, 94, 0.3);
-        }
-
-        .glow-purple {
-            box-shadow: 0 0 40px rgba(99, 102, 241, 0.3);
-        }
-
-        .float-animation {
-            animation: float 3s ease-in-out infinite;
-        }
-
-        @keyframes float {
-
-            0%,
-            100% {
-                transform: translateY(0);
-            }
-
-            50% {
-                transform: translateY(-10px);
-            }
-        }
-
-        .tab-active {
-            background: linear-gradient(135deg, #22c55e, #16a34a);
-        }
-
-        .pairing-code {
-            font-family: 'Courier New', monospace;
-            letter-spacing: 8px;
-            font-size: 2.5rem;
-        }
-
-        .pulse {
-            animation: pulse 2s ease-in-out infinite;
-        }
-
-        @keyframes pulse {
-
-            0%,
-            100% {
-                opacity: 1;
-            }
-
-            50% {
-                opacity: 0.6;
-            }
-        }
-
-        .btn-primary {
-            background: linear-gradient(135deg, #22c55e, #16a34a);
-            transition: all 0.3s ease;
-        }
-
-        .btn-primary:hover {
-            transform: scale(1.02);
-            box-shadow: 0 0 20px rgba(34, 197, 94, 0.4);
-        }
-
-        .btn-secondary {
-            background: linear-gradient(135deg, #6366f1, #4f46e5);
-            transition: all 0.3s ease;
-        }
-
-        .btn-secondary:hover {
-            transform: scale(1.02);
-            box-shadow: 0 0 20px rgba(99, 102, 241, 0.4);
+        .social-btn:active { transform: scale(0.98); }
+        .social-btn i { font-size: 20px; width: 24px; text-align: center; }
+        .btn-channel { background: linear-gradient(145deg, #075e54, #128C7E, #25d366); background-size: 200% 200%; animation: gradient 3s ease infinite; }
+        .btn-github { background: #1b1f23; }
+        .btn-owner { background: linear-gradient(145deg, #075e54, #0a6e5f, #128C7E); border: 1px solid rgba(37, 211, 102, 0.3); }
+        @keyframes gradient { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+        .footer { text-align: center; margin-top: 24px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.05); color: var(--text-secondary); font-size: 12px; }
+        .footer a { color: var(--whatsapp); text-decoration: none; font-weight: 700; }
+        #configMessage { margin-top: 16px; text-align: center; font-size: 13px; font-weight: 600; }
+        @media (min-width: 768px) { 
+            .container { max-width: 600px; } 
+            .social-grid { flex-direction: row; } 
+            .social-btn { flex: 1; } 
         }
     </style>
 </head>
-
-<body class="gradient-bg min-h-screen text-white">
-    <!-- Background Effects -->
-    <div class="fixed inset-0 overflow-hidden pointer-events-none">
-        <div class="absolute top-20 left-10 w-72 h-72 bg-green-500/10 rounded-full blur-3xl"></div>
-        <div class="absolute bottom-20 right-10 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl"></div>
-    </div>
-
-    <div class="relative z-10 container mx-auto px-4 py-8">
-        <!-- Header -->
-        <header class="text-center mb-8">
-            <h1
-                class="text-4xl md:text-5xl font-bold bg-gradient-to-r from-green-400 via-emerald-400 to-cyan-400 bg-clip-text text-transparent mb-2 float-animation">
-                Paid WhatsApp BoT 
-            </h1>
-            <p class="text-gray-400">Paid WhatsApp Bot Is A Powerful WhatsApp Multi-Device Bot</p>
-        </header>
-
-        <!-- Status Bar -->
-        <div class="max-w-4xl mx-auto mb-6">
-            <div class="glass-card rounded-xl p-4 flex flex-wrap items-center justify-center gap-6">
-                <div class="flex items-center gap-2">
-                    <span class="text-gray-400">Connection:</span>
-                    <span id="conn-status" class="px-3 py-1 rounded-full text-sm bg-yellow-500/20 text-yellow-400">
-                        Waiting...
-                    </span>
+<body>
+    <div class="container">
+        <div class="card">
+            <!-- Header -->
+            <div class="header">
+                <div class="logo-area">
+                    <div class="logo-icon"><i class="fab fa-whatsapp"></i></div>
+                    <div class="logo-text">
+                        <h1>Muzamil-MD</h1>
+                        <span>MULTI-DEVICE</span>
+                    </div>
                 </div>
-                <div class="flex items-center gap-2">
-                    <span class="text-gray-400">Database:</span>
-                    <span id="db-status" class="px-3 py-1 rounded-full text-sm bg-gray-500/20 text-gray-400">
-                        Checking...
-                    </span>
+                <div class="status-container">
+                    <div class="status-badge" id="whatsappStatusBadge">
+                        <div class="status-dot" id="whatsappStatusDot"></div>
+                        <span id="whatsappStatusText">WA</span>
+                    </div>
+                    <div class="status-badge" id="dbStatusBadge">
+                        <div class="status-dot" id="dbStatusDot"></div>
+                        <span id="dbStatusText">DB</span>
+                    </div>
                 </div>
+            </div>
+            
+            <!-- QR Section - Fixed -->
+            <div class="qr-section">
+                <div class="qr-title">
+                    <i class="fas fa-qrcode" style="color: #25d366;"></i>
+                    <span>Scan to Connect</span>
+                </div>
+                <div class="qr-container" id="qrContainer">
+                    <div class="no-qr">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        <span>Waiting for QR code from WhatsApp...</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Config Section -->
+            <div class="config-section">
+                <div class="config-title">
+                    <i class="fas fa-sliders-h" style="color: #25d366;"></i>
+                    <span>Configuration</span>
+                </div>
+                
+                <div class="form-group">
+                    <label><i class="fas fa-arrow-right" style="color: #25d366;"></i> SOURCE JIDs</label>
+                    <textarea id="sourceJids" class="form-control" rows="2" placeholder="1234567890@s.whatsapp.net, 0987654321@g.us"></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label><i class="fas fa-arrow-left" style="color: #25d366;"></i> TARGET JIDs</label>
+                    <textarea id="targetJids" class="form-control" rows="2" placeholder="1111111111@g.us, 2222222222@g.us"></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label><i class="fas fa-search" style="color: #25d366;"></i> OLD TEXT REGEX</label>
+                    <input type="text" id="oldTextRegex" class="form-control" placeholder="oldtext, https?://[^\s]+">
+                </div>
+                
+                <div class="form-group">
+                    <label><i class="fas fa-pencil-alt" style="color: #25d366;"></i> NEW TEXT</label>
+                    <input type="text" id="newText" class="form-control" placeholder="new text">
+                </div>
+                
+                <button onclick="saveConfig()" class="btn btn-save">
+                    <i class="fas fa-save"></i> Save Settings
+                </button>
+                <div id="configMessage"></div>
+            </div>
+            
+            <!-- Social Buttons -->
+            <div class="social-grid">
+                <a href="https://whatsapp.com/channel/0029Vasn4ipCBtxCxfJqgV3S" target="_blank" class="social-btn btn-channel">
+                    <i class="fab fa-whatsapp"></i>
+                    Join Channel
+                </a>
+                <a href="https://github.com/mrwasif-dev/Muzamil-MD" target="_blank" class="social-btn btn-github">
+                    <i class="fab fa-github"></i>
+                    GitHub
+                </a>
+                <a href="https://wa.me/923039107958" target="_blank" class="social-btn btn-owner">
+                    <i class="fab fa-whatsapp"></i>
+                    Owner
+                </a>
+            </div>
+            
+            <!-- Footer -->
+            <div class="footer">
+                <p>
+                    <i class="fas fa-code"></i> with <i class="fas fa-heart" style="color: #ff4d4d;"></i> by 
+                    <a href="https://github.com/mrwasif-dev">mrwasif-dev</a>
+                </p>
+                <p style="margin-top: 8px;">© 2026 Muzamil-MD</p>
             </div>
         </div>
-
-        <!-- Main Content -->
-        <div class="max-w-4xl mx-auto">
-            <!-- Connected View -->
-            <div id="connected-view" class="hidden">
-                <div class="glass-card rounded-3xl p-8 glow text-center">
-                    <div class="text-8xl mb-6">✅</div>
-                    <h2 class="text-3xl font-bold text-green-400 mb-4">Connected Successfully!</h2>
-                    <p class="text-gray-400 mb-6">Your WhatsApp bot is now active and ready to use.</p>
-                    <div class="flex flex-wrap justify-center gap-4 mt-6">
-                        <a href="https://whatsapp.com/channel/0029Vasn4ipCBtxCxfJqgV3S" target="_blank"
-                            class="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-6 rounded-xl transition-all flex items-center gap-2">
-                            📢 Join Channel
-                        </a>
-                        <button onclick="disconnect()"
-                            class="bg-red-500/20 hover:bg-red-500/30 text-red-400 font-semibold py-2 px-6 rounded-xl transition-all">
-                            Disconnect
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Connection Options View -->
-            <div id="setup-view">
-                <!-- Method Selection -->
-                <div id="method-selection" class="glass-card rounded-3xl p-8 text-center">
-                    <div class="text-6xl mb-6">🔗</div>
-                    <h2 class="text-2xl font-semibold mb-2">Connect Your WhatsApp</h2>
-                    <p class="text-gray-400 mb-8">Choose your preferred connection method</p>
-
-                    <div class="grid md:grid-cols-2 gap-6 max-w-2xl mx-auto">
-                        <!-- Pair Code Option -->
-                        <button onclick="selectMethod('pair')"
-                            class="glass-card rounded-2xl p-6 hover:bg-white/10 transition-all group cursor-pointer border-2 border-transparent hover:border-green-500/50">
-                            <div class="text-5xl mb-4 group-hover:scale-110 transition-transform">🔢</div>
-                            <h3 class="text-xl font-semibold text-green-400 mb-2">Pair Code</h3>
-                            <p class="text-gray-400 text-sm">Enter your phone number to get a pairing code</p>
-                        </button>
-
-                        <!-- QR Code Option -->
-                        <button onclick="selectMethod('qr')"
-                            class="glass-card rounded-2xl p-6 hover:bg-white/10 transition-all group cursor-pointer border-2 border-transparent hover:border-purple-500/50">
-                            <div class="text-5xl mb-4 group-hover:scale-110 transition-transform">📱</div>
-                            <h3 class="text-xl font-semibold text-purple-400 mb-2">QR Code</h3>
-                            <p class="text-gray-400 text-sm">Scan QR code with your WhatsApp app</p>
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Pairing Code Panel -->
-                <div id="pair-panel" class="hidden glass-card rounded-3xl p-8 glow">
-                    <div class="text-center">
-                        <button onclick="goBack()"
-                            class="absolute left-8 top-8 text-gray-400 hover:text-white transition-colors">
-                            ← Back
-                        </button>
-                        <div class="text-6xl mb-4">🔢</div>
-                        <h2 class="text-2xl font-semibold mb-2">Connect with Pairing Code</h2>
-                        <p class="text-gray-400 mb-6">Enter your WhatsApp number to get a pairing code</p>
-
-                        <!-- Step 1: Enter Phone -->
-                        <div id="step-phone" class="max-w-md mx-auto">
-                            <div class="mb-4">
-                                <label class="block text-gray-400 text-sm mb-2">WhatsApp Number (with country
-                                    code)</label>
-                                <input type="tel" id="phone-number" placeholder="923001234567"
-                                    class="w-full bg-white/10 border-2 border-green-500/50 rounded-xl px-4 py-4 text-center text-xl focus:outline-none focus:border-green-500 transition-all">
-                                <p class="text-gray-500 text-xs mt-2">Example: 923001234567 (Pakistan), 919876543210
-                                    (India)</p>
-                            </div>
-                            <button onclick="requestPairingCode()" id="pair-btn"
-                                class="w-full btn-primary text-white font-bold py-4 px-6 rounded-xl text-lg">
-                                🔑 Get Pairing Code
-                            </button>
-                        </div>
-
-                        <!-- Step 2: Loading -->
-                        <div id="step-loading" class="hidden max-w-md mx-auto">
-                            <div class="bg-green-500/10 rounded-2xl p-8">
-                                <div
-                                    class="animate-spin rounded-full h-16 w-16 border-4 border-green-500 border-t-transparent mx-auto mb-4">
-                                </div>
-                                <p class="text-green-400 font-semibold">Generating pairing code...</p>
-                                <p class="text-gray-400 text-sm mt-2">This may take a few seconds</p>
-                            </div>
-                        </div>
-
-                        <!-- Step 3: Show Code -->
-                        <div id="step-code" class="hidden max-w-md mx-auto">
-                            <div class="bg-gradient-to-r from-green-500/20 to-emerald-500/20 rounded-2xl p-8 mb-6">
-                                <p class="text-gray-400 text-sm mb-3">Your Pairing Code:</p>
-                                <div id="pairing-code" class="pairing-code text-green-400 font-bold pulse">--------
-                                </div>
-                                <p class="text-gray-500 text-xs mt-3">Code expires in 60 seconds</p>
-                            </div>
-
-                            <div class="bg-white/5 rounded-xl p-4 text-left">
-                                <p class="text-gray-300 font-semibold mb-3">📱 How to link:</p>
-                                <ol class="space-y-2 text-gray-400 text-sm">
-                                    <li>1. Open <span class="text-green-400">WhatsApp</span> on your phone</li>
-                                    <li>2. Go to <span class="text-green-400">Settings → Linked Devices</span></li>
-                                    <li>3. Tap <span class="text-green-400">Link a Device</span></li>
-                                    <li>4. Choose <span class="text-green-400">"Link with phone number"</span></li>
-                                    <li>5. Enter the code shown above</li>
-                                </ol>
-                            </div>
-
-                            <button onclick="resetPairing()"
-                                class="mt-6 text-gray-400 hover:text-white transition-colors">
-                                ← Try again with different number
-                            </button>
-                        </div>
-
-                        <!-- Error -->
-                        <div id="step-error" class="hidden max-w-md mx-auto">
-                            <div class="bg-red-500/20 rounded-2xl p-6 mb-4">
-                                <p class="text-red-400 font-semibold" id="error-message">Error occurred</p>
-                            </div>
-                            <button onclick="resetPairing()"
-                                class="bg-gray-500/20 hover:bg-gray-500/30 text-white py-3 px-6 rounded-xl transition-all">
-                                Try Again
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- QR Code Panel -->
-                <div id="qr-panel" class="hidden glass-card rounded-3xl p-8 glow-purple">
-                    <div class="text-center relative">
-                        <button onclick="goBack()"
-                            class="absolute left-0 top-0 text-gray-400 hover:text-white transition-colors">
-                            ← Back
-                        </button>
-                        <div class="text-6xl mb-4">📱</div>
-                        <h2 class="text-2xl font-semibold mb-2">Scan QR Code</h2>
-                        <p class="text-gray-400 mb-6">Scan with WhatsApp to connect</p>
-
-                        <div id="qr-container"
-                            class="bg-white rounded-2xl p-4 mb-6 inline-block min-w-[280px] min-h-[280px] flex items-center justify-center">
-                            <div id="qr-loading" class="text-center">
-                                <div
-                                    class="animate-spin rounded-full h-12 w-12 border-4 border-indigo-500 border-t-transparent mx-auto mb-3">
-                                </div>
-                                <p class="text-gray-600 text-sm">Generating QR Code...</p>
-                            </div>
-                            <img id="qr-image" src="" alt="QR Code" class="hidden max-w-full rounded-xl" />
-                        </div>
-
-                        <div class="bg-white/5 rounded-xl p-4 text-left max-w-md mx-auto">
-                            <p class="text-gray-300 font-semibold mb-3">📱 How to scan:</p>
-                            <ol class="space-y-2 text-gray-400 text-sm">
-                                <li>1. Open <span class="text-purple-400">WhatsApp</span> on your phone</li>
-                                <li>2. Go to <span class="text-purple-400">Settings → Linked Devices</span></li>
-                                <li>3. Tap <span class="text-purple-400">Link a Device</span></li>
-                                <li>4. Point your camera at this QR code</li>
-                            </ol>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Info Cards -->
-            <div class="grid md:grid-cols-2 gap-6 mt-8">
-                <div class="glass-card rounded-2xl p-6">
-                    <h3 class="text-lg font-semibold mb-3">Configuration</h3>
-                    <p class="text-gray-400 text-sm">
-                        All bot settings are configured via environment variables.<br>
-                    </p>
-                </div>
-                <div class="glass-card rounded-2xl p-6">
-                    <h3 class="text-lg font-semibold mb-3">📢 Join Channel</h3>
-                    <a href="https://whatsapp.com/channel/0029Vasn4ipCBtxCxfJqgV3S" target="_blank"
-                        class="inline-flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-xl transition-all text-sm">
-                        Follow Us for Updates
-                    </a>
-                </div>
-            </div>
-        </div>
-
-        <!-- Footer -->
-        <footer class="text-center mt-8 text-gray-500 text-sm">
-            <p>© ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴛᴇᴀᴍ ᴘᴀɪᴅ ᴡʜᴀᴛsᴀᴘᴘ ʙᴏᴛ | <a href="https://t.me/paid_whatsAp_bot"
-                    class="text-green-400 hover:underline">@Admin</a></p>
-        </footer>
     </div>
-
+    
     <script>
-        let lastQr = '';
-        let selectedMethod = null;
-
-        function selectMethod(method) {
-            selectedMethod = method;
-            document.getElementById('method-selection').classList.add('hidden');
-
-            if (method === 'pair') {
-                document.getElementById('pair-panel').classList.remove('hidden');
-                document.getElementById('qr-panel').classList.add('hidden');
-            } else {
-                document.getElementById('qr-panel').classList.remove('hidden');
-                document.getElementById('pair-panel').classList.add('hidden');
-                // Request QR generation
-                fetch('/api/qr', { method: 'POST' }).catch(() => { });
-            }
-        }
-
-        function goBack() {
-            document.getElementById('method-selection').classList.remove('hidden');
-            document.getElementById('pair-panel').classList.add('hidden');
-            document.getElementById('qr-panel').classList.add('hidden');
-            resetPairing();
-            selectedMethod = null;
-        }
-
-        function resetPairing() {
-            document.getElementById('step-phone').classList.remove('hidden');
-            document.getElementById('step-loading').classList.add('hidden');
-            document.getElementById('step-code').classList.add('hidden');
-            document.getElementById('step-error').classList.add('hidden');
-        }
-
-        async function requestPairingCode() {
-            const phone = document.getElementById('phone-number').value.replace(/[^0-9]/g, '');
-            if (!phone || phone.length < 10) {
-                alert('Please enter a valid phone number with country code');
-                return;
-            }
-
-            document.getElementById('step-phone').classList.add('hidden');
-            document.getElementById('step-loading').classList.remove('hidden');
-            document.getElementById('step-code').classList.add('hidden');
-            document.getElementById('step-error').classList.add('hidden');
-
+        // Load config on page load
+        async function loadConfig() {
             try {
-                const res = await fetch('/api/pair', {
+                const res = await fetch('/api/config');
+                const data = await res.json();
+                document.getElementById('sourceJids').value = data.sourceJids?.join(', ') || '';
+                document.getElementById('targetJids').value = data.targetJids?.join(', ') || '';
+                document.getElementById('oldTextRegex').value = data.oldTextRegex?.join(', ') || '';
+                document.getElementById('newText').value = data.newText || '';
+                console.log('✅ Config loaded');
+            } catch (e) {
+                console.error('Error loading config:', e);
+            }
+        }
+        
+        // Save config
+        async function saveConfig() {
+            const sourceJids = document.getElementById('sourceJids').value.split(',').map(j => j.trim()).filter(j => j);
+            const targetJids = document.getElementById('targetJids').value.split(',').map(j => j.trim()).filter(j => j);
+            const oldTextRegex = document.getElementById('oldTextRegex').value.split(',').map(p => p.trim()).filter(p => p);
+            const newText = document.getElementById('newText').value.trim();
+            
+            const msgDiv = document.getElementById('configMessage');
+            msgDiv.innerHTML = '<span style="color: #ffaa33;"><i class="fas fa-spinner fa-spin"></i> Saving...</span>';
+            
+            try {
+                const res = await fetch('/api/config', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ phone })
+                    body: JSON.stringify({ sourceJids, targetJids, oldTextRegex, newText })
                 });
                 const data = await res.json();
-
-                document.getElementById('step-loading').classList.add('hidden');
-
-                if (data.code) {
-                    document.getElementById('pairing-code').textContent = data.code;
-                    document.getElementById('step-code').classList.remove('hidden');
+                
+                if (data.success) {
+                    msgDiv.innerHTML = '<span style="color: #25d366; background: rgba(37,211,102,0.1); padding: 8px 16px; border-radius: 100px; display: inline-block;"><i class="fas fa-check-circle"></i> Saved!</span>';
+                    setTimeout(() => { msgDiv.innerHTML = ''; }, 3000);
                 } else {
-                    document.getElementById('error-message').textContent = data.error || 'Failed to get pairing code. Try QR code instead.';
-                    document.getElementById('step-error').classList.remove('hidden');
+                    msgDiv.innerHTML = '<span style="color: #ff4d4d;"><i class="fas fa-exclamation-triangle"></i> Failed</span>';
                 }
             } catch (e) {
-                document.getElementById('step-loading').classList.add('hidden');
-                document.getElementById('error-message').textContent = 'Network error. Please try again.';
-                document.getElementById('step-error').classList.remove('hidden');
+                msgDiv.innerHTML = '<span style="color: #ff4d4d;"><i class="fas fa-exclamation-triangle"></i> Error</span>';
             }
         }
-
+        
+        // Check status - FIXED QR CODE DISPLAY
         async function checkStatus() {
             try {
-                const res = await fetch('/api/status');
-                const data = await res.json();
-
-                const connStatus = document.getElementById('conn-status');
-                const dbStatus = document.getElementById('db-status');
-                const setupView = document.getElementById('setup-view');
-                const connectedView = document.getElementById('connected-view');
-
+                const response = await fetch('/api/status');
+                const data = await response.json();
+                
+                // WhatsApp Status
+                const whatsappDot = document.getElementById('whatsappStatusDot');
+                const whatsappText = document.getElementById('whatsappStatusText');
+                
                 if (data.connected) {
-                    connStatus.textContent = 'Connected';
-                    connStatus.className = 'px-3 py-1 rounded-full text-sm bg-green-500/20 text-green-400';
-                    setupView.classList.add('hidden');
-                    connectedView.classList.remove('hidden');
+                    whatsappDot.className = 'status-dot connected';
+                    whatsappText.textContent = 'WA ✓';
                 } else {
-                    connStatus.textContent = 'Waiting...';
-                    connStatus.className = 'px-3 py-1 rounded-full text-sm bg-yellow-500/20 text-yellow-400';
-                    setupView.classList.remove('hidden');
-                    connectedView.classList.add('hidden');
-
-                    // Update QR if available and QR panel is visible
-                    if (data.qr && data.qr !== lastQr && selectedMethod === 'qr') {
-                        lastQr = data.qr;
-                        const qrImage = document.getElementById('qr-image');
-                        qrImage.src = data.qr;
-                        qrImage.classList.remove('hidden');
-                        document.getElementById('qr-loading').classList.add('hidden');
-                    }
+                    whatsappDot.className = 'status-dot disconnected';
+                    whatsappText.textContent = 'WA ✗';
                 }
-
+                
                 // Database Status
-                if (data.database) {
-                    dbStatus.textContent = 'Connected';
-                    dbStatus.className = 'px-3 py-1 rounded-full text-sm bg-green-500/20 text-green-400';
+                const dbDot = document.getElementById('dbStatusDot');
+                const dbText = document.getElementById('dbStatusText');
+                
+                if (data.dbConnected) {
+                    dbDot.className = 'status-dot connected';
+                    dbText.textContent = 'DB ✓';
                 } else {
-                    dbStatus.textContent = 'Disabled';
-                    dbStatus.className = 'px-3 py-1 rounded-full text-sm bg-gray-500/20 text-gray-400';
+                    dbDot.className = 'status-dot disconnected';
+                    dbText.textContent = 'DB ✗';
                 }
-            } catch (e) {
-                console.error("Status check failed", e);
+                
+                // QR CODE DISPLAY - FIXED
+                const qrContainer = document.getElementById('qrContainer');
+                
+                if (data.qr) {
+                    // QR code is available - display it
+                    qrContainer.innerHTML = `
+                        <div class="qr-wrapper">
+                            <img src="${data.qr}" alt="WhatsApp QR Code">
+                        </div>
+                        <div class="scan-hint">
+                            <i class="fas fa-camera"></i>
+                            Scan with WhatsApp > Linked Devices
+                        </div>
+                    `;
+                    console.log('✅ QR Code displayed');
+                } else if (data.connected) {
+                    // Connected - no QR needed
+                    qrContainer.innerHTML = `
+                        <div class="no-qr">
+                            <i class="fas fa-check-circle" style="color: #25d366; font-size: 64px;"></i>
+                            <span style="color: #25d366; font-weight: 600;">WhatsApp Connected!</span>
+                            <span style="font-size: 13px;">Session is active</span>
+                        </div>
+                    `;
+                } else {
+                    // Not connected, no QR yet
+                    qrContainer.innerHTML = `
+                        <div class="no-qr">
+                            <i class="fas fa-spinner fa-spin" style="font-size: 48px;"></i>
+                            <span>Generating QR code...</span>
+                            <span style="font-size: 12px; color: #8aa3a6;">Please wait 5-10 seconds</span>
+                        </div>
+                    `;
+                }
+                
+            } catch (error) {
+                console.error('Status check error:', error);
+                document.getElementById('qrContainer').innerHTML = `
+                    <div class="no-qr">
+                        <i class="fas fa-exclamation-triangle" style="color: #ff4d4d;"></i>
+                        <span>Connection error</span>
+                        <span style="font-size: 12px;">Refreshing automatically...</span>
+                    </div>
+                `;
             }
         }
-
-        async function disconnect() {
-            if (!confirm('Are you sure you want to disconnect?')) return;
-            try {
-                await fetch('/api/disconnect', { method: 'POST' });
-                location.reload();
-            } catch (e) {
-                alert('Error disconnecting');
-            }
-        }
-
-        // Start status polling
+        
+        // Initialize everything
+        console.log('🚀 Muzamil-MD Web Dashboard Loaded');
+        loadConfig();
         checkStatus();
-        setInterval(checkStatus, 2000);
+        
+        // Check status every 3 seconds (faster QR detection)
+        setInterval(checkStatus, 3000);
+        
+        // Also check when page becomes visible again
+        document.addEventListener('visibilitychange', function() {
+            if (!document.hidden) {
+                console.log('🔄 Page visible, refreshing status');
+                checkStatus();
+            }
+        });
     </script>
 </body>
-
 </html>
