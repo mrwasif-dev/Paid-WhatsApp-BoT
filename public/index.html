@@ -30,7 +30,7 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            margin-bottom: 30px;
+            margin-bottom: 20px;
         }
         .logo {
             display: flex;
@@ -48,12 +48,39 @@
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
-        .status {
-            background: #25d3661a;
-            border: 1px solid #25d36666;
+        .status-container {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+        .status-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #00000033;
             border-radius: 50px;
             padding: 8px 16px;
+        }
+        .status-label {
+            font-size: 13px;
+            color: #a8e6cf;
+        }
+        .status-value {
             font-size: 14px;
+            font-weight: 600;
+            padding: 4px 12px;
+            border-radius: 50px;
+        }
+        .status-connected {
+            background: #25d3661a;
+            border: 1px solid #25d36666;
+            color: #25d366;
+        }
+        .status-disconnected {
+            background: #ff4d4d1a;
+            border: 1px solid #ff4d4d66;
+            color: #ff4d4d;
         }
         .qr-section {
             background: #00000033;
@@ -146,9 +173,24 @@
                 <i class="fab fa-whatsapp"></i>
                 <h1>Muzamil-MD</h1>
             </div>
-            <div class="status" id="status">Loading...</div>
         </div>
 
+        <!-- Status Container with Both Indicators -->
+        <div class="status-container">
+            <!-- WhatsApp Session Status -->
+            <div class="status-item">
+                <span class="status-label"><i class="fab fa-whatsapp"></i> WhatsApp Session</span>
+                <span class="status-value" id="whatsappStatus">Loading...</span>
+            </div>
+            
+            <!-- Database Connection Status - NEW -->
+            <div class="status-item">
+                <span class="status-label"><i class="fas fa-database"></i> Database Connection</span>
+                <span class="status-value" id="databaseStatus">Loading...</span>
+            </div>
+        </div>
+
+        <!-- QR Code Section -->
         <div class="qr-section" id="qrSection">
             <div id="qrContainer">
                 <div class="qr-wrapper">
@@ -158,6 +200,7 @@
             </div>
         </div>
 
+        <!-- Configuration Section -->
         <div class="config">
             <h3><i class="fas fa-cog"></i> Configuration</h3>
             <div class="form-group">
@@ -182,6 +225,7 @@
             <p id="configMsg" style="margin-top: 10px; text-align: center;"></p>
         </div>
 
+        <!-- Footer -->
         <div class="footer">
             <p>Made with <i class="fas fa-heart" style="color: #ff4d4d;"></i> by mrwasif-dev</p>
             <p>© 2026 Muzamil-MD</p>
@@ -233,11 +277,20 @@
                 const res = await fetch('/api/status');
                 const data = await res.json();
                 
-                const statusEl = document.getElementById('status');
-                statusEl.innerHTML = data.connected ? '✅ Connected' : '❌ Disconnected';
-                statusEl.style.background = data.connected ? '#25d3661a' : '#ff4d4d1a';
-                statusEl.style.borderColor = data.connected ? '#25d36666' : '#ff4d4d66';
+                // Update WhatsApp Status
+                const whatsappEl = document.getElementById('whatsappStatus');
+                whatsappEl.innerHTML = data.connected ? '✅ Connected' : '❌ Disconnected';
+                whatsappEl.className = 'status-value ' + (data.connected ? 'status-connected' : 'status-disconnected');
 
+                // Update Database Status - NEW
+                const dbEl = document.getElementById('databaseStatus');
+                // You can modify this based on your actual database status
+                // For now, checking if mongoDbUrl exists in config
+                const dbConnected = data.databaseConnected || false;
+                dbEl.innerHTML = dbConnected ? '✅ Connected' : '❌ Disconnected';
+                dbEl.className = 'status-value ' + (dbConnected ? 'status-connected' : 'status-disconnected');
+
+                // Update QR Code
                 const qrContainer = document.getElementById('qrContainer');
                 if (data.qr) {
                     qrContainer.innerHTML = `
