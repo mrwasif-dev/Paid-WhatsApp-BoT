@@ -9,6 +9,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const mongoose = require('mongoose');
+const session = require('express-session');
 
 const { wasi_connectSession, wasi_clearSession } = require('./wasilib/session');
 const { wasi_connectDatabase } = require('./wasilib/database');
@@ -16,48 +17,58 @@ const { wasi_connectDatabase } = require('./wasilib/database');
 const config = require('./wasi');
 
 // -----------------------------------------------------------------------------
-// DEFAULT CONFIG FROM ENV
+// EXPRESS SETUP
 // -----------------------------------------------------------------------------
-let DEFAULT_SOURCE_JIDS = [];
-let DEFAULT_TARGET_JIDS = [];
-let DEFAULT_OLD_TEXT_REGEX = [];
-let DEFAULT_NEW_TEXT = '';
+const wasi_app = express();
+const wasi_port = process.env.PORT || 3000;
+const QRCode = require('qrcode');
 
-if (process.env.SOURCE_JIDS) {
-    DEFAULT_SOURCE_JIDS = process.env.SOURCE_JIDS.split(',').map(s => s.trim()).filter(s => s);
-}
-if (process.env.TARGET_JIDS) {
-    DEFAULT_TARGET_JIDS = process.env.TARGET_JIDS.split(',').map(s => s.trim()).filter(s => s);
-}
-if (process.env.OLD_TEXT_REGEX) {
-    DEFAULT_OLD_TEXT_REGEX = process.env.OLD_TEXT_REGEX.split(',').map(pattern => {
-        try {
-            return pattern.trim() ? new RegExp(pattern.trim(), 'gu') : null;
-        } catch (e) {
-            console.error(`Invalid regex pattern: ${pattern}`, e);
-            return null;
+// Session middleware for login
+wasi_app.use(session({
+    secret: 'wasibotsecret',
+    resave: false,
+    saveUninitialized: true,
+    cookie: { secure: false }
+}));
+
+wasi_app.use(express.json());
+wasi_app.use(express.urlencoded({ extended: true }));
+wasi_app.use(express.static(path.join(__dirname, 'public')));
+
+// -----------------------------------------------------------------------------
+// MONGODB CONNECTION (Dynamic)
+// -----------------------------------------------------------------------------
+let isMongoConnected = false;
+let BotConfig = null;
+
+// Function to connect to MongoDB with user credentials
+async function connectToMongoDB(uri) {
+    try {
+        if (mongoose.connection.readyState === 1) {
+            await mongoose.disconnect();
         }
-    }).filter(regex => regex !== null);
+        await mongoose.connect(uri);
+        isMongoConnected = true;
+        
+        // Define schema after connection
+        const ConfigSchema = new mongoose.Schema({
+            sessionId: { type: String, required: true, unique: true },
+            sourceJids: [String],
+            targetJids: [String],
+            oldTextRegex: [String],
+            newText: String,
+            updatedAt: { type: Date, default: Date.now }
+        });
+        
+        BotConfig = mongoose.model('BotConfig', ConfigSchema);
+        console.log('✅ MongoDB Connected Successfully');
+        return true;
+    } catch (error) {
+        console.error('❌ MongoDB Connection Failed:', error.message);
+        isMongoConnected = false;
+        return false;
+    }
 }
-if (process.env.NEW_TEXT) {
-    DEFAULT_NEW_TEXT = process.env.NEW_TEXT;
-}
-
-console.log('✅ Default config loaded from .env');
-
-// -----------------------------------------------------------------------------
-// MONGODB CONFIG SCHEMA
-// -----------------------------------------------------------------------------
-const ConfigSchema = new mongoose.Schema({
-    sessionId: { type: String, required: true, unique: true },
-    sourceJids: [String],
-    targetJids: [String],
-    oldTextRegex: [String],
-    newText: String,
-    updatedAt: { type: Date, default: Date.now }
-});
-
-const BotConfig = mongoose.model('BotConfig', ConfigSchema);
 
 // -----------------------------------------------------------------------------
 // SESSION STATE
@@ -76,38 +87,32 @@ async function loadConfigForSession(sessionId) {
         _source: 'none'
     };
 
-    // MongoDB
+    if (!isMongoConnected || !BotConfig) return configData;
+
     try {
-        if (mongoose.connection.readyState === 1) {
-            const dbConfig = await BotConfig.findOne({ sessionId: sessionId });
-            if (dbConfig) {
-                configData = {
-                    sourceJids: dbConfig.sourceJids || [],
-                    targetJids: dbConfig.targetJids || [],
-                    newText: dbConfig.newText || '',
-                    oldTextRegex: (dbConfig.oldTextRegex || []).map(pattern => {
-                        try {
-                            return pattern ? new RegExp(pattern, 'gu') : null;
-                        } catch (e) {
-                            return null;
-                        }
-                    }).filter(regex => regex !== null),
-                    _source: 'mongodb'
-                };
-                console.log(`✅ Config loaded from MongoDB for session: ${sessionId}`);
-                return configData;
-            }
+        const dbConfig = await BotConfig.findOne({ sessionId: sessionId });
+        if (dbConfig) {
+            configData = {
+                sourceJids: dbConfig.sourceJids || [],
+                targetJids: dbConfig.targetJids || [],
+                newText: dbConfig.newText || '',
+                oldTextRegex: (dbConfig.oldTextRegex || []).map(pattern => {
+                    try {
+                        return pattern ? new RegExp(pattern, 'gu') : null;
+                    } catch (e) {
+                        return null;
+                    }
+                }).filter(regex => regex !== null),
+                _source: 'mongodb'
+            };
         }
-    } catch (e) {
-        console.error(`Failed to load config for session ${sessionId} from MongoDB:`, e);
-    }
+    } catch (e) {}
     
-    // JSON file
+    // Try JSON backup
     try {
         const jsonPath = path.join(__dirname, `${sessionId}_config.json`);
-        if (fs.existsSync(jsonPath)) {
+        if (fs.existsSync(jsonPath) && configData._source === 'none') {
             const savedConfig = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
-            
             configData = {
                 sourceJids: savedConfig.sourceJids || [],
                 targetJids: savedConfig.targetJids || [],
@@ -121,24 +126,8 @@ async function loadConfigForSession(sessionId) {
                 }).filter(regex => regex !== null),
                 _source: 'json'
             };
-            console.log(`✅ Config loaded from ${sessionId}_config.json`);
-            return configData;
         }
-    } catch (e) {
-        console.error(`Failed to load ${sessionId}_config.json:`, e);
-    }
-    
-    // Default config
-    if (DEFAULT_SOURCE_JIDS.length > 0 || DEFAULT_TARGET_JIDS.length > 0 || DEFAULT_NEW_TEXT) {
-        configData = {
-            sourceJids: [...DEFAULT_SOURCE_JIDS],
-            targetJids: [...DEFAULT_TARGET_JIDS],
-            oldTextRegex: [...DEFAULT_OLD_TEXT_REGEX],
-            newText: DEFAULT_NEW_TEXT,
-            _source: 'env'
-        };
-        console.log(`✅ Using default config from .env for session: ${sessionId}`);
-    }
+    } catch (e) {}
     
     return configData;
 }
@@ -150,9 +139,8 @@ async function saveConfigForSession(sessionId, configData) {
     let savedToMongo = false;
     let savedToJson = false;
     
-    // MongoDB
-    try {
-        if (mongoose.connection.readyState === 1) {
+    if (isMongoConnected && BotConfig) {
+        try {
             const updateData = {
                 sourceJids: configData.sourceJids || [],
                 targetJids: configData.targetJids || [],
@@ -166,14 +154,11 @@ async function saveConfigForSession(sessionId, configData) {
                 updateData,
                 { upsert: true }
             );
-            console.log(`✅ Config saved to MongoDB for session: ${sessionId}`);
             savedToMongo = true;
-        }
-    } catch (error) {
-        console.error(`Failed to save config for session ${sessionId} to MongoDB:`, error);
+        } catch (error) {}
     }
     
-    // JSON file
+    // JSON backup
     try {
         const jsonPath = path.join(__dirname, `${sessionId}_config.json`);
         const jsonConfig = {
@@ -184,11 +169,8 @@ async function saveConfigForSession(sessionId, configData) {
             lastUpdated: new Date().toISOString()
         };
         fs.writeFileSync(jsonPath, JSON.stringify(jsonConfig, null, 2));
-        console.log(`✅ Config saved to ${sessionId}_config.json`);
         savedToJson = true;
-    } catch (error) {
-        console.error(`Failed to save ${sessionId}_config.json:`, error);
-    }
+    } catch (error) {}
     
     return { savedToMongo, savedToJson };
 }
@@ -199,10 +181,8 @@ async function saveConfigForSession(sessionId, configData) {
 function cleanForwardedLabel(message) {
     try {
         let cleanedMessage = JSON.parse(JSON.stringify(message));
-        
-        const messageTypes = ['extendedTextMessage', 'imageMessage', 'videoMessage', 'audioMessage', 'documentMessage'];
-        
-        messageTypes.forEach(type => {
+        const types = ['extendedTextMessage', 'imageMessage', 'videoMessage', 'audioMessage', 'documentMessage'];
+        types.forEach(type => {
             if (cleanedMessage[type]?.contextInfo) {
                 cleanedMessage[type].contextInfo.isForwarded = false;
                 if (cleanedMessage[type].contextInfo.forwardingScore) {
@@ -210,7 +190,6 @@ function cleanForwardedLabel(message) {
                 }
             }
         });
-        
         return cleanedMessage;
     } catch (error) {
         return message;
@@ -219,26 +198,21 @@ function cleanForwardedLabel(message) {
 
 function cleanNewsletterText(text) {
     if (!text) return text;
-    
     const markers = [
         /📢\s*/g, /🔔\s*/g, /📰\s*/g, /🗞️\s*/g,
         /\[NEWSLETTER\]/gi, /\[BROADCAST\]/gi, /\[ANNOUNCEMENT\]/gi,
         /Newsletter:/gi, /Broadcast:/gi, /Announcement:/gi,
-        /Forwarded many times/gi, /Forwarded message/gi,
-        /This is a broadcast message/gi
+        /Forwarded many times/gi, /Forwarded message/gi
     ];
-    
     let cleanedText = text;
     markers.forEach(marker => {
         cleanedText = cleanedText.replace(marker, '');
     });
-    
     return cleanedText.trim();
 }
 
 function replaceCaption(caption, sessionConfig) {
     if (!caption || !sessionConfig.oldTextRegex.length || !sessionConfig.newText) return caption;
-    
     let result = caption;
     sessionConfig.oldTextRegex.forEach(regex => {
         result = result.replace(regex, sessionConfig.newText);
@@ -259,7 +233,6 @@ function processAndCleanMessage(originalMessage, sessionConfig) {
         
         if (text) {
             const cleanedText = cleanNewsletterText(text);
-            
             if (cleanedMessage.conversation) {
                 cleanedMessage.conversation = cleanedText;
             } else if (cleanedMessage.extendedTextMessage?.text) {
@@ -274,7 +247,6 @@ function processAndCleanMessage(originalMessage, sessionConfig) {
         }
         
         delete cleanedMessage.protocolMessage;
-        
         return cleanedMessage;
     } catch (error) {
         return originalMessage;
@@ -297,14 +269,12 @@ async function handleGjidCommand(sock, from, sessionId) {
         const groups = await sock.groupFetchAllParticipating();
         let response = "📌 *Groups List:*\n\n";
         let groupCount = 1;
-        
         for (const [jid, group] of Object.entries(groups)) {
             response += `${groupCount}. *${group.subject || "Unnamed"}*\n`;
             response += `   🆔: \`${jid}\`\n`;
             response += `   ──────────────\n\n`;
             groupCount++;
         }
-        
         response += `\n*Total: ${groupCount - 1}*`;
         await sock.sendMessage(from, { text: response });
     } catch (error) {
@@ -446,21 +416,66 @@ async function startSession(sessionId) {
 }
 
 // -----------------------------------------------------------------------------
-// EXPRESS SETUP
+// LOGIN ROUTES
 // -----------------------------------------------------------------------------
-const wasi_app = express();
-const wasi_port = process.env.PORT || 3000;
-const QRCode = require('qrcode');
+wasi_app.get('/login', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'login.html'));
+});
 
-wasi_app.use(express.json());
-wasi_app.use(express.static(path.join(__dirname, 'public')));
-wasi_app.get('/ping', (req, res) => res.status(200).send('pong'));
+wasi_app.post('/login', async (req, res) => {
+    const { username, password, cluster, database } = req.body;
+    
+    if (!username || !password || !cluster || !database) {
+        return res.status(400).json({ error: 'All fields are required' });
+    }
+    
+    try {
+        // Special case for demo/showcase
+        if (username === 'demo' && password === 'demo123') {
+            req.session.loggedIn = true;
+            req.session.username = username;
+            req.session.isDemo = true;
+            isMongoConnected = true;
+            return res.json({ success: true, redirect: '/' });
+        }
+        
+        // Construct MongoDB URI
+        const uri = `mongodb+srv://${username}:${encodeURIComponent(password)}@${cluster}/${database}?retryWrites=true&w=majority`;
+        
+        // Try to connect
+        const connected = await connectToMongoDB(uri);
+        
+        if (connected) {
+            req.session.loggedIn = true;
+            req.session.username = username;
+            req.session.cluster = cluster;
+            req.session.database = database;
+            res.json({ success: true, redirect: '/' });
+        } else {
+            res.status(401).json({ error: 'Invalid MongoDB credentials' });
+        }
+    } catch (error) {
+        res.status(500).json({ error: 'Connection failed: ' + error.message });
+    }
+});
+
+wasi_app.get('/logout', (req, res) => {
+    req.session.destroy();
+    res.redirect('/login');
+});
 
 // -----------------------------------------------------------------------------
-// API ROUTES
+// API ROUTES (Protected)
 // -----------------------------------------------------------------------------
+wasi_app.use('/api/*', (req, res, next) => {
+    if (!req.session.loggedIn) {
+        return res.status(401).json({ error: 'Please login first' });
+    }
+    next();
+});
+
 wasi_app.get('/api/status', async (req, res) => {
-    const sessionId = req.query.sessionId || config.sessionId || 'wasi_session';
+    const sessionId = req.query.sessionId || 'default_session';
     const session = sessions.get(sessionId);
 
     let qrDataUrl = null;
@@ -486,15 +501,16 @@ wasi_app.get('/api/status', async (req, res) => {
             targetJids: sessionConfig?.targetJids || [],
             oldTextRegex: sessionConfig?.oldTextRegex?.map(r => r.source) || [],
             newText: sessionConfig?.newText || '',
-            configSource: sessionConfig?_source || 'none'
+            configSource: sessionConfig?._source || 'none'
         },
         activeSessions: Array.from(sessions.keys()),
-        databaseConnected: mongoose.connection.readyState === 1
+        databaseConnected: isMongoConnected,
+        isDemo: req.session.isDemo || false
     });
 });
 
 wasi_app.get('/api/config', async (req, res) => {
-    const sessionId = req.query.sessionId || config.sessionId || 'wasi_session';
+    const sessionId = req.query.sessionId || 'default_session';
     const session = sessions.get(sessionId);
     
     if (!session) {
@@ -513,7 +529,7 @@ wasi_app.get('/api/config', async (req, res) => {
 
 wasi_app.post('/api/config', async (req, res) => {
     try {
-        const sessionId = req.query.sessionId || config.sessionId || 'wasi_session';
+        const sessionId = req.query.sessionId || 'default_session';
         const { sourceJids, targetJids, oldTextRegex, newText } = req.body;
 
         const session = sessions.get(sessionId);
@@ -552,7 +568,6 @@ wasi_app.post('/api/config', async (req, res) => {
         res.json({ 
             success: true, 
             message: `Configuration saved for session: ${sessionId}`,
-            sessionId,
             savedToMongo: saveResult.savedToMongo,
             savedToJson: saveResult.savedToJson
         });
@@ -598,7 +613,13 @@ wasi_app.get('/api/sessions', (req, res) => {
     res.json({ sessions: sessionList });
 });
 
+// -----------------------------------------------------------------------------
+// MAIN PAGE (Protected)
+// -----------------------------------------------------------------------------
 wasi_app.get('/', (req, res) => {
+    if (!req.session.loggedIn) {
+        return res.redirect('/login');
+    }
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
@@ -608,24 +629,12 @@ wasi_app.get('/', (req, res) => {
 function wasi_startServer() {
     wasi_app.listen(wasi_port, () => {
         console.log(`\n🌐 Server running on port ${wasi_port}`);
-        console.log(`📡 Multi-session WhatsApp Bot`);
-        console.log(`📋 Default config: ${DEFAULT_SOURCE_JIDS.length} sources, ${DEFAULT_TARGET_JIDS.length} targets\n`);
+        console.log(`🔐 Login page: http://localhost:${wasi_port}/login`);
+        console.log(`📱 Main page: http://localhost:${wasi_port} (after login)\n`);
     });
 }
 
-async function main() {
-    if (config.mongoDbUrl) {
-        try {
-            await mongoose.connect(config.mongoDbUrl);
-            console.log('✅ MongoDB Connected');
-        } catch (error) {
-            console.error('MongoDB connection error:', error);
-        }
-    }
-
-    const sessionId = config.sessionId || 'wasi_session';
-    await startSession(sessionId);
-    wasi_startServer();
-}
-
-main();
+// -----------------------------------------------------------------------------
+// MAIN (No MongoDB until login)
+// -----------------------------------------------------------------------------
+wasi_startServer();
