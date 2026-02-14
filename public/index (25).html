@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Muzamil-MD • WhatsApp Bot</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(145deg, #0a1a1f, #1a2f35);
+            color: white;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .card {
+            background: rgba(20, 35, 40, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid #25d36633;
+            border-radius: 30px;
+            padding: 30px;
+            max-width: 500px;
+            width: 100%;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+        }
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        .logo i {
+            font-size: 40px;
+            color: #25d366;
+        }
+        .logo h1 {
+            font-size: 28px;
+            font-weight: 700;
+            background: linear-gradient(to right, #fff, #25d366);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .status-container {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+        .status-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #00000033;
+            border-radius: 50px;
+            padding: 8px 16px;
+        }
+        .status-label {
+            font-size: 13px;
+            color: #a8e6cf;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .status-value {
+            font-size: 14px;
+            font-weight: 600;
+            padding: 4px 12px;
+            border-radius: 50px;
+        }
+        .status-connected {
+            background: #25d3661a;
+            border: 1px solid #25d36666;
+            color: #25d366;
+        }
+        .status-disconnected {
+            background: #ff4d4d1a;
+            border: 1px solid #ff4d4d66;
+            color: #ff4d4d;
+        }
+        .qr-section {
+            background: #00000033;
+            border: 2px dashed #25d36666;
+            border-radius: 20px;
+            padding: 30px;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .qr-wrapper {
+            background: white;
+            padding: 15px;
+            border-radius: 15px;
+            display: inline-block;
+            margin-bottom: 15px;
+        }
+        .qr-wrapper img {
+            max-width: 250px;
+            border-radius: 10px;
+        }
+        .config {
+            background: #00000033;
+            border-radius: 20px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+        .config h3 {
+            color: #25d366;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .config h3 i {
+            font-size: 20px;
+        }
+        .config-note {
+            font-size: 12px;
+            color: #8aa3a6;
+            margin-bottom: 15px;
+            padding: 8px;
+            background: #1a2f35;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            color: #a8e6cf;
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+        .form-control {
+            width: 100%;
+            padding: 12px;
+            background: #1a2f35;
+            border: 1px solid #25d36666;
+            border-radius: 10px;
+            color: white;
+            font-size: 14px;
+            transition: 0.3s;
+        }
+        .form-control:focus {
+            outline: none;
+            border-color: #25d366;
+            box-shadow: 0 0 0 2px #25d36633;
+        }
+        .btn {
+            background: #25d366;
+            color: #0a1a1f;
+            border: none;
+            padding: 14px 20px;
+            border-radius: 50px;
+            font-weight: 700;
+            cursor: pointer;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            transition: 0.3s;
+            font-size: 16px;
+        }
+        .btn:hover {
+            background: #20bd5a;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px #25d36666;
+        }
+        .footer {
+            text-align: center;
+            color: #8aa3a6;
+            font-size: 12px;
+        }
+        .footer a {
+            color: #25d366;
+            text-decoration: none;
+        }
+        .save-msg {
+            margin-top: 10px;
+            text-align: center;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="header">
+            <div class="logo">
+                <i class="fab fa-whatsapp"></i>
+                <h1>Muzamil-MD</h1>
+            </div>
+        </div>
+
+        <!-- Status Container -->
+        <div class="status-container">
+            <div class="status-item">
+                <span class="status-label"><i class="fab fa-whatsapp"></i> WhatsApp Session</span>
+                <span class="status-value" id="whatsappStatus">Loading...</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label"><i class="fas fa-database"></i> Database Connection</span>
+                <span class="status-value" id="databaseStatus">Loading...</span>
+            </div>
+        </div>
+
+        <!-- QR Code Section -->
+        <div class="qr-section">
+            <div id="qrContainer">
+                <div class="qr-wrapper">
+                    <i class="fas fa-spinner fa-spin" style="font-size: 50px; color: #25d366;"></i>
+                </div>
+                <p>Waiting for QR...</p>
+            </div>
+        </div>
+
+        <!-- Configuration Section - PERMANENT STORAGE -->
+        <div class="config">
+            <h3><i class="fas fa-cog"></i> Configuration</h3>
+            <div class="config-note">
+                <i class="fas fa-save"></i> یہ کنفیگریشن خود بخود botConfig.json میں محفوظ ہو جائے گی اور بعد میں دوبارہ لوڈ ہو گی
+            </div>
+            
+            <div class="form-group">
+                <label><i class="fas fa-source"></i> SOURCE JIDs (comma separated)</label>
+                <textarea id="sourceJids" class="form-control" rows="2" placeholder="1234567890@s.whatsapp.net, 0987654321@g.us"></textarea>
+            </div>
+            
+            <div class="form-group">
+                <label><i class="fas fa-target"></i> TARGET JIDs (comma separated)</label>
+                <textarea id="targetJids" class="form-control" rows="2" placeholder="1234567890@s.whatsapp.net, group@us.wa.com"></textarea>
+            </div>
+            
+            <div class="form-group">
+                <label><i class="fas fa-code"></i> OLD TEXT REGEX (comma separated)</label>
+                <input type="text" id="oldTextRegex" class="form-control" placeholder="hello.*world, test[0-9]+">
+            </div>
+            
+            <div class="form-group">
+                <label><i class="fas fa-pen"></i> NEW TEXT</label>
+                <input type="text" id="newText" class="form-control" placeholder="New text to replace with">
+            </div>
+            
+            <button class="btn" onclick="saveConfig()">
+                <i class="fas fa-save"></i> Save Configuration Permanently
+            </button>
+            
+            <div id="configMsg" class="save-msg"></div>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <p>Made with <i class="fas fa-heart" style="color: #ff4d4d;"></i> by mrwasif-dev</p>
+            <p>© 2026 Muzamil-MD | Config saved in botConfig.json</p>
+        </div>
+    </div>
+
+    <script>
+        // Load saved configuration on page load
+        async function loadConfig() {
+            try {
+                const res = await fetch('/api/config');
+                const config = await res.json();
+                
+                document.getElementById('sourceJids').value = config.sourceJids?.join(', ') || '';
+                document.getElementById('targetJids').value = config.targetJids?.join(', ') || '';
+                document.getElementById('oldTextRegex').value = config.oldTextRegex?.join(', ') || '';
+                document.getElementById('newText').value = config.newText || '';
+                
+                console.log('✅ Config loaded from server');
+            } catch (e) {
+                console.error('Config load error:', e);
+            }
+        }
+
+        // Save configuration permanently
+        async function saveConfig() {
+            const sourceJids = document.getElementById('sourceJids').value.split(',').map(j => j.trim()).filter(j => j);
+            const targetJids = document.getElementById('targetJids').value.split(',').map(j => j.trim()).filter(j => j);
+            const oldTextRegex = document.getElementById('oldTextRegex').value.split(',').map(p => p.trim()).filter(p => p);
+            const newText = document.getElementById('newText').value.trim();
+
+            const msgEl = document.getElementById('configMsg');
+            msgEl.innerHTML = '<span style="color: #ffaa33;"><i class="fas fa-spinner fa-spin"></i> Saving...</span>';
+
+            try {
+                const res = await fetch('/api/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ sourceJids, targetJids, oldTextRegex, newText })
+                });
+                
+                const data = await res.json();
+                
+                if (data.success) {
+                    msgEl.innerHTML = '<span style="color: #25d366;"><i class="fas fa-check-circle"></i> ✅ Permanently Saved!</span>';
+                    setTimeout(() => msgEl.innerHTML = '', 3000);
+                } else {
+                    msgEl.innerHTML = '<span style="color: #ff4d4d;"><i class="fas fa-times-circle"></i> ❌ Failed</span>';
+                }
+            } catch (e) {
+                msgEl.innerHTML = '<span style="color: #ff4d4d;"><i class="fas fa-times-circle"></i> ❌ Error</span>';
+            }
+        }
+
+        // Check WhatsApp and Database status
+        async function checkStatus() {
+            try {
+                const res = await fetch('/api/status');
+                const data = await res.json();
+                
+                // Update WhatsApp Status
+                const whatsappEl = document.getElementById('whatsappStatus');
+                whatsappEl.innerHTML = data.connected ? '✅ Connected' : '❌ Disconnected';
+                whatsappEl.className = 'status-value ' + (data.connected ? 'status-connected' : 'status-disconnected');
+
+                // Update Database Status
+                const dbEl = document.getElementById('databaseStatus');
+                dbEl.innerHTML = data.databaseConnected ? '✅ Connected' : '❌ Disconnected';
+                dbEl.className = 'status-value ' + (data.databaseConnected ? 'status-connected' : 'status-disconnected');
+
+                // Update QR Code
+                const qrContainer = document.getElementById('qrContainer');
+                if (data.qr) {
+                    qrContainer.innerHTML = `
+                        <div class="qr-wrapper">
+                            <img src="${data.qr}" alt="QR Code">
+                        </div>
+                        <p><i class="fas fa-camera"></i> Scan with WhatsApp</p>
+                    `;
+                } else if (!data.connected) {
+                    qrContainer.innerHTML = `
+                        <div class="qr-wrapper">
+                            <i class="fas fa-spinner fa-spin" style="font-size: 50px; color: #25d366;"></i>
+                        </div>
+                        <p>Generating QR...</p>
+                    `;
+                } else {
+                    qrContainer.innerHTML = `
+                        <div class="qr-wrapper">
+                            <i class="fas fa-check-circle" style="font-size: 50px; color: #25d366;"></i>
+                        </div>
+                        <p>Connected to WhatsApp!</p>
+                    `;
+                }
+            } catch (e) {
+                console.error('Status error:', e);
+            }
+        }
+
+        // Load everything on page load
+        loadConfig();
+        checkStatus();
+        
+        // Auto-refresh status every 3 seconds
+        setInterval(checkStatus, 3000);
+    </script>
+</body>
+</html>
