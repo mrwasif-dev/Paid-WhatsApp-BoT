@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
+    <title>Muzamil-MD • WhatsApp Bot</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        body {
+            background: radial-gradient(circle at 10% 20%, #1a3a40, #0b1c22);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+        }
+
+        /* Main Glass Card */
+        .card {
+            background: rgba(18, 30, 34, 0.85);
+            backdrop-filter: blur(16px) saturate(180%);
+            -webkit-backdrop-filter: blur(16px) saturate(180%);
+            border: 1px solid rgba(37, 211, 102, 0.25);
+            border-radius: 40px;
+            max-width: 560px;
+            width: 100%;
+            padding: 28px 24px;
+            box-shadow: 0 30px 50px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(37, 211, 102, 0.1) inset;
+            transition: all 0.3s ease;
+        }
+
+        /* Header */
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 28px;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .logo i {
+            font-size: 44px;
+            color: #25d366;
+            filter: drop-shadow(0 8px 12px #25d36633);
+        }
+
+        .logo h1 {
+            font-size: clamp(24px, 6vw, 32px);
+            font-weight: 800;
+            background: linear-gradient(145deg, #ffffff, #b0f0d0);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.5px;
+        }
+
+        .version-badge {
+            background: #25d36620;
+            border: 1px solid #25d36660;
+            color: #25d366;
+            padding: 6px 14px;
+            border-radius: 60px;
+            font-size: 13px;
+            font-weight: 600;
+            letter-spacing: 0.3px;
+            backdrop-filter: blur(5px);
+        }
+
+        /* Status Container */
+        .status-container {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 30px;
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #00000030;
+            border-radius: 60px;
+            padding: 12px 20px;
+            border: 1px solid #2a4a4f;
+            backdrop-filter: blur(4px);
+        }
+
+        .status-label {
+            font-size: 14px;
+            font-weight: 500;
+            color: #b2e6d9;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .status-label i {
+            font-size: 16px;
+            color: #25d366;
+        }
+
+        .status-value {
+            font-size: 14px;
+            font-weight: 700;
+            padding: 6px 16px;
+            border-radius: 50px;
+            transition: 0.2s;
+        }
+
+        .status-connected {
+            background: #25d3661a;
+            border: 1px solid #25d366;
+            color: #25d366;
+            box-shadow: 0 0 10px #25d36633;
+        }
+
+        .status-disconnected {
+            background: #ff4d4d1a;
+            border: 1px solid #ff6b6b;
+            color: #ff8a8a;
+        }
+
+        /* QR Section */
+        .qr-section {
+            background: #0d1f24;
+            border: 2px dashed #25d36660;
+            border-radius: 32px;
+            padding: 28px 20px;
+            text-align: center;
+            margin-bottom: 30px;
+            transition: 0.3s;
+        }
+
+        .qr-wrapper {
+            background: #ffffff;
+            padding: 14px;
+            border-radius: 24px;
+            display: inline-block;
+            margin-bottom: 16px;
+            box-shadow: 0 20px 30px #00000060;
+        }
+
+        .qr-wrapper img {
+            max-width: 220px;
+            width: 100%;
+            height: auto;
+            border-radius: 16px;
+            display: block;
+        }
+
+        .qr-section p {
+            color: #bbdddd;
+            font-weight: 500;
+            font-size: 15px;
+        }
+
+        .qr-section i {
+            color: #25d366;
+        }
+
+        /* Config Panel */
+        .config {
+            background: #0d1b20e0;
+            border-radius: 32px;
+            padding: 26px 22px;
+            margin-bottom: 30px;
+            border: 1px solid #2b4a50;
+            backdrop-filter: blur(8px);
+        }
+
+        .config h3 {
+            color: #25d366;
+            font-size: 22px;
+            font-weight: 700;
+            margin-bottom: 18px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            letter-spacing: -0.3px;
+        }
+
+        .config h3 i {
+            font-size: 26px;
+        }
+
+        .config-note {
+            background: #11292e;
+            padding: 14px 16px;
+            border-radius: 20px;
+            color: #b0e0d0;
+            font-size: 13px;
+            border-left: 4px solid #25d366;
+            margin-bottom: 28px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 500;
+            line-height: 1.5;
+            word-break: break-word;
+        }
+
+        .config-note i {
+            color: #25d366;
+            font-size: 18px;
+        }
+
+        /* Form */
+        .form-group {
+            margin-bottom: 24px;
+        }
+
+        .form-group label {
+            display: block;
+            color: #c5f0e5;
+            font-weight: 600;
+            font-size: 15px;
+            margin-bottom: 8px;
+            letter-spacing: 0.3px;
+        }
+
+        .form-group label i {
+            color: #25d366;
+            margin-right: 8px;
+            width: 20px;
+        }
+
+        /* Auto-expand textareas */
+        .form-control {
+            width: 100%;
+            background: #10262c;
+            border: 2px solid #2b555c;
+            border-radius: 20px;
+            padding: 16px 18px;
+            color: white;
+            font-size: 15px;
+            line-height: 1.6;
+            transition: all 0.2s;
+            resize: none;
+            overflow-y: hidden;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            min-height: 60px;
+            box-shadow: inset 0 4px 8px #00000030;
+        }
+
+        .form-control:focus {
+            border-color: #25d366;
+            outline: none;
+            box-shadow: 0 0 0 4px #25d36630, inset 0 2px 6px #00000060;
+            background: #0f2d34;
+        }
+
+        .form-control::placeholder {
+            color: #6f9fa8;
+            font-size: 13px;
+            font-weight: 400;
+        }
+
+        /* Single line input */
+        #oldTextRegex {
+            white-space: nowrap;
+            overflow-x: auto;
+            resize: none;
+        }
+
+        /* Button */
+        .btn {
+            background: linear-gradient(145deg, #25d366, #1fa84d);
+            border: none;
+            padding: 18px 24px;
+            border-radius: 60px;
+            font-weight: 700;
+            font-size: 18px;
+            color: #0b1a1f;
+            width: 100%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 14px;
+            transition: 0.25s;
+            border: 1px solid #8efcb0;
+            box-shadow: 0 12px 30px -5px #25d36680;
+            margin-top: 10px;
+        }
+
+        .btn:hover {
+            background: linear-gradient(145deg, #2bde6f, #22b855);
+            transform: scale(1.02);
+            box-shadow: 0 18px 35px -3px #25d366cc;
+            border-color: #e0ffe8;
+        }
+
+        .btn i {
+            font-size: 22px;
+        }
+
+        /* Save message */
+        .save-msg {
+            margin-top: 20px;
+            text-align: center;
+            font-size: 15px;
+            font-weight: 600;
+            min-height: 30px;
+        }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            color: #6e9fa8;
+            font-size: 13px;
+            border-top: 1px solid #264a52;
+            padding-top: 22px;
+            margin-top: 10px;
+        }
+
+        .footer i.fa-heart {
+            color: #ff5e7c;
+            margin: 0 4px;
+        }
+
+        .footer a {
+            color: #25d366;
+            text-decoration: none;
+            font-weight: 600;
+            border-bottom: 1px dotted #25d36680;
+        }
+
+        /* Responsive fine-tuning */
+        @media (max-width: 450px) {
+            .card {
+                padding: 22px 16px;
+                border-radius: 32px;
+            }
+
+            .logo h1 {
+                font-size: 26px;
+            }
+
+            .logo i {
+                font-size: 38px;
+            }
+
+            .btn {
+                font-size: 16px;
+                padding: 16px 20px;
+            }
+
+            .config-note {
+                flex-direction: column;
+                text-align: left;
+                align-items: flex-start;
+            }
+
+            .status-item {
+                padding: 10px 16px;
+            }
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #1c3a42;
+            border-radius: 30px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #25d366;
+            border-radius: 30px;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <!-- Header -->
+        <div class="header">
+            <div class="logo">
+                <i class="fab fa-whatsapp"></i>
+                <h1>Muzamil-MD</h1>
+            </div>
+            <span class="version-badge"><i class="fas fa-check-circle"></i> v2.0</span>
+        </div>
+
+        <!-- Status -->
+        <div class="status-container">
+            <div class="status-item">
+                <span class="status-label"><i class="fab fa-whatsapp"></i> WhatsApp</span>
+                <span class="status-value" id="whatsappStatus">Loading...</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label"><i class="fas fa-database"></i> Database</span>
+                <span class="status-value" id="databaseStatus">Loading...</span>
+            </div>
+        </div>
+
+        <!-- QR -->
+        <div class="qr-section">
+            <div id="qrContainer">
+                <div class="qr-wrapper">
+                    <i class="fas fa-spinner fa-pulse" style="font-size: 50px; color: #25d366;"></i>
+                </div>
+                <p><i class="fas fa-qrcode"></i> Generating QR...</p>
+            </div>
+        </div>
+
+        <!-- Configuration -->
+        <div class="config">
+            <h3><i class="fas fa-sliders-h"></i> Configuration</h3>
+            <div class="config-note">
+                <i class="fas fa-save fa-2x"></i>
+                <span>یہ کنفیگریشن خود بخود <strong>botConfig.json</strong> میں محفوظ ہو گی۔ نیو ٹیکسٹ اور اولڈ ٹیکسٹ دونوں ملٹی لائن ہیں۔</span>
+            </div>
+
+            <!-- SOURCE JIDs -->
+            <div class="form-group">
+                <label><i class="fas fa-arrow-right-to-bracket"></i> SOURCE JIDs (comma separated)</label>
+                <textarea id="sourceJids" class="form-control" placeholder="123...@s.whatsapp.net, 098...@g.us" rows="1"></textarea>
+            </div>
+
+            <!-- TARGET JIDs -->
+            <div class="form-group">
+                <label><i class="fas fa-bullseye"></i> TARGET JIDs (comma separated)</label>
+                <textarea id="targetJids" class="form-control" placeholder="456...@s.whatsapp.net, group@g.us" rows="1"></textarea>
+            </div>
+
+            <!-- OLD TEXT REGEX (Now auto-expand) -->
+            <div class="form-group">
+                <label><i class="fas fa-code"></i> OLD TEXT REGEX (comma / multi-line)</label>
+                <textarea id="oldTextRegex" class="form-control" placeholder="hello.*world, test[0-9]+, (مرحبا|سلام)" oninput="autoExpand(this)" rows="1"></textarea>
+            </div>
+
+            <!-- NEW TEXT (Auto-expand) -->
+            <div class="form-group">
+                <label><i class="fas fa-pen-fancy"></i> NEW TEXT (auto-expand)</label>
+                <textarea id="newText" class="form-control" placeholder="یہاں نیا متن لکھیں... ملٹی لائن بھی ہو سکتا ہے" oninput="autoExpand(this)" rows="1"></textarea>
+            </div>
+
+            <!-- Save Button -->
+            <button class="btn" onclick="saveConfig()">
+                <i class="fas fa-cloud-upload-alt"></i> Permanently Save
+            </button>
+
+            <div id="configMsg" class="save-msg"></div>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <p>Made with <i class="fas fa-heart"></i> by <a href="#">mrwasif-dev</a></p>
+            <p>© 2026 Muzamil-MD • <i class="fas fa-database"></i> JSON stored</p>
+        </div>
+    </div>
+
+    <script>
+        // Auto-expand function for ALL textareas
+        function autoExpand(el) {
+            el.style.height = 'auto';
+            let newHeight = el.scrollHeight;
+            el.style.height = Math.max(60, newHeight) + 'px';
+        }
+
+        // Load config from server
+        async function loadConfig() {
+            try {
+                const res = await fetch('/api/config');
+                const config = await res.json();
+
+                const source = document.getElementById('sourceJids');
+                const target = document.getElementById('targetJids');
+                const oldRegex = document.getElementById('oldTextRegex');
+                const newText = document.getElementById('newText');
+
+                source.value = config.sourceJids?.join(', ') || '';
+                target.value = config.targetJids?.join(', ') || '';
+                oldRegex.value = config.oldTextRegex?.join(', ') || '';
+                newText.value = config.newText || '';
+
+                // Auto-expand all after load
+                [source, target, oldRegex, newText].forEach(el => autoExpand(el));
+
+                console.log('✅ Config loaded');
+            } catch (e) {
+                console.warn('⚠️ Config load failed, using empty', e);
+            }
+        }
+
+        // Save config
+        async function saveConfig() {
+            const sourceJids = document.getElementById('sourceJids').value.split(',').map(j => j.trim()).filter(j => j);
+            const targetJids = document.getElementById('targetJids').value.split(',').map(j => j.trim()).filter(j => j);
+            const oldTextRegex = document.getElementById('oldTextRegex').value.split(',').map(p => p.trim()).filter(p => p);
+            const newText = document.getElementById('newText').value;
+
+            const msgEl = document.getElementById('configMsg');
+            msgEl.innerHTML = '<span style="color: #faa726;"><i class="fas fa-spinner fa-pulse"></i> Saving...</span>';
+
+            try {
+                const res = await fetch('/api/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ sourceJids, targetJids, oldTextRegex, newText })
+                });
+
+                const data = await res.json();
+
+                if (data.success) {
+                    msgEl.innerHTML = '<span style="color: #25d366;"><i class="fas fa-check-circle"></i> ✅ Saved to botConfig.json</span>';
+                    setTimeout(() => msgEl.innerHTML = '', 3000);
+                } else {
+                    msgEl.innerHTML = '<span style="color: #ff6b6b;"><i class="fas fa-times-circle"></i> ❌ Save failed</span>';
+                }
+            } catch (e) {
+                msgEl.innerHTML = '<span style="color: #ff8a8a;"><i class="fas fa-exclamation-triangle"></i> ❌ Error</span>';
+            }
+        }
+
+        // Status check
+        async function checkStatus() {
+            try {
+                const res = await fetch('/api/status');
+                const data = await res.json();
+
+                const wEl = document.getElementById('whatsappStatus');
+                const dEl = document.getElementById('databaseStatus');
+
+                wEl.innerText = data.connected ? '✅ Connected' : '❌ Disconnected';
+                wEl.className = 'status-value ' + (data.connected ? 'status-connected' : 'status-disconnected');
+
+                dEl.innerText = data.databaseConnected ? '✅ Connected' : '❌ Disconnected';
+                dEl.className = 'status-value ' + (data.databaseConnected ? 'status-connected' : 'status-disconnected');
+
+                const qrContainer = document.getElementById('qrContainer');
+                if (data.qr) {
+                    qrContainer.innerHTML = `
+                        <div class="qr-wrapper">
+                            <img src="${data.qr}" alt="QR Code">
+                        </div>
+                        <p><i class="fas fa-camera"></i> Scan with WhatsApp</p>
+                    `;
+                } else if (!data.connected) {
+                    qrContainer.innerHTML = `
+                        <div class="qr-wrapper">
+                            <i class="fas fa-spinner fa-pulse" style="font-size: 50px; color: #25d366;"></i>
+                        </div>
+                        <p><i class="fas fa-qrcode"></i> Generating QR...</p>
+                    `;
+                } else {
+                    qrContainer.innerHTML = `
+                        <div class="qr-wrapper">
+                            <i class="fas fa-check-circle" style="font-size: 60px; color: #25d366;"></i>
+                        </div>
+                        <p><i class="fas fa-wifi"></i> Connected to WhatsApp</p>
+                    `;
+                }
+            } catch (e) {
+                console.error('Status error', e);
+            }
+        }
+
+        // Apply auto-expand to all textareas on page
+        document.querySelectorAll('.form-control').forEach(el => {
+            el.addEventListener('input', function() { autoExpand(this); });
+        });
+
+        // Load on start
+        loadConfig();
+        checkStatus();
+
+        // Auto refresh status
+        setInterval(checkStatus, 3000);
+    </script>
+</body>
+</html>
