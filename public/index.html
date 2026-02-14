@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
+    <title>Muzamil-MD • WhatsApp Bot Controller</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        body {
+            background: radial-gradient(circle at 10% 20%, #0b1e24, #0a1419);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+            margin: 0;
+            color: #ffffff;
+        }
+
+        .dashboard {
+            max-width: 560px;
+            width: 100%;
+            background: rgba(18, 32, 38, 0.85);
+            backdrop-filter: blur(18px) saturate(180%);
+            -webkit-backdrop-filter: blur(18px) saturate(180%);
+            border: 1px solid rgba(37, 211, 102, 0.25);
+            border-radius: 40px;
+            padding: 24px 22px 30px;
+            box-shadow: 0 30px 50px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(37, 211, 102, 0.1) inset;
+            transition: transform 0.2s ease;
+        }
+
+        .top-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .brand i {
+            font-size: 42px;
+            color: #25d366;
+            filter: drop-shadow(0 4px 8px rgba(37, 211, 102, 0.4));
+            transition: transform 0.2s;
+        }
+
+        .brand h1 {
+            font-size: 28px;
+            font-weight: 700;
+            background: linear-gradient(145deg, #ffffff, #b0ffe0);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.5px;
+        }
+
+        .badge {
+            background: #1c2f36;
+            border-radius: 100px;
+            padding: 6px 14px;
+            font-size: 12px;
+            font-weight: 600;
+            border: 1px solid #25d36640;
+            color: #a8e6cf;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+        }
+
+        .status-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-bottom: 28px;
+        }
+
+        .status-pill {
+            flex: 1 1 160px;
+            background: #0e2027;
+            border-radius: 28px;
+            padding: 12px 18px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            border: 1px solid #2a404a;
+            box-shadow: 0 8px 12px -8px #00000080;
+            transition: all 0.2s;
+        }
+
+        .status-pill:hover {
+            border-color: #25d36680;
+            background: #11262e;
+        }
+
+        .status-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: #1d313a;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+
+        .status-info {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .status-label {
+            font-size: 13px;
+            color: #8daeb6;
+            font-weight: 500;
+        }
+
+        .status-value {
+            font-weight: 700;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .connected {
+            color: #25d366;
+        }
+
+        .disconnected {
+            color: #ff5e6b;
+        }
+
+        .qr-panel {
+            background: #0b1c22;
+            border-radius: 38px;
+            padding: 24px 16px;
+            margin-bottom: 28px;
+            border: 1px solid #25d36630;
+            box-shadow: 0 15px 25px -12px #000000, inset 0 1px 2px #ffffff0d;
+            text-align: center;
+            transition: border 0.3s;
+            animation: gentleGlow 3s infinite alternate;
+        }
+
+        @keyframes gentleGlow {
+            0% { border-color: #25d36620; box-shadow: 0 15px 25px -12px #000000; }
+            100% { border-color: #25d36670; box-shadow: 0 15px 35px -8px #25d36640; }
+        }
+
+        .qr-display {
+            background: #ffffff;
+            padding: 14px;
+            border-radius: 28px;
+            display: inline-block;
+            margin-bottom: 15px;
+            box-shadow: 0 10px 20px #00000060;
+        }
+
+        .qr-display img {
+            max-width: 220px;
+            height: auto;
+            border-radius: 18px;
+            display: block;
+        }
+
+        .qr-placeholder {
+            width: 200px;
+            height: 200px;
+            background: #13272f;
+            border-radius: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto;
+            font-size: 48px;
+            color: #25d366;
+            border: 2px dashed #3e6b78;
+        }
+
+        .qr-status-text {
+            color: #c1dbe2;
+            font-size: 15px;
+            font-weight: 400;
+            margin-top: 6px;
+        }
+
+        .pairing-code-box {
+            background: #1a2f38;
+            border-radius: 20px;
+            padding: 20px;
+            margin-top: 15px;
+            border: 1px solid #25d36640;
+        }
+
+        .pairing-code-display {
+            background: #0d1e24;
+            border-radius: 16px;
+            padding: 20px;
+            font-size: 32px;
+            font-weight: 700;
+            letter-spacing: 8px;
+            color: #25d366;
+            font-family: monospace;
+            border: 2px dashed #25d36660;
+            margin: 10px 0;
+        }
+
+        .phone-input {
+            width: 100%;
+            background: #10262e;
+            border: 2px solid #254e5c;
+            border-radius: 24px;
+            padding: 15px 20px;
+            font-size: 16px;
+            color: white;
+            transition: all 0.2s;
+            margin-bottom: 12px;
+        }
+
+        .phone-input:focus {
+            outline: none;
+            border-color: #25d366;
+            box-shadow: 0 0 0 4px #25d36630;
+        }
+
+        .connection-buttons {
+            display: flex;
+            gap: 12px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+
+        .btn-qr, .btn-pairing, .btn-disconnect {
+            flex: 1;
+            padding: 14px 20px;
+            border-radius: 40px;
+            border: none;
+            font-weight: 600;
+            font-size: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            min-width: 140px;
+        }
+
+        .btn-qr {
+            background: linear-gradient(145deg, #25d366, #1fa852);
+            color: #0a1f1f;
+            box-shadow: 0 10px 20px -5px #1e824c;
+        }
+
+        .btn-pairing {
+            background: linear-gradient(145deg, #3498db, #2980b9);
+            color: white;
+            box-shadow: 0 10px 20px -5px #206694;
+        }
+
+        .btn-disconnect {
+            background: linear-gradient(145deg, #e74c3c, #c0392b);
+            color: white;
+            box-shadow: 0 10px 20px -5px #932b1f;
+        }
+
+        .btn-qr:hover, .btn-pairing:hover, .btn-disconnect:hover {
+            transform: translateY(-2px);
+            filter: brightness(1.1);
+        }
+
+        .config-card {
+            background: #0d1f26;
+            border-radius: 32px;
+            padding: 22px 20px;
+            margin-bottom: 25px;
+            border: 1px solid #2e4a54;
+            box-shadow: 0 20px 30px -15px black;
+        }
+
+        .config-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 18px;
+            border-bottom: 1px dashed #25d36650;
+            padding-bottom: 12px;
+        }
+
+        .config-header i {
+            font-size: 26px;
+            color: #25d366;
+        }
+
+        .config-header h3 {
+            font-size: 22px;
+            font-weight: 600;
+            color: #e1f5fe;
+        }
+
+        .field-info {
+            background: #15313b;
+            border-radius: 18px;
+            padding: 14px 16px;
+            margin-bottom: 24px;
+            font-size: 14px;
+            color: #bbdfe9;
+            border-left: 5px solid #25d366;
+            line-height: 1.6;
+            box-shadow: inset 0 1px 4px #00000060;
+        }
+
+        .field-info i {
+            color: #25d366;
+            margin-right: 6px;
+        }
+
+        .field-info strong {
+            color: white;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 600;
+            font-size: 15px;
+            color: #b6dae3;
+            margin-bottom: 6px;
+        }
+
+        .form-group label i {
+            color: #25d366;
+            width: 22px;
+            font-size: 18px;
+        }
+
+        .form-control {
+            width: 100%;
+            background: #10262e;
+            border: 2px solid #254e5c;
+            border-radius: 24px;
+            padding: 15px 20px;
+            font-size: 15px;
+            color: white;
+            transition: all 0.2s;
+            resize: vertical;
+            font-family: 'SF Mono', 'Fira Code', monospace;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: #25d366;
+            box-shadow: 0 0 0 4px #25d36630;
+            background: #0b1f27;
+        }
+
+        .form-control::placeholder {
+            color: #5e8693;
+            font-size: 14px;
+        }
+
+        .hint {
+            font-size: 13px;
+            color: #7a9fa8;
+            margin-top: 5px;
+            padding-left: 12px;
+        }
+
+        .btn-save {
+            background: linear-gradient(145deg, #25d366, #1fa852);
+            border: none;
+            border-radius: 60px;
+            padding: 18px 22px;
+            width: 100%;
+            font-weight: 700;
+            font-size: 18px;
+            color: #0a1f1f;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            cursor: pointer;
+            box-shadow: 0 10px 20px -5px #1e824c;
+            transition: all 0.2s ease;
+            border: 1px solid #82e2a0;
+            margin-top: 8px;
+        }
+
+        .btn-save:hover {
+            background: linear-gradient(145deg, #2ee97a, #25d366);
+            transform: scale(1.02) translateY(-3px);
+            box-shadow: 0 20px 25px -5px #25d36680;
+        }
+
+        .btn-save:active {
+            transform: scale(0.99);
+        }
+
+        .save-feedback {
+            margin-top: 15px;
+            text-align: center;
+            font-weight: 500;
+            min-height: 24px;
+        }
+
+        .logs-container {
+            background: #0a1a20;
+            border-radius: 24px;
+            padding: 15px;
+            margin-bottom: 20px;
+            max-height: 150px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+            border: 1px solid #2a4a55;
+        }
+
+        .log-entry {
+            padding: 4px 0;
+            border-bottom: 1px solid #1a3a45;
+            color: #aaccdd;
+        }
+
+        .log-success { color: #25d366; }
+        .log-error { color: #ff6b6b; }
+
+        .footer {
+            text-align: center;
+            color: #6a919c;
+            font-size: 13px;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 12px;
+            border-top: 1px solid #28434b;
+            padding-top: 18px;
+            margin-top: 8px;
+        }
+
+        .footer a {
+            color: #25d366;
+            font-weight: 600;
+            text-decoration: none;
+        }
+
+        @media (max-width: 450px) {
+            .dashboard { padding: 18px; }
+            .brand h1 { font-size: 24px; }
+            .status-pill { flex: 1 1 100%; }
+            .qr-placeholder { width: 160px; height: 160px; }
+            .pairing-code-display { font-size: 24px; letter-spacing: 4px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard">
+        <div class="top-bar">
+            <div class="brand">
+                <i class="fab fa-whatsapp"></i>
+                <h1>Muzamil-MD</h1>
+            </div>
+            <div class="badge">
+                <i class="fas fa-robot"></i> v2.1 · active
+            </div>
+        </div>
+
+        <div class="status-grid">
+            <div class="status-pill" id="waStatusPill">
+                <div class="status-icon"><i class="fab fa-whatsapp"></i></div>
+                <div class="status-info">
+                    <span class="status-label">WhatsApp session</span>
+                    <span class="status-value" id="whatsappStatus"><i class="fas fa-spinner fa-pulse"></i> loading</span>
+                </div>
+            </div>
+            <div class="status-pill" id="dbStatusPill">
+                <div class="status-icon"><i class="fas fa-database"></i></div>
+                <div class="status-info">
+                    <span class="status-label">Database</span>
+                    <span class="status-value" id="databaseStatus"><i class="fas fa-spinner fa-pulse"></i> loading</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="qr-panel" id="qrPanel">
+            <div id="qrContainer">
+                <div class="qr-display">
+                    <div class="qr-placeholder">
+                        <i class="fas fa-qrcode"></i>
+                    </div>
+                </div>
+                <div class="qr-status-text" id="qrStatusText">
+                    <i class="fas fa-spinner fa-pulse"></i> Ready to connect
+                </div>
+            </div>
+            
+            <div id="pairingContainer" style="display: none;">
+                <div class="pairing-code-box">
+                    <i class="fas fa-key" style="color: #25d366; font-size: 24px; margin-bottom: 10px;"></i>
+                    <div style="color: #8daeb6; margin-bottom: 5px;">Your pairing code:</div>
+                    <div class="pairing-code-display" id="pairingCodeDisplay">------</div>
+                    <div style="color: #c1dbe2; font-size: 14px; margin-top: 10px;">
+                        <i class="fas fa-info-circle"></i> Open WhatsApp > Linked Devices > Link with phone number
+                    </div>
+                </div>
+            </div>
+
+            <div class="connection-buttons">
+                <button class="btn-qr" onclick="requestQR()">
+                    <i class="fas fa-qrcode"></i> QR Code
+                </button>
+                <button class="btn-pairing" onclick="showPairingInput()">
+                    <i class="fas fa-phone"></i> Pairing Code
+                </button>
+                <button class="btn-disconnect" onclick="disconnectBot()">
+                    <i class="fas fa-power-off"></i> Disconnect
+                </button>
+            </div>
+
+            <div id="pairingInputDiv" style="display: none; margin-top: 15px;">
+                <input type="text" id="phoneNumber" class="phone-input" placeholder="Enter phone number (e.g., 923001234567)" value="">
+                <button class="btn-pairing" style="width: 100%;" onclick="requestPairing()">
+                    <i class="fas fa-key"></i> Generate Pairing Code
+                </button>
+            </div>
+        </div>
+
+        <div class="logs-container" id="logsContainer">
+            <div class="log-entry"><i class="fas fa-info-circle"></i> System ready</div>
+        </div>
+
+        <div class="config-card">
+            <div class="config-header">
+                <i class="fas fa-sliders-h"></i>
+                <h3>Message filter configuration</h3>
+            </div>
+
+            <div class="field-info">
+                <i class="fas fa-info-circle"></i> <strong>SOURCE JIDs</strong> = sender(s) — messages coming <strong>from</strong> these IDs will be monitored.<br>
+                <i class="fas fa-info-circle"></i> <strong>TARGET JIDs</strong> = receiver(s) — modified messages will be <strong>forwarded / replaced</strong> to these chats.<br>
+                <i class="fas fa-info-circle"></i> <strong>OLD TEXT REGEX</strong> : pattern(s) to match in original message (regular expression).<br>
+                <i class="fas fa-info-circle"></i> <strong>NEW TEXT</strong> : the text that replaces matched content.<br>
+                <span style="display: block; margin-top: 8px; background: #1a3f4a; padding: 5px 10px; border-radius: 40px;"><i class="fas fa-save"></i> Config is permanently stored in <code>botConfig.json</code> on server</span>
+            </div>
+
+            <div class="form-group">
+                <label><i class="fas fa-arrow-right-to-bracket"></i> SOURCE JIDs</label>
+                <textarea id="sourceJids" class="form-control" rows="2" placeholder="e.g. 92300123456@s.whatsapp.net, 1234567890@g.us"></textarea>
+                <div class="hint"><i class="far fa-lightbulb"></i> Separate by comma. These are the chat IDs that trigger the replacement.</div>
+            </div>
+
+            <div class="form-group">
+                <label><i class="fas fa-arrow-left-from-bracket"></i> TARGET JIDs</label>
+                <textarea id="targetJids" class="form-control" rows="2" placeholder="e.g. 92333123456@s.whatsapp.net, group@g.us"></textarea>
+                <div class="hint"><i class="far fa-lightbulb"></i> Destination chat(s) where the modified message will be sent.</div>
+            </div>
+
+            <div class="form-group">
+                <label><i class="fas fa-code"></i> OLD TEXT REGEX (patterns)</label>
+                <input type="text" id="oldTextRegex" class="form-control" placeholder="e.g. hello.*world, price: [0-9]+, (urgent)">
+                <div class="hint"><i class="far fa-lightbulb"></i> Regular expression, case-sensitive. Use comma to separate multiple patterns.</div>
+            </div>
+
+            <div class="form-group">
+                <label><i class="fas fa-pen-to-square"></i> NEW TEXT (replacement)</label>
+                <input type="text" id="newText" class="form-control" placeholder="e.g. ✅ Message auto‑updated">
+                <div class="hint"><i class="far fa-lightbulb"></i> The text that will replace the matched content.</div>
+            </div>
+
+            <button class="btn-save" onclick="saveConfig()">
+                <i class="fas fa-cloud-upload-alt fa-lg"></i> Permanently save config
+            </button>
+            <div id="configMsg" class="save-feedback"></div>
+        </div>
+
+        <div class="footer">
+            <span><i class="fas fa-heart" style="color: #ff5e6b;"></i> mrwasif-dev</span>
+            <span>© 2026 Muzamil-MD</span>
+            <span><a href="#"><i class="fas fa-sync-alt"></i> live</a></span>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        let currentPairingCode = null;
+
+        socket.on('connect', () => {
+            console.log('Connected to server');
+        });
+
+        socket.on('initial_status', (data) => {
+            updateStatus(data);
+            if (data.pairingCode) {
+                showPairingCode(data.pairingCode);
+            }
+        });
+
+        socket.on('status_update', (data) => {
+            updateStatus(data);
+        });
+
+        socket.on('qr_update', (data) => {
+            displayQR(data.qr);
+        });
+
+        socket.on('pairing_code', (data) => {
+            showPairingCode(data.code);
+        });
+
+        socket.on('log', (data) => {
+            addLog(data.type, data.message);
+        });
+
+        socket.on('error', (data) => {
+            addLog('error', data.message);
+        });
+
+        function updateStatus(data) {
+            const waEl = document.getElementById('whatsappStatus');
+            const dbEl = document.getElementById('databaseStatus');
+            
+            if (data.status === 'connected') {
+                waEl.innerHTML = '<i class="fas fa-check-circle"></i> Connected';
+                waEl.className = 'status-value connected';
+                document.getElementById('qrStatusText').innerHTML = '<i class="fas fa-check-circle"></i> WhatsApp session active';
+                hideQR();
+                hidePairing();
+            } else if (data.status === 'connecting') {
+                waEl.innerHTML = '<i class="fas fa-spinner fa-pulse"></i> Connecting';
+                waEl.className = 'status-value';
+                document.getElementById('qrStatusText').innerHTML = '<i class="fas fa-spinner fa-pulse"></i> Connecting...';
+            } else {
+                waEl.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Disconnected';
+                waEl.className = 'status-value disconnected';
+            }
+
+            if (data.databaseConnected) {
+                dbEl.innerHTML = '<i class="fas fa-check-circle"></i> Connected';
+                dbEl.className = 'status-value connected';
+            } else {
+                dbEl.innerHTML = '<i class="fas fa-times-circle"></i> Disconnected';
+                dbEl.className = 'status-value disconnected';
+            }
+        }
+
+        function displayQR(qrData) {
+            const qrContainer = document.getElementById('qrContainer');
+            qrContainer.innerHTML = `
+                <div class="qr-display">
+                    <img src="${qrData}" alt="Scan QR">
+                </div>
+                <div class="qr-status-text"><i class="fas fa-camera"></i> Scan with WhatsApp</div>
+            `;
+            document.getElementById('pairingContainer').style.display = 'none';
+        }
+
+        function showPairingCode(code) {
+            currentPairingCode = code;
+            document.getElementById('qrContainer').style.display = 'none';
+            document.getElementById('pairingContainer').style.display = 'block';
+            document.getElementById('pairingCodeDisplay').textContent = code;
+            document.getElementById('qrStatusText').innerHTML = '<i class="fas fa-key"></i> Use pairing code to connect';
+        }
+
+        function hideQR() {
+            document.getElementById('qrContainer').style.display = 'block';
+            document.getElementById('pairingContainer').style.display = 'none';
+        }
+
+        function hidePairing() {
+            document.getElementById('pairingContainer').style.display = 'none';
+            document.getElementById('qrContainer').style.display = 'block';
+        }
+
+        function requestQR() {
+            document.getElementById('pairingInputDiv').style.display = 'none';
+            socket.emit('request_qr');
+            addLog('info', 'Requesting QR code...');
+        }
+
+        function showPairingInput() {
+            document.getElementById('pairingInputDiv').style.display = 'block';
+        }
+
+        function requestPairing() {
+            const phoneNumber = document.getElementById('phoneNumber').value.trim();
+            if (!phoneNumber) {
+                alert('Please enter phone number');
+                return;
+            }
+            socket.emit('request_pairing', { phoneNumber });
+            addLog('info', `Requesting pairing code for ${phoneNumber}...`);
+            document.getElementById('pairingInputDiv').style.display = 'none';
+        }
+
+        function disconnectBot() {
+            if (confirm('Are you sure you want to disconnect the bot?')) {
+                socket.emit('disconnect_bot');
+                addLog('info', 'Disconnecting bot...');
+            }
+        }
+
+        function addLog(type, message) {
+            const logsContainer = document.getElementById('logsContainer');
+            const logEntry = document.createElement('div');
+            logEntry.className = 'log-entry';
+            
+            let icon = 'fa-info-circle';
+            let colorClass = '';
+            
+            if (type === 'success') {
+                icon = 'fa-check-circle';
+                colorClass = 'log-success';
+            } else if (type === 'error') {
+                icon = 'fa-exclamation-circle';
+                colorClass = 'log-error';
+            }
+            
+            logEntry.innerHTML = `<i class="fas ${icon} ${colorClass}"></i> ${new Date().toLocaleTimeString()} - ${message}`;
+            logsContainer.appendChild(logEntry);
+            logsContainer.scrollTop = logsContainer.scrollHeight;
+            
+            if (logsContainer.children.length > 50) {
+                logsContainer.removeChild(logsContainer.children[0]);
+            }
+        }
+
+        async function loadConfig() {
+            try {
+                const res = await fetch('/api/config');
+                const config = await res.json();
+                
+                document.getElementById('sourceJids').value = (config.sourceJids && Array.isArray(config.sourceJids)) ? config.sourceJids.join(', ') : '';
+                document.getElementById('targetJids').value = (config.targetJids && Array.isArray(config.targetJids)) ? config.targetJids.join(', ') : '';
+                document.getElementById('oldTextRegex').value = (config.oldTextRegex && Array.isArray(config.oldTextRegex)) ? config.oldTextRegex.join(', ') : '';
+                document.getElementById('newText').value = config.newText || '';
+                
+                addLog('success', 'Config loaded');
+            } catch (e) {
+                console.warn('Config load failed:', e);
+            }
+        }
+
+        async function saveConfig() {
+            const sourceJids = document.getElementById('sourceJids').value.split(',').map(j => j.trim()).filter(j => j.length > 0);
+            const targetJids = document.getElementById('targetJids').value.split(',').map(j => j.trim()).filter(j => j.length > 0);
+            const oldTextRegex = document.getElementById('oldTextRegex').value.split(',').map(p => p.trim()).filter(p => p.length > 0);
+            const newText = document.getElementById('newText').value.trim();
+
+            const feedback = document.getElementById('configMsg');
+            feedback.innerHTML = '<span style="color: #faa83b;"><i class="fas fa-spinner fa-pulse"></i> saving to botConfig.json ...</span>';
+
+            try {
+                const res = await fetch('/api/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ sourceJids, targetJids, oldTextRegex, newText })
+                });
+                
+                const data = await res.json();
+                
+                if (data.success) {
+                    feedback.innerHTML = '<span style="color: #25d366;"><i class="fas fa-check-circle"></i> ✓ configuration saved permanently!</span>';
+                    addLog('success', 'Config saved');
+                    setTimeout(() => feedback.innerHTML = '', 3200);
+                } else {
+                    feedback.innerHTML = '<span style="color: #ff6b7c;"><i class="fas fa-times-circle"></i> saving failed</span>';
+                }
+            } catch (err) {
+                feedback.innerHTML = '<span style="color: #ff6b7c;"><i class="fas fa-exclamation-triangle"></i> network error</span>';
+            }
+        }
+
+        loadConfig();
+    </script>
+</body>
+</html>
