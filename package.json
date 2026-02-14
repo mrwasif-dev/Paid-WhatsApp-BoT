@@ -1,7 +1,6 @@
 {
   "name": "paid-whatsapp-bot",
   "version": "1.0.0",
-  "description": "WhatsApp Bot with QR and Pairing Code Support",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
