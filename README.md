@@ -28,7 +28,7 @@
   
   <!-- Cyclic -->
   <a href="https://app.cyclic.sh/api/app/deploy/mrwasif-dev/Muzamil-MD">
-    <img src="https://deploy.cyclic.app/button.svg" alt="Deploy to Cyclic" width="200"/>
+    <img src="https://cyclic.sh/deploy/button.svg" alt="Deploy to Cyclic" width="200"/>
   </a>
   <br>
   
@@ -39,18 +39,18 @@
   
   <!-- Netlify -->
   <a href="https://app.netlify.com/start/deploy?repository=https://github.com/mrwasif-dev/Muzamil-MD">
-    <img src="https://www.netlify.com/img/deploy/button.svg" alt="Deploy to Netlify" width="200"/>
+    <img src="https://www.netlify.com/v3/img/components/netlify-color-bg.svg" alt="Deploy to Netlify" width="200"/>
   </a>
   <br>
   
   <!-- Google Cloud -->
   <a href="https://deploy.cloud.run/?git_repo=https://github.com/mrwasif-dev/Muzamil-MD.git">
-    <img src="https://deploy.cloud.run/button.svg" alt="Run on Google Cloud" width="200"/>
+    <img src="https://storage.googleapis.com/cloudrun/button.svg" alt="Run on Google Cloud" width="200"/>
   </a>
   
   <!-- Northflank -->
   <a href="https://app.northflank.com/signup?deploy=mrwasif-dev/Muzamil-MD">
-    <img src="https://northflank.com/images/deploy-button.svg" alt="Deploy to Northflank" width="200"/>
+    <img src="https://northflank.com/deploy-button.svg" alt="Deploy to Northflank" width="200"/>
   </a>
   <br>
   
@@ -61,7 +61,7 @@
   
   <!-- Fly.io -->
   <a href="https://fly.io/launch/github/mrwasif-dev/Muzamil-MD">
-    <img src="https://fly.io/static/images/badge.svg" alt="Deploy to Fly.io" width="200"/>
+    <img src="https://fly.io/static/badge.svg" alt="Deploy to Fly.io" width="200"/>
   </a>
   <br>
   
@@ -72,13 +72,13 @@
   
   <!-- PythonAnywhere -->
   <a href="https://www.pythonanywhere.com/?start_repo=mrwasif-dev/Muzamil-MD">
-    <img src="https://www.pythonanywhere.com/static/anywhere.png" alt="PythonAnywhere" width="200"/>
+    <img src="https://www.pythonanywhere.com/static/anywhere.png" alt="Deploy to PythonAnywhere" width="200"/>
   </a>
   <br>
   
   <!-- Deta Space -->
   <a href="https://deta.space/new?ref=mrwasif-dev/Muzamil-MD">
-    <img src="https://deta.space/static/space-badge.svg" alt="Deploy to Deta Space" width="200"/>
+    <img src="https://deta.space/static/button.svg" alt="Deploy to Deta Space" width="200"/>
   </a>
   
   <!-- AlwaysData -->
@@ -94,7 +94,7 @@
   
   <!-- Clever Cloud -->
   <a href="https://api.clever-cloud.com/v2/apps/create?ref=mrwasif-dev/Muzamil-MD">
-    <img src="https://res.cloudinary.com/clever-cloud/image/upload/v1/logos/clever-cloud.png" alt="Clever Cloud" width="200"/>
+    <img src="https://res.cloudinary.com/clever-cloud/image/upload/v1/logos/clever-cloud.svg" alt="Clever Cloud" width="200"/>
   </a>
   <br>
   
@@ -133,7 +133,7 @@
   
   <!-- Cloudflare Workers -->
   <a href="https://workers.cloudflare.com/?ref=muzamil">
-    <img src="https://img.stackshare.io/service/8654/cloudflare-workers.png" alt="Cloudflare Workers" width="200"/>
+    <img src="https://imagedelivery.net/46u4s15wLPFdcPc5D8G5bA/e501fd73-57bb-4158-b5a7-55b3c68b7900/public" alt="Cloudflare Workers" width="200"/>
   </a>
   
   <!-- Zeabur -->
@@ -153,7 +153,7 @@
   </a>
   <br>
   
-  <!-- Section -->
+  <!-- Section.io -->
   <a href="https://www.section.io/?ref=muzamil">
     <img src="https://www.section.io/assets/img/brand/section-logo.png" alt="Section.io" width="200"/>
   </a>
@@ -175,7 +175,7 @@
   </a>
   <br>
   
-  <!--最后一个按钮：Back to Top -->
+  <!-- Back to Top -->
   <a href="#top">
     <img src="https://img.shields.io/badge/🔝-Back_to_Top-blue?style=for-the-badge" alt="Back to Top" width="200"/>
   </a>
