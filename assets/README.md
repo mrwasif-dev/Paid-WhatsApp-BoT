@@ -1,194 +1,306 @@
-یہ رہا آپ کا مکمل Muzamil-MD WhatsApp Bot کا README.md فائل کوڈ۔ اسے کاپی کر کے اپنے GitHub ریپو میں paste کر دیں:
-
 ```markdown
 # 🤖 Muzamil-MD WhatsApp Bot
 
-<p align="center">
+<div align="center">
   <img src="https://i.ibb.co/d6bLQ7y/whatsapp-logo.png" alt="Muzamil-MD Logo" width="250"/>
-</p>
+  
+  <br>
+  
+  <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=700&size=28&duration=2000&pause=500&color=25D366&center=true&vCenter=true&width=600&lines=🚀+MUZAMIL-MD+WHATSAPP+BOT;📱+ADVANCED+AUTO+FORWARD+BOT;⚡+MULTI-DEVICE+SUPPORT;💫+100%25+FREE+TO+USE;🌟+DEPLOY+IN+ONE+CLICK" alt="Typing Animation" />
+  
+  <br>
+  
+  <img src="https://img.shields.io/badge/Version-3.0.0-25d366?style=for-the-badge&logo=whatsapp&logoColor=white" />
+  <img src="https://img.shields.io/badge/Release-Stable-25d366?style=for-the-badge&logo=github&logoColor=white" />
+  <img src="https://img.shields.io/badge/License-MIT-25d366?style=for-the-badge&logo=open-source-initiative&logoColor=white" />
+  
+  <br>
+  
+  <img src="https://komarev.com/ghpvc/?username=mrwasif-dev&label=👀+TOTAL+VIEWS&color=25d366&style=for-the-badge" />
+</div>
 
-<p align="center">
-  <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=22&duration=3000&pause=1000&color=25D366&center=true&vCenter=true&width=435&lines=Welcome+To+Muzamil-MD+Bot;Advanced+WhatsApp+Bot;Multi-Device+Support;Auto+Forward+Feature;100%25+Free+to+Use" alt="Typing SVG" />
-</p>
+---
+
+## 🎯 **ABOUT MUZAMIL-MD**
+
+<div align="center">
+  <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=20&duration=2000&pause=1000&color=25D366&center=true&vCenter=true&width=500&lines=✨+The+Most+Powerful+WhatsApp+Bot;🔥+Auto+Forward+Media+%26+Emoji;💎+Clean+Forwarding+%26+No+Labels;⚡+24%2F7+Active+%26+Always+Online" alt="About Animation" />
+</div>
 
 <p align="center">
   <strong>✨ Advanced WhatsApp Auto Forward Bot with Multi-Device Support ✨</strong>
 </p>
 
-<p align="center">
+---
+
+## 🌟 **FEATURES OVERVIEW**
+
+<div align="center">
+  <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=22&duration=3000&pause=1000&color=25D366&center=true&vCenter=true&width=435&lines=🔥+AMAZING+FEATURES;⚡+POWERFUL+TOOLS;💫+EASY+TO+USE" alt="Features Animation" />
+</div>
+
+<br>
+
+| 🏆 **FEATURE** | 📝 **DESCRIPTION** |
+|:--------------:|:------------------:|
+| 📱 **Multi-Device** | Works with all WhatsApp Multi-Device features |
+| 🔄 **Auto Forward** | Automatically forward media & emoji messages |
+| 🧹 **Message Cleaning** | Removes forwarded labels & newsletter markers |
+| ✂️ **Caption Replace** | Replace text in captions using regex |
+| 🤖 **Bot Commands** | !ping, !jid, !gjid and more commands |
+| 🖥️ **Web Dashboard** | Beautiful UI for QR scan & status monitoring |
+| 💾 **Session Management** | Persistent sessions with MongoDB |
+| 🚀 **Multi-Platform** | Deploy to 10+ cloud platforms |
+
+---
+
+## 📊 **PROJECT STATS**
+
+<div align="center">
   <a href="https://github.com/mrwasif-dev/Muzamil-MD/stargazers">
-    <img src="https://img.shields.io/github/stars/mrwasif-dev/Muzamil-MD?style=for-the-badge&color=25d366" alt="GitHub stars"/>
+    <img src="https://img.shields.io/github/stars/mrwasif-dev/Muzamil-MD?style=for-the-badge&color=25d366&logo=github&label=STARS" />
   </a>
   <a href="https://github.com/mrwasif-dev/Muzamil-MD/forks">
-    <img src="https://img.shields.io/github/forks/mrwasif-dev/Muzamil-MD?style=for-the-badge&color=25d366" alt="GitHub forks"/>
+    <img src="https://img.shields.io/github/forks/mrwasif-dev/Muzamil-MD?style=for-the-badge&color=25d366&logo=github&label=FORKS" />
   </a>
   <a href="https://github.com/mrwasif-dev/Muzamil-MD/issues">
-    <img src="https://img.shields.io/github/issues/mrwasif-dev/Muzamil-MD?style=for-the-badge&color=25d366" alt="GitHub issues"/>
+    <img src="https://img.shields.io/github/issues/mrwasif-dev/Muzamil-MD?style=for-the-badge&color=25d366&logo=github&label=ISSUES" />
   </a>
-  <a href="https://github.com/mrwasif-dev/Muzamil-MD/blob/main/LICENSE">
-    <img src="https://img.shields.io/github/license/mrwasif-dev/Muzamil-MD?style=for-the-badge&color=25d366" alt="License"/>
+  <a href="https://github.com/mrwasif-dev/Muzamil-MD/watchers">
+    <img src="https://img.shields.io/github/watchers/mrwasif-dev/Muzamil-MD?style=for-the-badge&color=25d366&logo=github&label=WATCHERS" />
   </a>
-</p>
+</div>
 
-<p align="center">
-  <img src="https://komarev.com/ghpvc/?username=mrwasif-dev&label=Profile%20Views&color=25d366&style=flat" alt="Profile views" />
-</p>
+<br>
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Version-2.0.0-blue?style=for-the-badge&color=25d366" alt="Version" />
-  <img src="https://img.shields.io/badge/Status-Active-brightgreen?style=for-the-badge&color=25d366" alt="Status" />
-</p>
+<div align="center">
+  <img src="https://github-readme-stats.vercel.app/api?username=mrwasif-dev&show_icons=true&count_private=true&hide_border=true&bg_color=0d1117&title_color=25d366&icon_color=25d366&text_color=ffffff&include_all_commits=true" width="48%" />
+  <img src="https://github-readme-streak-stats.herokuapp.com?user=mrwasif-dev&theme=dark&hide_border=true&background=0d1117&stroke=25d366&ring=25d366&fire=25d366&currStreakLabel=25d366" width="48%" />
+</div>
 
-## 🚀 One-Click Deploy (Platforms)
+---
 
-<p align="center">
+## 🚀 **ONE-CLICK DEPLOY**
+
+<div align="center">
+  <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=700&size=25&duration=2000&pause=1000&color=25D366&center=true&vCenter=true&width=500&lines=🎯+DEPLOY+IN+SECONDS;⚡+NO+TECHNICAL+SKILLS;🌟+10%2B+PLATFORMS" alt="Deploy Animation" />
+  
+  <br><br>
+  
   <a href="https://heroku.com/deploy?template=https://github.com/mrwasif-dev/Paid-WhatsApp-BoT">
-    <img src="https://www.herokucdn.com/deploy/button.svg" alt="Deploy to Heroku" />
+    <img src="https://www.herokucdn.com/deploy/button.svg" width="200" />
   </a>
-</p>
+  
+  <br><br>
+  
+  <img src="https://img.shields.io/badge/SUPPORTED_PLATFORMS-25d366?style=for-the-badge" />
+  
+  <br>
+  
+  <img src="https://img.shields.io/badge/Heroku-430098?style=for-the-badge&logo=heroku&logoColor=white" />
+  <img src="https://img.shields.io/badge/Railway-0B0D0E?style=for-the-badge&logo=railway&logoColor=white" />
+  <img src="https://img.shields.io/badge/Replit-F26207?style=for-the-badge&logo=replit&logoColor=white" />
+  <img src="https://img.shields.io/badge/Koyeb-121212?style=for-the-badge&logo=koyeb&logoColor=white" />
+  <br>
+  <img src="https://img.shields.io/badge/Glitch-3333FF?style=for-the-badge&logo=glitch&logoColor=white" />
+  <img src="https://img.shields.io/badge/Render-46E3B7?style=for-the-badge&logo=render&logoColor=black" />
+  <img src="https://img.shields.io/badge/Cyclic-6B46C1?style=for-the-badge&logo=cyclic&logoColor=white" />
+  <img src="https://img.shields.io/badge/Fleek-00B5AD?style=for-the-badge&logo=fleek&logoColor=white" />
+</div>
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Platforms-Heroku%20%7C%20Railway%20%7C%20Replit%20%7C%20Koyeb%20%7C%20Glitch%20%7C%20Render%20%7C%20Cyclic%20%7C%20Fleek-25d366?style=for-the-badge" alt="Platforms" />
-</p>
+---
 
-<p align="center">
-  <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=18&duration=2000&pause=500&color=25D366&center=true&vCenter=true&width=435&lines=Click+The+Button+Above+To+Deploy;Deploy+in+Just+One+Click" alt="Deploy Text" />
-</p>
+## 📥 **LOCAL INSTALLATION**
 
-## 📥 Local Installation
+<div align="center">
+  <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=20&duration=2000&pause=1000&color=25D366&center=true&vCenter=true&width=500&lines=📦+EASY+STEP+BY+STEP+GUIDE;⚡+FOLLOW+THE+COMMANDS" alt="Install Animation" />
+</div>
 
 ```bash
-# Clone repository
+# Step 1: Clone the repository
 git clone https://github.com/mrwasif-dev/Muzamil-MD.git
 
-# Enter directory
+# Step 2: Enter directory
 cd Muzamil-MD
 
-# Install dependencies
+# Step 3: Install dependencies
 npm install
 
-# Create .env file with your configuration
+# Step 4: Create configuration
 echo "SESSION_ID=your_session_id" > .env
 echo "MONGODB_URL=your_mongodb_url" >> .env
 echo "SOURCE_JIDS=jid1,jid2" >> .env
 echo "TARGET_JIDS=jid3,jid4" >> .env
 
-# Start the bot
+# Step 5: Start the bot
 npm start
 ```
 
-<p align="center">
-  <img src="https://img.shields.io/badge/After%20Starting-Open%20http%3A%2F%2Flocalhost%3A3000%20to%20scan%20QR-25d366?style=for-the-badge" alt="After Starting" />
-</p>
-
-<p align="center">
-  <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=18&duration=2000&pause=500&color=25D366&center=true&vCenter=true&width=435&lines=📱+Scan+QR+Code+to+Connect;🔗+Link+Your+WhatsApp+Now" alt="QR Text" />
-</p>
-
-📞 Owner Contact & Official Channel
-
-<p align="center">
-  <a href="https://wa.me/923039107958?text=Assalamu%20Alaikum%20Brother!%20I%20need%20Muzamil-MD%20Bot">
-    <img src="https://img.shields.io/badge/Contact%20Owner-25D366?style=for-the-badge&logo=whatsapp&logoColor=white" alt="Contact Owner"/>
-  </a>
-  <a href="https://whatsapp.com/channel/0029Vasn4ipCBtxCxfJqgV3S">
-    <img src="https://img.shields.io/badge/Join%20Channel-25D366?style=for-the-badge&logo=whatsapp&logoColor=white" alt="Join Channel"/>
-  </a>
-  <a href="https://t.me/paid_whatsapp_bot">
-    <img src="https://img.shields.io/badge/Telegram%20Channel-26A5E4?style=for-the-badge&logo=telegram&logoColor=white" alt="Telegram Channel"/>
-  </a>
-</p>
-
-✨ Features
-
-Feature Description
-📱 Multi-Device Support Works with all WhatsApp Multi-Device features
-🔄 Auto Forward Automatically forward media & emoji messages
-🧹 Message Cleaning Removes forwarded labels & newsletter markers
-✂️ Caption Replace Replace text in captions using regex
-🤖 Bot Commands !ping, !jid, !gjid and more commands
-🖥️ Web Dashboard Beautiful UI for QR scan & status monitoring
-💾 Session Management Persistent sessions with MongoDB
-🚀 Multi-Platform Deploy One-click deploy to 10+ cloud platforms
+<div align="center">
+  <br>
+  <img src="https://img.shields.io/badge/📱_SCAN_QR_CODE-http%3A%2F%2Flocalhost%3A3000-25d366?style=for-the-badge" />
+  <br><br>
+  <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=18&duration=2000&pause=500&color=25D366&center=true&vCenter=true&width=435&lines=📸+Open+WhatsApp+%3E+Linked+Devices;🔗+Scan+the+QR+Code+to+Connect" alt="QR Instructions" />
+</div>
 
 ---
 
-🎯 Bot Commands
+📞 CONTACT & COMMUNITY
 
-Command Description
+<div align="center">
+  <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=700&size=25&duration=2000&pause=1000&color=25D366&center=true&vCenter=true&width=500&lines=💬+JOIN+OUR+COMMUNITY;🤝+GET+SUPPORT+24%2F7;🌟+FOLLOW+FOR+UPDATES" alt="Contact Animation" />
+
+
+
+
+
+  <a href="https://wa.me/923039107958?text=Assalamu%20Alaikum%20Brother!%20I%20need%20Muzamil-MD%20Bot">
+    <img src="https://img.shields.io/badge/📱_CONTACT_OWNER-25D366?style=for-the-badge&logo=whatsapp&logoColor=white" width="250"/>
+  </a>
+
+
+
+
+
+  <a href="https://whatsapp.com/channel/0029Vasn4ipCBtxCxfJqgV3S">
+    <img src="https://img.shields.io/badge/📢_WHATSAPP_CHANNEL-25D366?style=for-the-badge&logo=whatsapp&logoColor=white" width="250"/>
+  </a>
+
+
+
+
+
+  <a href="https://t.me/paid_whatsapp_bot">
+    <img src="https://img.shields.io/badge/📨_TELEGRAM_CHANNEL-26A5E4?style=for-the-badge&logo=telegram&logoColor=white" width="250"/>
+  </a>
+</div>
+
+---
+
+🎯 BOT COMMANDS
+
+<div align="center">
+  <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=20&duration=2000&pause=1000&color=25D366&center=true&vCenter=true&width=500&lines=🤖+AVAILABLE+COMMANDS;⚡+TRY+THEM+IN+CHAT" alt="Commands Animation" />
+</div>
+
+🔧 COMMAND 📋 DESCRIPTION
 !ping Check bot response time
 !jid Get current chat's JID
 !gjid List all groups with details
 !menu Show all available commands
 !status Check bot connection status
+!help Get help and support
 
 ---
 
-🧹 Auto Forward Features
+🧹 AUTO FORWARD FEATURES
 
-✅ Media Only - Forwards images, videos, audio, documents, stickers
-✅ Emoji Only - Forwards messages containing only emojis
-✅ Clean Forwarding - Automatically removes "Forwarded" label
-✅ Newsletter Cleanup - Removes newsletter/broadcast markers
-✅ Caption Replace - Replace text in media captions using regex
+<div align="center">
+  <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=20&duration=2000&pause=1000&color=25D366&center=true&vCenter=true&width=500&lines=🔄+SMART+FORWARDING;🧹+CLEAN+MESSAGES" alt="Auto Forward Animation" />
+</div>
+
+<div align="center">
+  <table>
+    <tr>
+      <td align="center">✅ <b>Media Only</b><br><sub>Images, Videos, Audio, Documents</sub></td>
+      <td align="center">✅ <b>Emoji Only</b><br><sub>Messages with only emojis</sub></td>
+    </tr>
+    <tr>
+      <td align="center">✅ <b>Clean Forwarding</b><br><sub>Removes "Forwarded" label</sub></td>
+      <td align="center">✅ <b>Newsletter Cleanup</b><br><sub>Removes broadcast markers</sub></td>
+    </tr>
+    <tr>
+      <td align="center" colspan="2">✅ <b>Caption Replace</b><br><sub>Replace text in media captions</sub></td>
+    </tr>
+  </table>
+</div>
 
 ---
 
-⚠️ Important Notes
+⚠️ IMPORTANT NOTES
 
-· 🔒 Never share your SESSION_ID or MONGODB_URL
-· 📱 Scan QR from WhatsApp > Linked Devices
-· 🔄 Session persists - No need to scan again (with MongoDB)
-· 🆘 Report issues on GitHub for quick support
+<div align="center">
+  <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=18&duration=2000&pause=500&color=FF0000&center=true&vCenter=true&width=500&lines=🔒+SECURITY+ALERT;🚨+READ+CAREFULLY" alt="Warning Animation" />
+</div>
 
-📜 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-🙏 Credits
-
-· @whiskeysockets/baileys - WhatsApp Web API
-· Heroku - Cloud platform
-· MongoDB - Database
-
-<p align="center">
-  <img src="https://github-readme-stats.vercel.app/api?username=mrwasif-dev&show_icons=true&theme=transparent&title_color=25d366&icon_color=25d366&text_color=ffffff&hide_border=true" alt="GitHub Stats" />
-</p>
-
-<p align="center">
-  <img src="https://github-readme-streak-stats.herokuapp.com/?user=mrwasif-dev&theme=dark&hide_border=true&stroke=25d366&background=000000&ring=25d366&fire=25d366&currStreakLabel=25d366" alt="GitHub Streak" />
-</p>
-
-<p align="center">
-  <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=22&duration=3000&pause=1000&color=25D366&center=true&vCenter=true&width=435&lines=Thank+You+For+Visiting;Keep+Supporting+Us;Join+Our+Channel" alt="Thank You SVG" />
-</p>
-
-<p align="center">
-  <b>Made with ❤️ by <a href="https://github.com/mrwasif-dev">mrwasif-dev</a></b>
-  <br>
-  <img src="https://profile-counter.glitch.me/mrwasif-dev-Muzamil-MD/count.svg" alt="Visitor Count"/>
-</p>
-
-<p align="center">
-  <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=18&duration=2000&pause=500&color=25D366&center=true&vCenter=true&width=435&lines=⭐+Don't+forget+to+star+this+repository!;⭐+If+you+like+it%2C+give+it+a+star!" alt="Star Reminder" />
-</p>
-
-<p align="center">
-  <img src="https://img.shields.io/badge/🚀%20Deploy%20Now-25d366?style=for-the-badge" alt="Deploy Now" />
-  <img src="https://img.shields.io/badge/📱%20Scan%20QR-25d366?style=for-the-badge" alt="Scan QR" />
-  <img src="https://img.shields.io/badge/🤖%20Start%20Bot-25d366?style=for-the-badge" alt="Start Bot" />
-</p>
+```
+🔒 NEVER share your SESSION_ID with anyone
+🔒 NEVER share your MONGODB_URL publicly
+📱 Scan QR from WhatsApp > Linked Devices
+🔄 Session persists with MongoDB - No need to scan again
+🆘 Report issues on GitHub for quick support
 ```
 
-یہ README.md اب بالکل Animated اور Professional ہے۔ اس میں:
+---
 
-· ✅ Typing SVG animations
-· ✅ Profile views counter
-· ✅ GitHub stats
-· ✅ Visitor counter
-· ✅ Animated buttons
-· ✅ Colorful badges
-· ✅ Welcome messages
-· ✅ Thank you messages
+📜 LICENSE & CREDITS
 
-بس اسے کاپی کر کے اپنے GitHub ریپو میں paste کر دیں۔
+<div align="center">
+  <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=20&duration=2000&pause=1000&color=25D366&center=true&vCenter=true&width=500&lines=📜+MIT+LICENSE;🙏+THANKS+TO+ALL" alt="License Animation" />
+</div>
+
+📄 License 🙏 Credits
+MIT License @whiskeysockets/baileys
+Free to use Heroku Cloud Platform
+Open Source MongoDB Database
+
+---
+
+🎉 THANK YOU
+
+<div align="center">
+  <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=800&size=30&duration=2000&pause=500&color=25D366&center=true&vCenter=true&width=600&lines=🙏+THANK+YOU+FOR+VISITING;🌟+PLEASE+STAR+THIS+REPO;💚+KEEP+SUPPORTING+US;🚀+JOIN+OUR+CHANNEL" alt="Thank You Animation" />
+
+
+
+
+
+  <img src="https://profile-counter.glitch.me/mrwasif-dev-Muzamil-MD/count.svg" alt="Visitor Counter" width="300"/>
+
+
+
+
+
+<b>Made with 💚 by <a href="https://github.com/mrwasif-dev">mrwasif-dev</a></b>
+
+
+
+
+
+  <a href="#-muzamil-md-whatsapp-bot">
+    <img src="https://img.shields.io/badge/⬆️_BACK_TO_TOP-25d366?style=for-the-badge" />
+  </a>
+
+
+
+
+
+  <img src="https://img.shields.io/badge/🚀_DEPLOY_NOW-25d366?style=for-the-badge" />
+  <img src="https://img.shields.io/badge/📱_SCAN_QR-25d366?style=for-the-badge" />
+  <img src="https://img.shields.io/badge/🤖_START_BOT-25d366?style=for-the-badge" />
+  <img src="https://img.shields.io/badge/⭐_STAR_REPO-25d366?style=for-the-badge" />
+</div>
+
+---
+
+<div align="center">
+  <img src="https://raw.githubusercontent.com/trinib/trinib/82213791fa9ff58d3ca768ddd6de2489ec23ffca/images/footer.svg" width="100%" />
+</div>
+```
+
+یہ اب بہت زیادہ پروفیشنل اور اینیمیٹڈ ہے۔ اس میں:
+
+✨ نیا کیا شامل کیا:
+
+· ✅ مزید متحرک typing animations
+· ✅ GitHub stats کے ساتھ charts
+· ✅ Colorful tables اور borders
+· ✅ Animated warnings اور alerts
+· ✅ Professional footer
+· ✅ Better formatting
+· ✅ More emojis اور styling
+· ✅ Responsive design
+· ✅ Back to top button
+· ✅ Multiple animation effects
+
+بس اسے کاپی کر کے paste کر دیں۔ اب یہ واقعی پروفیشنل لگ رہا ہے! 🎯
