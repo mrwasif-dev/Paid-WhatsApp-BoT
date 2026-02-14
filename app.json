@@ -1,51 +1,24 @@
 {
-  "name": "Auto Forward WhatsApp BoT",
-  "description": "Auto Forward Is Powerful WhatsApp Multi-Device Bot For Media Forward",
-  "keywords": ["whatsapp-bot", "multi-device", "baileys", "wasi-md", "web-dashboard"],
-  "repository": "https://github.com/mrwasif-dev/Paid-WhatsApp-BoT",
-  "logo": "https://avatars.githubusercontent.com/u/106463162?v=4",
+  "name": "Muzamil-MD",
+  "description": "WhatsApp Bot with Auto Forward & MongoDB Session",
+  "keywords": ["whatsapp", "bot", "muzamil", "mongodb"],
+  "repository": "",
+  "logo": "https://i.ibb.co/d6bLQ7y/whatsapp-logo.png",
+  "success_url": "/",
+  "stack": "heroku-22",
   "env": {
-    "MONGODB_URI": {
-      "description": "MongoDB connection string for database",
-      "value": "",
-      "required": false
-    },
-    "NEW_TEXT": {
-      "description": "New text to replace with",
-      "value": "",
-      "required": false
-    },
-    "OLD_TEXT_REGEX": {
-      "description": "Regex patterns to replace (comma separated)",
-      "value": "",
-      "required": false
-    },
     "SESSION_ID": {
-      "description": "Session ID for bot authentication",
-      "value": "",
-      "required": false
+      "description": "Unique session ID for your bot",
+      "required": true
     },
-    "SOURCE_JIDS": {
-      "description": "Source JIDs to monitor (comma separated)",
-      "value": "",
-      "required": false
-    },
-    "TARGET_JIDS": {
-      "description": "Target JIDs to send messages (comma separated)",
-      "value": "",
-      "required": false
-    }
-  },
-  "formation": {
-    "web": {
-      "quantity": 1,
-      "size": "basic"
+    "MONGODB_URL": {
+      "description": "MongoDB connection URL",
+      "required": true
     }
   },
   "buildpacks": [
     {
       "url": "heroku/nodejs"
     }
-  ],
-  "stack": "container"
+  ]
 }
