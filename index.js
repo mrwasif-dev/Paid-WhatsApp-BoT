@@ -42,17 +42,17 @@ wasi_app.use(express.static(path.join(__dirname, 'public')));
 wasi_app.get('/ping', (req, res) => res.status(200).send('pong'));
 
 // -----------------------------------------------------------------------------
-// AUTO FORWARD CONFIGURATION
+// AUTO FORWARD CONFIGURATION (AB LET KE SAATH TAAKE UPDATE HO SAKE)
 // -----------------------------------------------------------------------------
-const SOURCE_JIDS = process.env.SOURCE_JIDS
+let SOURCE_JIDS = process.env.SOURCE_JIDS
     ? process.env.SOURCE_JIDS.split(',')
     : [];
 
-const TARGET_JIDS = process.env.TARGET_JIDS
+let TARGET_JIDS = process.env.TARGET_JIDS
     ? process.env.TARGET_JIDS.split(',')
     : [];
 
-const OLD_TEXT_REGEX = process.env.OLD_TEXT_REGEX
+let OLD_TEXT_REGEX = process.env.OLD_TEXT_REGEX
     ? process.env.OLD_TEXT_REGEX.split(',').map(pattern => {
         try {
             return pattern.trim() ? new RegExp(pattern.trim(), 'gu') : null;
@@ -63,7 +63,7 @@ const OLD_TEXT_REGEX = process.env.OLD_TEXT_REGEX
       }).filter(regex => regex !== null)
     : [];
 
-const NEW_TEXT = process.env.NEW_TEXT
+let NEW_TEXT = process.env.NEW_TEXT
     ? process.env.NEW_TEXT
     : '';
 
@@ -537,7 +537,71 @@ wasi_app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+// -----------------------------------------------------------------------------
+// HTML CONFIGURATION API (یہ بلاک بالکل آخر میں ADD کیا ہے)
+// -----------------------------------------------------------------------------
 
+// GET current config for HTML
+wasi_app.get('/api/config', (req, res) => {
+    res.json({
+        sourceJids: SOURCE_JIDS,
+        targetJids: TARGET_JIDS,
+        oldTextRegex: OLD_TEXT_REGEX.map(regex => regex.source),
+        newText: NEW_TEXT
+    });
+});
+
+// POST updated config from HTML
+wasi_app.post('/api/config', (req, res) => {
+    try {
+        const { sourceJids, targetJids, oldTextRegex, newText } = req.body;
+
+        // Update arrays
+        if (sourceJids) {
+            SOURCE_JIDS = sourceJids.filter(s => s && s.trim());
+            process.env.SOURCE_JIDS = SOURCE_JIDS.join(',');
+        }
+        if (targetJids) {
+            TARGET_JIDS = targetJids.filter(s => s && s.trim());
+            process.env.TARGET_JIDS = TARGET_JIDS.join(',');
+        }
+        if (oldTextRegex) {
+            OLD_TEXT_REGEX = oldTextRegex
+                .map(pattern => {
+                    try {
+                        return pattern && pattern.trim() ? new RegExp(pattern.trim(), 'gu') : null;
+                    } catch (e) {
+                        console.error(`Invalid regex pattern: ${pattern}`, e);
+                        return null;
+                    }
+                })
+                .filter(regex => regex !== null);
+            process.env.OLD_TEXT_REGEX = OLD_TEXT_REGEX.map(r => r.source).join(',');
+        }
+        if (newText !== undefined) {
+            NEW_TEXT = newText;
+            process.env.NEW_TEXT = NEW_TEXT;
+        }
+
+        // Save to botConfig.json
+        const configToSave = {
+            SOURCE_JIDS,
+            TARGET_JIDS,
+            OLD_TEXT_REGEX: OLD_TEXT_REGEX.map(r => r.source),
+            NEW_TEXT
+        };
+        
+        fs.writeFileSync(
+            path.join(__dirname, 'botConfig.json'),
+            JSON.stringify(configToSave, null, 2)
+        );
+
+        res.json({ success: true, message: 'Configuration saved!' });
+    } catch (error) {
+        console.error('Config save error:', error);
+        res.json({ success: false, error: error.message });
+    }
+});
 
 // -----------------------------------------------------------------------------
 // SERVER START
@@ -550,6 +614,7 @@ function wasi_startServer() {
         console.log(`🤖 Bot Commands: !ping, !jid, !gjid`);
     });
 }
+
 // -----------------------------------------------------------------------------
 // MAIN STARTUP
 // -----------------------------------------------------------------------------
