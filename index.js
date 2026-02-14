@@ -537,54 +537,6 @@ wasi_app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// -----------------------------------------------------------------------------
-// HTML CONFIGURATION API (SIRF YE BLAK ADD KARO)
-// -----------------------------------------------------------------------------
-
-// HTML form ke liye config API
-wasi_app.get('/config', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-// API to get current settings
-wasi_app.get('/api/settings', (req, res) => {
-    res.json({
-        sourceJids: process.env.SOURCE_JIDS ? process.env.SOURCE_JIDS.split(',') : [],
-        targetJids: process.env.TARGET_JIDS ? process.env.TARGET_JIDS.split(',') : [],
-        oldTextRegex: process.env.OLD_TEXT_REGEX ? process.env.OLD_TEXT_REGEX.split(',') : [],
-        newText: process.env.NEW_TEXT || ""
-    });
-});
-
-// API to update settings from HTML
-wasi_app.post('/api/settings', (req, res) => {
-    try {
-        const { sourceJids, targetJids, oldTextRegex, newText } = req.body;
-        
-        // Update environment variables
-        if (sourceJids) process.env.SOURCE_JIDS = sourceJids.join(',');
-        if (targetJids) process.env.TARGET_JIDS = targetJids.join(',');
-        if (oldTextRegex) process.env.OLD_TEXT_REGEX = oldTextRegex.join(',');
-        if (newText !== undefined) process.env.NEW_TEXT = newText;
-        
-        // Save to file
-        const configToSave = {
-            SOURCE_JIDS: sourceJids || [],
-            TARGET_JIDS: targetJids || [],
-            OLD_TEXT_REGEX: oldTextRegex || [],
-            NEW_TEXT: newText || ""
-        };
-        
-        fs.writeFileSync(
-            path.join(__dirname, 'botConfig.json'),
-            JSON.stringify(configToSave, null, 2)
-        );
-        
-        res.json({ success: true });
-    } catch (error) {
-        res.json({ success: false, error: error.message });
-    }
-});
 
 
 // -----------------------------------------------------------------------------
@@ -598,7 +550,6 @@ function wasi_startServer() {
         console.log(`🤖 Bot Commands: !ping, !jid, !gjid`);
     });
 }
-
 // -----------------------------------------------------------------------------
 // MAIN STARTUP
 // -----------------------------------------------------------------------------
