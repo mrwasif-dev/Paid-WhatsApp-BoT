@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
+    <title>Muzamil-MD • WhatsApp Bot</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        body {
+            background: linear-gradient(145deg, #0a1a1f, #1a2f35);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        /* Main Card - Simple */
+        .card {
+            background: rgba(20, 35, 40, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid #25d36633;
+            border-radius: 30px;
+            padding: 30px;
+            max-width: 500px;
+            width: 100%;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+        }
+
+        /* Header - Simple */
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .logo i {
+            font-size: 40px;
+            color: #25d366;
+        }
+
+        .logo h1 {
+            font-size: 28px;
+            font-weight: 700;
+            background: linear-gradient(to right, #fff, #25d366);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        /* Status Container */
+        .status-container {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 25px;
+            position: relative;
+            min-height: 120px;
+        }
+
+        /* Status Items - Only these will flip */
+        .status-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #00000033;
+            border-radius: 50px;
+            padding: 12px 20px;
+            border: 1px solid #2a4a4f;
+            transition: all 0.3s;
+            position: absolute;
+            width: 100%;
+            backface-visibility: hidden;
+            transform-style: preserve-3d;
+        }
+
+        /* WhatsApp Item - Initial position */
+        #whatsappItem {
+            top: 0;
+            left: 0;
+            opacity: 1;
+            transform: rotateX(0deg);
+            z-index: 2;
+        }
+
+        /* Database Item - Hidden initially */
+        #databaseItem {
+            top: 0;
+            left: 0;
+            opacity: 0;
+            transform: rotateX(180deg);
+            z-index: 1;
+        }
+
+        /* Flipping Animation Classes */
+        .flip-whatsapp-out {
+            animation: flipOut 1.5s ease-in-out forwards;
+        }
+
+        .flip-database-in {
+            animation: flipIn 1.5s ease-in-out forwards;
+        }
+
+        .flip-database-out {
+            animation: flipOut 1.5s ease-in-out forwards;
+        }
+
+        .flip-whatsapp-in {
+            animation: flipIn 1.5s ease-in-out forwards;
+        }
+
+        @keyframes flipOut {
+            0% {
+                transform: rotateX(0deg);
+                opacity: 1;
+            }
+            50% {
+                transform: rotateX(90deg);
+                opacity: 0.5;
+            }
+            100% {
+                transform: rotateX(180deg);
+                opacity: 0;
+            }
+        }
+
+        @keyframes flipIn {
+            0% {
+                transform: rotateX(180deg);
+                opacity: 0;
+            }
+            50% {
+                transform: rotateX(90deg);
+                opacity: 0.5;
+            }
+            100% {
+                transform: rotateX(0deg);
+                opacity: 1;
+            }
+        }
+
+        .status-label {
+            font-size: 14px;
+            color: #a8e6cf;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .status-label i {
+            font-size: 16px;
+            color: #25d366;
+        }
+
+        .status-value {
+            font-size: 14px;
+            font-weight: 600;
+            padding: 6px 14px;
+            border-radius: 50px;
+        }
+
+        .status-connected {
+            background: #25d3661a;
+            border: 1px solid #25d36666;
+            color: #25d366;
+        }
+
+        .status-disconnected {
+            background: #ff4d4d1a;
+            border: 1px solid #ff4d4d66;
+            color: #ff4d4d;
+        }
+
+        /* QR Section - Simple */
+        .qr-section {
+            background: #00000033;
+            border: 2px dashed #25d36666;
+            border-radius: 20px;
+            padding: 30px;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .qr-wrapper {
+            background: white;
+            padding: 15px;
+            border-radius: 15px;
+            display: inline-block;
+            margin-bottom: 15px;
+        }
+
+        .qr-wrapper img {
+            max-width: 250px;
+            border-radius: 10px;
+        }
+
+        .qr-section p {
+            color: #a8e6cf;
+        }
+
+        /* Config Section - Simple */
+        .config {
+            background: #00000033;
+            border-radius: 20px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+
+        .config h3 {
+            color: #25d366;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .config-note {
+            font-size: 12px;
+            color: #8aa3a6;
+            margin-bottom: 15px;
+            padding: 8px;
+            background: #1a2f35;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        /* Field Explanation */
+        .field-explanation {
+            color: #6f9fa8;
+            font-size: 11px;
+            margin-top: 4px;
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .field-explanation i {
+            color: #25d366;
+            font-size: 11px;
+        }
+
+        .form-group {
+            margin-bottom: 18px;
+        }
+
+        .form-group label {
+            display: block;
+            color: #a8e6cf;
+            margin-bottom: 4px;
+            font-size: 14px;
+        }
+
+        .form-group label i {
+            color: #25d366;
+            margin-right: 6px;
+            width: 18px;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 12px;
+            background: #1a2f35;
+            border: 1px solid #25d36666;
+            border-radius: 10px;
+            color: white;
+            font-size: 14px;
+            transition: 0.3s;
+            resize: vertical;
+            min-height: 45px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: #25d366;
+            box-shadow: 0 0 0 2px #25d36633;
+        }
+
+        .form-control::placeholder {
+            color: #5f8a94;
+            font-size: 12px;
+        }
+
+        /* Button - Simple */
+        .btn {
+            background: #25d366;
+            color: #0a1a1f;
+            border: none;
+            padding: 14px 20px;
+            border-radius: 50px;
+            font-weight: 700;
+            cursor: pointer;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            transition: 0.3s;
+            font-size: 16px;
+        }
+
+        .btn:hover {
+            background: #20bd5a;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px #25d36666;
+        }
+
+        .save-msg {
+            margin-top: 10px;
+            text-align: center;
+            font-size: 14px;
+        }
+
+        /* Footer - Simple */
+        .footer {
+            text-align: center;
+            color: #8aa3a6;
+            font-size: 12px;
+        }
+
+        .footer a {
+            color: #25d366;
+            text-decoration: none;
+        }
+
+        @media (max-width: 480px) {
+            .card {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <!-- Header -->
+        <div class="header">
+            <div class="logo">
+                <i class="fab fa-whatsapp"></i>
+                <h1>Muzamil-MD</h1>
+            </div>
+        </div>
+
+        <!-- Status Container with Flipping Items -->
+        <div class="status-container">
+            <!-- WhatsApp Status Item -->
+            <div id="whatsappItem" class="status-item">
+                <span class="status-label"><i class="fab fa-whatsapp"></i> WhatsApp Session</span>
+                <span class="status-value" id="whatsappStatus">Loading...</span>
+            </div>
+            
+            <!-- Database Status Item -->
+            <div id="databaseItem" class="status-item">
+                <span class="status-label"><i class="fas fa-database"></i> Database Connection</span>
+                <span class="status-value" id="databaseStatus">Loading...</span>
+            </div>
+        </div>
+
+        <!-- QR Code Section -->
+        <div class="qr-section">
+            <div id="qrContainer">
+                <div class="qr-wrapper">
+                    <i class="fas fa-spinner fa-spin" style="font-size: 50px; color: #25d366;"></i>
+                </div>
+                <p>Waiting for QR...</p>
+            </div>
+        </div>
+
+        <!-- Configuration Section -->
+        <div class="config">
+            <h3><i class="fas fa-cog"></i> Configuration</h3>
+            <div class="config-note">
+                <i class="fas fa-save"></i> Configuration is permanently saved to botConfig.json
+            </div>
+            
+            <!-- SOURCE JIDs -->
+            <div class="form-group">
+                <label><i class="fas fa-arrow-right-to-bracket"></i> SOURCE JIDs</label>
+                <div class="field-explanation">
+                    <i class="fas fa-info-circle"></i> Comma separated WhatsApp JIDs to monitor
+                </div>
+                <textarea id="sourceJids" class="form-control" placeholder="1234567890@s.whatsapp.net, 0987654321@g.us" rows="1"></textarea>
+            </div>
+            
+            <!-- TARGET JIDs -->
+            <div class="form-group">
+                <label><i class="fas fa-bullseye"></i> TARGET JIDs</label>
+                <div class="field-explanation">
+                    <i class="fas fa-info-circle"></i> Comma separated WhatsApp JIDs to send to
+                </div>
+                <textarea id="targetJids" class="form-control" placeholder="1234567890@s.whatsapp.net, group@g.us" rows="1"></textarea>
+            </div>
+            
+            <!-- OLD TEXT PATTERNS -->
+            <div class="form-group">
+                <label><i class="fas fa-code"></i> OLD TEXT PATTERNS</label>
+                <div class="field-explanation">
+                    <i class="fas fa-info-circle"></i> Comma separated patterns. Each pattern can be multi-line
+                </div>
+                <textarea id="oldTextRegex" class="form-control" placeholder="hello world
+how are you, test[0-9]+
+second pattern, (hi|hello)" oninput="autoExpand(this)" rows="3"></textarea>
+            </div>
+            
+            <!-- NEW TEXT -->
+            <div class="form-group">
+                <label><i class="fas fa-pen-fancy"></i> NEW TEXT</label>
+                <div class="field-explanation">
+                    <i class="fas fa-info-circle"></i> Replacement text. Line breaks are preserved
+                </div>
+                <textarea id="newText" class="form-control" placeholder="This is the new text
+It can be multi-line
+Line breaks stay intact" oninput="autoExpand(this)" rows="3"></textarea>
+            </div>
+            
+            <!-- Save Button -->
+            <button class="btn" onclick="saveConfig()">
+                <i class="fas fa-save"></i> Save Configuration
+            </button>
+            
+            <div id="configMsg" class="save-msg"></div>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <p>Made with <i class="fas fa-heart" style="color: #ff4d4d;"></i> by mrwasif-dev</p>
+            <p>© 2026 Muzamil-MD • JSON Storage</p>
+        </div>
+    </div>
+
+    <script>
+        // Flipping control variables
+        let isWhatsAppVisible = true;
+        let flipInterval;
+
+        // Auto-expand function
+        function autoExpand(el) {
+            el.style.height = 'auto';
+            el.style.height = (el.scrollHeight) + 'px';
+        }
+
+        // Parse patterns: split by comma, preserve line breaks
+        function parsePatterns(text) {
+            if (!text || text.trim() === '') return [];
+            
+            const patterns = [];
+            let currentPattern = '';
+            
+            const parts = text.split(',');
+            
+            for (let i = 0; i < parts.length; i++) {
+                let part = parts[i];
+                
+                if (i === 0) {
+                    currentPattern = part;
+                } else {
+                    if (part.startsWith('\n') || part.startsWith('\r\n')) {
+                        currentPattern += ',' + part;
+                    } else {
+                        if (currentPattern.trim()) {
+                            patterns.push(currentPattern.trim());
+                        }
+                        currentPattern = part;
+                    }
+                }
+            }
+            
+            if (currentPattern.trim()) {
+                patterns.push(currentPattern.trim());
+            }
+            
+            return patterns;
+        }
+
+        // Start flipping animation
+        function startFlipping() {
+            if (flipInterval) clearInterval(flipInterval);
+            
+            flipInterval = setInterval(() => {
+                const whatsappItem = document.getElementById('whatsappItem');
+                const databaseItem = document.getElementById('databaseItem');
+                
+                if (isWhatsAppVisible) {
+                    // Flip WhatsApp out, Database in
+                    whatsappItem.classList.remove('flip-whatsapp-in');
+                    whatsappItem.classList.add('flip-whatsapp-out');
+                    databaseItem.classList.remove('flip-database-out');
+                    databaseItem.classList.add('flip-database-in');
+                    
+                    setTimeout(() => {
+                        whatsappItem.style.opacity = '0';
+                        whatsappItem.style.zIndex = '1';
+                        whatsappItem.style.transform = 'rotateX(180deg)';
+                        
+                        databaseItem.style.opacity = '1';
+                        databaseItem.style.zIndex = '2';
+                        databaseItem.style.transform = 'rotateX(0deg)';
+                        
+                        whatsappItem.classList.remove('flip-whatsapp-out');
+                        databaseItem.classList.remove('flip-database-in');
+                    }, 1500);
+                    
+                    isWhatsAppVisible = false;
+                } else {
+                    // Flip Database out, WhatsApp in
+                    databaseItem.classList.remove('flip-database-in');
+                    databaseItem.classList.add('flip-database-out');
+                    whatsappItem.classList.remove('flip-whatsapp-out');
+                    whatsappItem.classList.add('flip-whatsapp-in');
+                    
+                    setTimeout(() => {
+                        databaseItem.style.opacity = '0';
+                        databaseItem.style.zIndex = '1';
+                        databaseItem.style.transform = 'rotateX(180deg)';
+                        
+                        whatsappItem.style.opacity = '1';
+                        whatsappItem.style.zIndex = '2';
+                        whatsappItem.style.transform = 'rotateX(0deg)';
+                        
+                        databaseItem.classList.remove('flip-database-out');
+                        whatsappItem.classList.remove('flip-whatsapp-in');
+                    }, 1500);
+                    
+                    isWhatsAppVisible = true;
+                }
+            }, 3000); // Flip every 3 seconds
+        }
+
+        // Load configuration
+        async function loadConfig() {
+            try {
+                const res = await fetch('/api/config');
+                const config = await res.json();
+
+                document.getElementById('sourceJids').value = config.sourceJids?.join(', ') || '';
+                document.getElementById('targetJids').value = config.targetJids?.join(', ') || '';
+                
+                if (config.oldTextRegex && Array.isArray(config.oldTextRegex)) {
+                    document.getElementById('oldTextRegex').value = config.oldTextRegex.join(',');
+                }
+                
+                document.getElementById('newText').value = config.newText || '';
+
+                // Auto-expand all
+                document.querySelectorAll('.form-control').forEach(el => autoExpand(el));
+
+                console.log('✅ Config loaded');
+            } catch (e) {
+                console.log('Using default config');
+            }
+        }
+
+        // Save configuration
+        async function saveConfig() {
+            const sourceJids = document.getElementById('sourceJids').value.split(',').map(j => j.trim()).filter(j => j);
+            const targetJids = document.getElementById('targetJids').value.split(',').map(j => j.trim()).filter(j => j);
+            
+            const oldTextRaw = document.getElementById('oldTextRegex').value;
+            const oldTextRegex = parsePatterns(oldTextRaw);
+            
+            const newText = document.getElementById('newText').value;
+
+            const msgEl = document.getElementById('configMsg');
+            msgEl.innerHTML = '<span style="color: #faa726;"><i class="fas fa-spinner fa-spin"></i> Saving...</span>';
+
+            try {
+                const res = await fetch('/api/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ sourceJids, targetJids, oldTextRegex, newText })
+                });
+
+                const data = await res.json();
+
+                if (data.success) {
+                    msgEl.innerHTML = '<span style="color: #25d366;"><i class="fas fa-check-circle"></i> ✅ Saved!</span>';
+                    setTimeout(() => msgEl.innerHTML = '', 3000);
+                } else {
+                    msgEl.innerHTML = '<span style="color: #ff4d4d;"><i class="fas fa-times-circle"></i> ❌ Failed</span>';
+                }
+            } catch (e) {
+                msgEl.innerHTML = '<span style="color: #ff4d4d;"><i class="fas fa-times-circle"></i> ❌ Error</span>';
+            }
+        }
+
+        // Check status
+        async function checkStatus() {
+            try {
+                const res = await fetch('/api/status');
+                const data = await res.json();
+
+                const whatsappEl = document.getElementById('whatsappStatus');
+                const databaseEl = document.getElementById('databaseStatus');
+
+                // Update WhatsApp status
+                if (data.connected) {
+                    whatsappEl.innerHTML = '✅ Connected';
+                    whatsappEl.className = 'status-value status-connected';
+                } else {
+                    whatsappEl.innerHTML = '❌ Disconnected';
+                    whatsappEl.className = 'status-value status-disconnected';
+                }
+
+                // Update Database status
+                if (data.databaseConnected) {
+                    databaseEl.innerHTML = '✅ Connected';
+                    databaseEl.className = 'status-value status-connected';
+                } else {
+                    databaseEl.innerHTML = '❌ Disconnected';
+                    databaseEl.className = 'status-value status-disconnected';
+                }
+
+                // Update QR
+                const qrContainer = document.getElementById('qrContainer');
+                if (data.qr) {
+                    qrContainer.innerHTML = `
+                        <div class="qr-wrapper">
+                            <img src="${data.qr}" alt="QR Code">
+                        </div>
+                        <p><i class="fas fa-camera"></i> Scan with WhatsApp</p>
+                    `;
+                } else if (!data.connected) {
+                    qrContainer.innerHTML = `
+                        <div class="qr-wrapper">
+                            <i class="fas fa-spinner fa-spin" style="font-size: 50px; color: #25d366;"></i>
+                        </div>
+                        <p>Generating QR...</p>
+                    `;
+                } else {
+                    qrContainer.innerHTML = `
+                        <div class="qr-wrapper">
+                            <i class="fas fa-check-circle" style="font-size: 50px; color: #25d366;"></i>
+                        </div>
+                        <p>Connected!</p>
+                    `;
+                }
+            } catch (e) {
+                console.error('Status error:', e);
+            }
+        }
+
+        // Initialize
+        document.querySelectorAll('.form-control').forEach(el => {
+            el.addEventListener('input', function() { autoExpand(this); });
+        });
+
+        loadConfig();
+        checkStatus();
+        
+        // Start the flipping animation
+        startFlipping();
+        
+        // Refresh status
+        setInterval(checkStatus, 3000);
+    </script>
+</body>
+</html>
