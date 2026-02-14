@@ -8,20 +8,114 @@ const { Boom } = require('@hapi/boom');
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const mongoose = require('mongoose');
 
 const { wasi_connectSession, wasi_clearSession } = require('./wasilib/session');
 const { wasi_connectDatabase } = require('./wasilib/database');
 
 const config = require('./wasi');
 
-// Load persistent config
+// -----------------------------------------------------------------------------
+// MONGODB CONFIG SCHEMA - YEH DATABASE MEIN SAVE HOGA
+// -----------------------------------------------------------------------------
+const ConfigSchema = new mongoose.Schema({
+    key: { type: String, default: 'botConfig' },
+    sourceJids: [String],
+    targetJids: [String],
+    oldTextRegex: [String],
+    newText: String,
+    updatedAt: { type: Date, default: Date.now }
+});
+
+const BotConfig = mongoose.model('BotConfig', ConfigSchema);
+
+// -----------------------------------------------------------------------------
+// PERSISTENT CONFIGURATION LOAD - MONGODB SE LOAD HOGA
+// -----------------------------------------------------------------------------
+let SOURCE_JIDS = [];
+let TARGET_JIDS = [];
+let OLD_TEXT_REGEX = [];
+let NEW_TEXT = '';
+
+// Pehle MongoDB se load karne ki koshish
+async function loadConfigFromDB() {
+    try {
+        if (mongoose.connection.readyState === 1) { // Connected
+            const dbConfig = await BotConfig.findOne({ key: 'botConfig' });
+            if (dbConfig) {
+                SOURCE_JIDS = dbConfig.sourceJids || [];
+                TARGET_JIDS = dbConfig.targetJids || [];
+                NEW_TEXT = dbConfig.newText || '';
+                
+                // Regex patterns ko RegExp objects mein convert karo
+                if (dbConfig.oldTextRegex) {
+                    OLD_TEXT_REGEX = dbConfig.oldTextRegex.map(pattern => {
+                        try {
+                            return pattern ? new RegExp(pattern, 'gu') : null;
+                        } catch (e) {
+                            console.error(`Invalid regex pattern: ${pattern}`, e);
+                            return null;
+                        }
+                    }).filter(regex => regex !== null);
+                }
+                
+                console.log('✅ Config loaded from MongoDB');
+                return true;
+            }
+        }
+    } catch (e) {
+        console.error('Failed to load from MongoDB:', e);
+    }
+    return false;
+}
+
+// Agar MongoDB se na mile to botConfig.json se load karo
 try {
     if (fs.existsSync(path.join(__dirname, 'botConfig.json'))) {
         const savedConfig = JSON.parse(fs.readFileSync(path.join(__dirname, 'botConfig.json')));
+        
         Object.assign(config, savedConfig);
+        
+        if (savedConfig.SOURCE_JIDS) SOURCE_JIDS = savedConfig.SOURCE_JIDS;
+        if (savedConfig.TARGET_JIDS) TARGET_JIDS = savedConfig.TARGET_JIDS;
+        if (savedConfig.NEW_TEXT) NEW_TEXT = savedConfig.NEW_TEXT;
+        
+        if (savedConfig.OLD_TEXT_REGEX) {
+            OLD_TEXT_REGEX = savedConfig.OLD_TEXT_REGEX.map(pattern => {
+                try {
+                    return pattern ? new RegExp(pattern, 'gu') : null;
+                } catch (e) {
+                    console.error(`Invalid regex pattern: ${pattern}`, e);
+                    return null;
+                }
+            }).filter(regex => regex !== null);
+        }
+        
+        console.log('✅ Config loaded from botConfig.json');
     }
 } catch (e) {
     console.error('Failed to load botConfig.json:', e);
+}
+
+// Agar kuch na mile to env se load karo
+if (SOURCE_JIDS.length === 0 && process.env.SOURCE_JIDS) {
+    SOURCE_JIDS = process.env.SOURCE_JIDS.split(',').map(s => s.trim()).filter(s => s);
+}
+if (TARGET_JIDS.length === 0 && process.env.TARGET_JIDS) {
+    TARGET_JIDS = process.env.TARGET_JIDS.split(',').map(s => s.trim()).filter(s => s);
+}
+if (OLD_TEXT_REGEX.length === 0 && process.env.OLD_TEXT_REGEX) {
+    OLD_TEXT_REGEX = process.env.OLD_TEXT_REGEX.split(',').map(pattern => {
+        try {
+            return pattern.trim() ? new RegExp(pattern.trim(), 'gu') : null;
+        } catch (e) {
+            console.error(`Invalid regex pattern: ${pattern}`, e);
+            return null;
+        }
+    }).filter(regex => regex !== null);
+}
+if (NEW_TEXT === '' && process.env.NEW_TEXT) {
+    NEW_TEXT = process.env.NEW_TEXT;
 }
 
 const wasi_app = express();
@@ -42,47 +136,15 @@ wasi_app.use(express.static(path.join(__dirname, 'public')));
 wasi_app.get('/ping', (req, res) => res.status(200).send('pong'));
 
 // -----------------------------------------------------------------------------
-// AUTO FORWARD CONFIGURATION (AB LET KE SAATH TAAKE UPDATE HO SAKE)
-// -----------------------------------------------------------------------------
-let SOURCE_JIDS = process.env.SOURCE_JIDS
-    ? process.env.SOURCE_JIDS.split(',')
-    : [];
-
-let TARGET_JIDS = process.env.TARGET_JIDS
-    ? process.env.TARGET_JIDS.split(',')
-    : [];
-
-let OLD_TEXT_REGEX = process.env.OLD_TEXT_REGEX
-    ? process.env.OLD_TEXT_REGEX.split(',').map(pattern => {
-        try {
-            return pattern.trim() ? new RegExp(pattern.trim(), 'gu') : null;
-        } catch (e) {
-            console.error(`Invalid regex pattern: ${pattern}`, e);
-            return null;
-        }
-      }).filter(regex => regex !== null)
-    : [];
-
-let NEW_TEXT = process.env.NEW_TEXT
-    ? process.env.NEW_TEXT
-    : '';
-
-// -----------------------------------------------------------------------------
 // HELPER FUNCTIONS FOR MESSAGE CLEANING
 // -----------------------------------------------------------------------------
 
-/**
- * Clean forwarded label from message
- */
 function cleanForwardedLabel(message) {
     try {
-        // Clone the message to avoid modifying original
         let cleanedMessage = JSON.parse(JSON.stringify(message));
         
-        // Remove forwarded flag from different message types
         if (cleanedMessage.extendedTextMessage?.contextInfo) {
             cleanedMessage.extendedTextMessage.contextInfo.isForwarded = false;
-            // Also remove forwarding news if present
             if (cleanedMessage.extendedTextMessage.contextInfo.forwardingScore) {
                 cleanedMessage.extendedTextMessage.contextInfo.forwardingScore = 0;
             }
@@ -116,24 +178,6 @@ function cleanForwardedLabel(message) {
             }
         }
         
-        // Remove newsletter/broadcast specific markers
-        if (cleanedMessage.protocolMessage) {
-            // For newsletter messages, we extract the actual message content
-            if (cleanedMessage.protocolMessage.type === 14 || 
-                cleanedMessage.protocolMessage.type === 26) {
-                // These are typically newsletter/broadcast messages
-                // We'll try to extract the actual message if possible
-                if (cleanedMessage.protocolMessage.historySyncNotification) {
-                    // Extract from history sync
-                    const syncData = cleanedMessage.protocolMessage.historySyncNotification;
-                    if (syncData.pushName) {
-                        // Use pushName as sender info
-                        console.log('Newsletter from:', syncData.pushName);
-                    }
-                }
-            }
-        }
-        
         return cleanedMessage;
     } catch (error) {
         console.error('Error cleaning forwarded label:', error);
@@ -141,13 +185,9 @@ function cleanForwardedLabel(message) {
     }
 }
 
-/**
- * Clean newsletter/information markers from text
- */
 function cleanNewsletterText(text) {
     if (!text) return text;
     
-    // Remove common newsletter markers
     const newsletterMarkers = [
         /📢\s*/g,
         /🔔\s*/g,
@@ -169,42 +209,25 @@ function cleanNewsletterText(text) {
         cleanedText = cleanedText.replace(marker, '');
     });
     
-    // Trim extra whitespace
-    cleanedText = cleanedText.trim();
-    
-    return cleanedText;
+    return cleanedText.trim();
 }
 
-/**
- * Replace caption text using regex patterns
- */
 function replaceCaption(caption) {
     if (!caption) return caption;
-    
-    // اگر OLD_TEXT_REGEX یا NEW_TEXT خالی ہوں تو کچھ نہیں کریں گے
     if (!OLD_TEXT_REGEX.length || !NEW_TEXT) return caption;
     
     let result = caption;
-    
     OLD_TEXT_REGEX.forEach(regex => {
         result = result.replace(regex, NEW_TEXT);
     });
-    
     return result;
 }
 
-/**
- * Process and clean a message completely
- */
 function processAndCleanMessage(originalMessage) {
     try {
-        // Step 1: Clone the message
         let cleanedMessage = JSON.parse(JSON.stringify(originalMessage));
-        
-        // Step 2: Remove forwarded labels
         cleanedMessage = cleanForwardedLabel(cleanedMessage);
         
-        // Step 3: Extract text and clean newsletter markers
         const text = cleanedMessage.conversation ||
             cleanedMessage.extendedTextMessage?.text ||
             cleanedMessage.imageMessage?.caption ||
@@ -214,7 +237,6 @@ function processAndCleanMessage(originalMessage) {
         if (text) {
             const cleanedText = cleanNewsletterText(text);
             
-            // Update the cleaned text in appropriate field
             if (cleanedMessage.conversation) {
                 cleanedMessage.conversation = cleanedText;
             } else if (cleanedMessage.extendedTextMessage?.text) {
@@ -228,25 +250,7 @@ function processAndCleanMessage(originalMessage) {
             }
         }
         
-        // Step 4: Remove protocol messages (newsletter metadata)
         delete cleanedMessage.protocolMessage;
-        
-        // Step 5: Remove newsletter sender info
-        if (cleanedMessage.extendedTextMessage?.contextInfo?.participant) {
-            const participant = cleanedMessage.extendedTextMessage.contextInfo.participant;
-            if (participant.includes('newsletter') || participant.includes('broadcast')) {
-                delete cleanedMessage.extendedTextMessage.contextInfo.participant;
-                delete cleanedMessage.extendedTextMessage.contextInfo.stanzaId;
-                delete cleanedMessage.extendedTextMessage.contextInfo.remoteJid;
-            }
-        }
-        
-        // Step 6: Ensure message appears as original (not forwarded)
-        if (cleanedMessage.extendedTextMessage) {
-            cleanedMessage.extendedTextMessage.contextInfo = cleanedMessage.extendedTextMessage.contextInfo || {};
-            cleanedMessage.extendedTextMessage.contextInfo.isForwarded = false;
-            cleanedMessage.extendedTextMessage.contextInfo.forwardingScore = 0;
-        }
         
         return cleanedMessage;
     } catch (error) {
@@ -259,25 +263,14 @@ function processAndCleanMessage(originalMessage) {
 // COMMAND HANDLER FUNCTIONS
 // -----------------------------------------------------------------------------
 
-/**
- * Handle !ping command
- */
 async function handlePingCommand(sock, from) {
     await sock.sendMessage(from, { text: "Love You😘" });
-    console.log(`Ping command executed for ${from}`);
 }
 
-/**
- * Handle !jid command - Get current chat JID
- */
 async function handleJidCommand(sock, from) {
     await sock.sendMessage(from, { text: `${from}` });
-    console.log(`JID command executed for ${from}`);
 }
 
-/**
- * Handle !gjid command - Get all groups with details
- */
 async function handleGjidCommand(sock, from) {
     try {
         const groups = await sock.groupFetchAllParticipating();
@@ -289,45 +282,30 @@ async function handleGjidCommand(sock, from) {
             const groupName = group.subject || "Unnamed Group";
             const participantsCount = group.participants ? group.participants.length : 0;
             
-            // Determine group type
-            let groupType = "Simple Group";
-            if (group.isCommunity) {
-                groupType = "Community";
-            } else if (group.isCommunityAnnounce) {
-                groupType = "Community Announcement";
-            } else if (group.parentGroup) {
-                groupType = "Subgroup";
-            }
-            
             response += `${groupCount}. *${groupName}*\n`;
             response += `   👥 Members: ${participantsCount}\n`;
             response += `   🆔: \`${jid}\`\n`;
-            response += `   📝 Type: ${groupType}\n`;
             response += `   ──────────────\n\n`;
             
             groupCount++;
         }
         
         if (groupCount === 1) {
-            response = "❌ No groups found. You are not in any groups.";
+            response = "❌ No groups found.";
         } else {
             response += `\n*Total Groups: ${groupCount - 1}*`;
         }
         
         await sock.sendMessage(from, { text: response });
-        console.log(`GJID command executed. Sent ${groupCount - 1} groups list.`);
         
     } catch (error) {
         console.error('Error fetching groups:', error);
         await sock.sendMessage(from, { 
-            text: "❌ Error fetching groups list. Please try again later." 
+            text: "❌ Error fetching groups list." 
         });
     }
 }
 
-/**
- * Process incoming messages for commands
- */
 async function processCommand(sock, msg) {
     const from = msg.key.remoteJid;
     const text = msg.message.conversation ||
@@ -341,15 +319,9 @@ async function processCommand(sock, msg) {
     const command = text.trim().toLowerCase();
     
     try {
-        if (command === '!ping') {
-            await handlePingCommand(sock, from);
-        } 
-        else if (command === '!jid') {
-            await handleJidCommand(sock, from);
-        }
-        else if (command === '!gjid') {
-            await handleGjidCommand(sock, from);
-        }
+        if (command === '!ping') await handlePingCommand(sock, from);
+        else if (command === '!jid') await handleJidCommand(sock, from);
+        else if (command === '!gjid') await handleGjidCommand(sock, from);
     } catch (error) {
         console.error('Command execution error:', error);
     }
@@ -402,29 +374,22 @@ async function startSession(sessionId) {
 
             const shouldReconnect = statusCode !== DisconnectReason.loggedOut && statusCode !== 440;
 
-            console.log(`Session ${sessionId}: Connection closed, reconnecting: ${shouldReconnect}`);
-
             if (shouldReconnect) {
-                setTimeout(() => {
-                    startSession(sessionId);
-                }, 3000);
+                setTimeout(() => startSession(sessionId), 3000);
             } else {
-                console.log(`Session ${sessionId} logged out. Removing.`);
+                console.log(`Session ${sessionId} logged out.`);
                 sessions.delete(sessionId);
                 await wasi_clearSession(sessionId);
             }
         } else if (connection === 'open') {
             sessionState.isConnected = true;
             sessionState.qr = null;
-            console.log(`✅ ${sessionId}: Connected to WhatsApp`);
+            console.log(`✅ ${sessionId}: Connected`);
         }
     });
 
     wasi_sock.ev.on('creds.update', saveCreds);
 
-    // -------------------------------------------------------------------------
-    // AUTO FORWARD MESSAGE HANDLER
-    // -------------------------------------------------------------------------
     wasi_sock.ev.on('messages.upsert', async wasi_m => {
         const wasi_msg = wasi_m.messages[0];
         if (!wasi_msg.message) return;
@@ -436,26 +401,20 @@ async function startSession(sessionId) {
             wasi_msg.message.videoMessage?.caption ||
             wasi_msg.message.documentMessage?.caption || "";
 
-        // COMMAND HANDLER
         if (wasi_text.startsWith('!')) {
             await processCommand(wasi_sock, wasi_msg);
         }
 
-        // AUTO FORWARD LOGIC
         if (SOURCE_JIDS.includes(wasi_origin) && !wasi_msg.key.fromMe) {
             try {
-                // Process and clean the message
                 let relayMsg = processAndCleanMessage(wasi_msg.message);
-                
                 if (!relayMsg) return;
 
-                // View Once Unwrap
                 if (relayMsg.viewOnceMessageV2)
                     relayMsg = relayMsg.viewOnceMessageV2.message;
                 if (relayMsg.viewOnceMessage)
                     relayMsg = relayMsg.viewOnceMessage.message;
 
-                // Check for Media or Emoji Only
                 const isMedia = relayMsg.imageMessage ||
                     relayMsg.videoMessage ||
                     relayMsg.audioMessage ||
@@ -468,24 +427,8 @@ async function startSession(sessionId) {
                     isEmojiOnly = emojiRegex.test(relayMsg.conversation);
                 }
 
-                // Only forward if media or emoji
                 if (!isMedia && !isEmojiOnly) return;
 
-                // Apply caption replacement (already done in processAndCleanMessage)
-                // For safety, we'll do it again here
-                if (relayMsg.imageMessage?.caption) {
-                    relayMsg.imageMessage.caption = replaceCaption(relayMsg.imageMessage.caption);
-                }
-                if (relayMsg.videoMessage?.caption) {
-                    relayMsg.videoMessage.caption = replaceCaption(relayMsg.videoMessage.caption);
-                }
-                if (relayMsg.documentMessage?.caption) {
-                    relayMsg.documentMessage.caption = replaceCaption(relayMsg.documentMessage.caption);
-                }
-
-                console.log(`📦 Forwarding (cleaned) from ${wasi_origin}`);
-
-                // Forward to all target JIDs
                 for (const targetJid of TARGET_JIDS) {
                     try {
                         await wasi_sock.relayMessage(
@@ -493,12 +436,11 @@ async function startSession(sessionId) {
                             relayMsg,
                             { messageId: wasi_sock.generateMessageTag() }
                         );
-                        console.log(`✅ Clean message forwarded to ${targetJid}`);
+                        console.log(`✅ Forwarded to ${targetJid}`);
                     } catch (err) {
                         console.error(`Failed to forward to ${targetJid}:`, err.message);
                     }
                 }
-
             } catch (err) {
                 console.error('Auto Forward Error:', err.message);
             }
@@ -525,11 +467,15 @@ wasi_app.get('/api/status', async (req, res) => {
         }
     }
 
+    // Database connection status
+    const dbConnected = mongoose.connection.readyState === 1;
+
     res.json({
         sessionId,
         connected,
         qr: qrDataUrl,
-        activeSessions: Array.from(sessions.keys())
+        activeSessions: Array.from(sessions.keys()),
+        databaseConnected: dbConnected
     });
 });
 
@@ -538,10 +484,10 @@ wasi_app.get('/', (req, res) => {
 });
 
 // -----------------------------------------------------------------------------
-// HTML CONFIGURATION API (یہ بلاک بالکل آخر میں ADD کیا ہے)
+// CONFIGURATION API - MONGODB MEIN SAVE HOGA
 // -----------------------------------------------------------------------------
 
-// GET current config for HTML
+// GET current config
 wasi_app.get('/api/config', (req, res) => {
     res.json({
         sourceJids: SOURCE_JIDS,
@@ -551,20 +497,14 @@ wasi_app.get('/api/config', (req, res) => {
     });
 });
 
-// POST updated config from HTML
-wasi_app.post('/api/config', (req, res) => {
+// POST updated config - YEH MONGODB MEIN SAVE KAREGA
+wasi_app.post('/api/config', async (req, res) => {
     try {
         const { sourceJids, targetJids, oldTextRegex, newText } = req.body;
 
-        // Update arrays
-        if (sourceJids) {
-            SOURCE_JIDS = sourceJids.filter(s => s && s.trim());
-            process.env.SOURCE_JIDS = SOURCE_JIDS.join(',');
-        }
-        if (targetJids) {
-            TARGET_JIDS = targetJids.filter(s => s && s.trim());
-            process.env.TARGET_JIDS = TARGET_JIDS.join(',');
-        }
+        // Update variables
+        if (sourceJids) SOURCE_JIDS = sourceJids.filter(s => s && s.trim());
+        if (targetJids) TARGET_JIDS = targetJids.filter(s => s && s.trim());
         if (oldTextRegex) {
             OLD_TEXT_REGEX = oldTextRegex
                 .map(pattern => {
@@ -576,19 +516,32 @@ wasi_app.post('/api/config', (req, res) => {
                     }
                 })
                 .filter(regex => regex !== null);
-            process.env.OLD_TEXT_REGEX = OLD_TEXT_REGEX.map(r => r.source).join(',');
         }
-        if (newText !== undefined) {
-            NEW_TEXT = newText;
-            process.env.NEW_TEXT = NEW_TEXT;
+        if (newText !== undefined) NEW_TEXT = newText;
+
+        // Save to MongoDB
+        if (mongoose.connection.readyState === 1) {
+            await BotConfig.findOneAndUpdate(
+                { key: 'botConfig' },
+                {
+                    sourceJids: SOURCE_JIDS,
+                    targetJids: TARGET_JIDS,
+                    oldTextRegex: OLD_TEXT_REGEX.map(r => r.source),
+                    newText: NEW_TEXT,
+                    updatedAt: new Date()
+                },
+                { upsert: true }
+            );
+            console.log('✅ Config saved to MongoDB');
         }
 
-        // Save to botConfig.json
+        // Also save to botConfig.json as backup
         const configToSave = {
             SOURCE_JIDS,
             TARGET_JIDS,
             OLD_TEXT_REGEX: OLD_TEXT_REGEX.map(r => r.source),
-            NEW_TEXT
+            NEW_TEXT,
+            lastUpdated: new Date().toISOString()
         };
         
         fs.writeFileSync(
@@ -596,7 +549,13 @@ wasi_app.post('/api/config', (req, res) => {
             JSON.stringify(configToSave, null, 2)
         );
 
-        res.json({ success: true, message: 'Configuration saved!' });
+        // Update process.env
+        process.env.SOURCE_JIDS = SOURCE_JIDS.join(',');
+        process.env.TARGET_JIDS = TARGET_JIDS.join(',');
+        process.env.OLD_TEXT_REGEX = OLD_TEXT_REGEX.map(r => r.source).join(',');
+        process.env.NEW_TEXT = NEW_TEXT;
+
+        res.json({ success: true, message: 'Configuration saved to MongoDB!' });
     } catch (error) {
         console.error('Config save error:', error);
         res.json({ success: false, error: error.message });
@@ -610,8 +569,8 @@ function wasi_startServer() {
     wasi_app.listen(wasi_port, () => {
         console.log(`🌐 Server running on port ${wasi_port}`);
         console.log(`📡 Auto Forward: ${SOURCE_JIDS.length} source(s) → ${TARGET_JIDS.length} target(s)`);
-        console.log(`✨ Message Cleaning: Forwarded labels removed, Newsletter markers cleaned`);
-        console.log(`🤖 Bot Commands: !ping, !jid, !gjid`);
+        console.log(`📝 New Text: ${NEW_TEXT || 'Not set'}`);
+        console.log(`💾 Config saved to MongoDB`);
     });
 }
 
@@ -619,19 +578,24 @@ function wasi_startServer() {
 // MAIN STARTUP
 // -----------------------------------------------------------------------------
 async function main() {
-    // 1. Connect DB if configured
+    // Connect to MongoDB first
     if (config.mongoDbUrl) {
-        const dbResult = await wasi_connectDatabase(config.mongoDbUrl);
-        if (dbResult) {
-            console.log('✅ Database connected');
+        try {
+            await mongoose.connect(config.mongoDbUrl);
+            console.log('✅ MongoDB Connected');
+            
+            // Load config from MongoDB
+            await loadConfigFromDB();
+        } catch (error) {
+            console.error('MongoDB connection error:', error);
         }
     }
 
-    // 2. Start default session
+    // Start default session
     const sessionId = config.sessionId || 'wasi_session';
     await startSession(sessionId);
 
-    // 3. Start server
+    // Start server
     wasi_startServer();
 }
 
