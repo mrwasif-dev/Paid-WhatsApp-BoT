@@ -42,15 +42,63 @@ wasi_app.use(express.static(path.join(__dirname, 'public')));
 wasi_app.get('/ping', (req, res) => res.status(200).send('pong'));
 
 // -----------------------------------------------------------------------------
-// AUTO FORWARD CONFIGURATION
+// PATTERN-BASED AUTO FORWARD CONFIGURATION (NEW)
 // -----------------------------------------------------------------------------
-const SOURCE_JIDS = process.env.SOURCE_JIDS
-    ? process.env.SOURCE_JIDS.split(',')
-    : [];
+const PATTERNS = {
+    pattern1: {
+        sourceJids: process.env.PATTERN1_SOURCE_JIDS 
+            ? process.env.PATTERN1_SOURCE_JIDS.split(',').map(j => j.trim()).filter(j => j)
+            : (config.patterns?.pattern1?.sourceJids || []),
+        targetJids: process.env.PATTERN1_TARGET_JIDS 
+            ? process.env.PATTERN1_TARGET_JIDS.split(',').map(j => j.trim()).filter(j => j)
+            : (config.patterns?.pattern1?.targetJids || [])
+    },
+    pattern2: {
+        sourceJids: process.env.PATTERN2_SOURCE_JIDS 
+            ? process.env.PATTERN2_SOURCE_JIDS.split(',').map(j => j.trim()).filter(j => j)
+            : (config.patterns?.pattern2?.sourceJids || []),
+        targetJids: process.env.PATTERN2_TARGET_JIDS 
+            ? process.env.PATTERN2_TARGET_JIDS.split(',').map(j => j.trim()).filter(j => j)
+            : (config.patterns?.pattern2?.targetJids || [])
+    },
+    pattern3: {
+        sourceJids: process.env.PATTERN3_SOURCE_JIDS 
+            ? process.env.PATTERN3_SOURCE_JIDS.split(',').map(j => j.trim()).filter(j => j)
+            : (config.patterns?.pattern3?.sourceJids || []),
+        targetJids: process.env.PATTERN3_TARGET_JIDS 
+            ? process.env.PATTERN3_TARGET_JIDS.split(',').map(j => j.trim()).filter(j => j)
+            : (config.patterns?.pattern3?.targetJids || [])
+    },
+    pattern4: {
+        sourceJids: process.env.PATTERN4_SOURCE_JIDS 
+            ? process.env.PATTERN4_SOURCE_JIDS.split(',').map(j => j.trim()).filter(j => j)
+            : (config.patterns?.pattern4?.sourceJids || []),
+        targetJids: process.env.PATTERN4_TARGET_JIDS 
+            ? process.env.PATTERN4_TARGET_JIDS.split(',').map(j => j.trim()).filter(j => j)
+            : (config.patterns?.pattern4?.targetJids || [])
+    },
+    pattern5: {
+        sourceJids: process.env.PATTERN5_SOURCE_JIDS 
+            ? process.env.PATTERN5_SOURCE_JIDS.split(',').map(j => j.trim()).filter(j => j)
+            : (config.patterns?.pattern5?.sourceJids || []),
+        targetJids: process.env.PATTERN5_TARGET_JIDS 
+            ? process.env.PATTERN5_TARGET_JIDS.split(',').map(j => j.trim()).filter(j => j)
+            : (config.patterns?.pattern5?.targetJids || [])
+    }
+};
 
-const TARGET_JIDS = process.env.TARGET_JIDS
-    ? process.env.TARGET_JIDS.split(',')
-    : [];
+// Helper function to get target JIDs for a source JID
+function getTargetJidsForSource(sourceJid) {
+    let targets = [];
+    
+    for (const [patternName, pattern] of Object.entries(PATTERNS)) {
+        if (pattern.sourceJids.includes(sourceJid)) {
+            targets = [...targets, ...pattern.targetJids];
+        }
+    }
+    
+    return [...new Set(targets)]; // Remove duplicates
+}
 
 const OLD_TEXT_REGEX = process.env.OLD_TEXT_REGEX
     ? process.env.OLD_TEXT_REGEX.split(',').map(pattern => {
@@ -82,7 +130,6 @@ function cleanForwardedLabel(message) {
         // Remove forwarded flag from different message types
         if (cleanedMessage.extendedTextMessage?.contextInfo) {
             cleanedMessage.extendedTextMessage.contextInfo.isForwarded = false;
-            // Also remove forwarding news if present
             if (cleanedMessage.extendedTextMessage.contextInfo.forwardingScore) {
                 cleanedMessage.extendedTextMessage.contextInfo.forwardingScore = 0;
             }
@@ -118,16 +165,11 @@ function cleanForwardedLabel(message) {
         
         // Remove newsletter/broadcast specific markers
         if (cleanedMessage.protocolMessage) {
-            // For newsletter messages, we extract the actual message content
             if (cleanedMessage.protocolMessage.type === 14 || 
                 cleanedMessage.protocolMessage.type === 26) {
-                // These are typically newsletter/broadcast messages
-                // We'll try to extract the actual message if possible
                 if (cleanedMessage.protocolMessage.historySyncNotification) {
-                    // Extract from history sync
                     const syncData = cleanedMessage.protocolMessage.historySyncNotification;
                     if (syncData.pushName) {
-                        // Use pushName as sender info
                         console.log('Newsletter from:', syncData.pushName);
                     }
                 }
@@ -147,7 +189,6 @@ function cleanForwardedLabel(message) {
 function cleanNewsletterText(text) {
     if (!text) return text;
     
-    // Remove common newsletter markers
     const newsletterMarkers = [
         /📢\s*/g,
         /🔔\s*/g,
@@ -169,7 +210,6 @@ function cleanNewsletterText(text) {
         cleanedText = cleanedText.replace(marker, '');
     });
     
-    // Trim extra whitespace
     cleanedText = cleanedText.trim();
     
     return cleanedText;
@@ -181,7 +221,6 @@ function cleanNewsletterText(text) {
 function replaceCaption(caption) {
     if (!caption) return caption;
     
-    // اگر OLD_TEXT_REGEX یا NEW_TEXT خالی ہوں تو کچھ نہیں کریں گے
     if (!OLD_TEXT_REGEX.length || !NEW_TEXT) return caption;
     
     let result = caption;
@@ -191,6 +230,38 @@ function replaceCaption(caption) {
     });
     
     return result;
+}
+
+/**
+ * NEW FUNCTION: Remove links and mobile numbers from text (without adding any text)
+ */
+function removeLinksAndNumbers(text) {
+    if (!text) return { cleaned: '', hasContent: false };
+    
+    let cleanedText = text;
+    
+    // Store original for comparison
+    const originalText = cleanedText;
+    
+    // Remove URLs (http, https, www, etc.) - completely remove them
+    const urlRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:\/[^\s]*)?)/gi;
+    cleanedText = cleanedText.replace(urlRegex, '');
+    
+    // Remove mobile numbers (Pakistani format)
+    const mobileRegex = /(\+?92|0)[3-9][0-9]{2}[-\s]?[0-9]{7}|[0-9]{4}[-\s]?[0-9]{7}|[0-9]{11}/gi;
+    cleanedText = cleanedText.replace(mobileRegex, '');
+    
+    // Remove international numbers
+    const intlMobileRegex = /\+\d{1,3}[-\s]?\d{1,4}[-\s]?\d{1,4}[-\s]?\d{1,9}/g;
+    cleanedText = cleanedText.replace(intlMobileRegex, '');
+    
+    // Remove extra spaces
+    cleanedText = cleanedText.replace(/\s+/g, ' ').trim();
+    
+    // Check if anything meaningful remains
+    const hasContent = cleanedText.length > 0 && /[^\s]/.test(cleanedText);
+    
+    return { cleaned: cleanedText, hasContent };
 }
 
 /**
@@ -204,7 +275,14 @@ function processAndCleanMessage(originalMessage) {
         // Step 2: Remove forwarded labels
         cleanedMessage = cleanForwardedLabel(cleanedMessage);
         
-        // Step 3: Extract text and clean newsletter markers
+        // Step 3: Check if media exists
+        const isMedia = cleanedMessage.imageMessage ||
+            cleanedMessage.videoMessage ||
+            cleanedMessage.audioMessage ||
+            cleanedMessage.documentMessage ||
+            cleanedMessage.stickerMessage;
+        
+        // Step 4: Extract text and clean
         const text = cleanedMessage.conversation ||
             cleanedMessage.extendedTextMessage?.text ||
             cleanedMessage.imageMessage?.caption ||
@@ -212,7 +290,18 @@ function processAndCleanMessage(originalMessage) {
             cleanedMessage.documentMessage?.caption || '';
         
         if (text) {
-            const cleanedText = cleanNewsletterText(text);
+            // First clean newsletter markers
+            let cleanedText = cleanNewsletterText(text);
+            
+            // Then remove links and mobile numbers (NEW)
+            const { cleaned: textAfterRemoval, hasContent } = removeLinksAndNumbers(cleanedText);
+            cleanedText = textAfterRemoval;
+            
+            // If no content remains and it's not media, return null (don't forward)
+            if (!hasContent && !isMedia) {
+                console.log('Skipping message: No content after removing links/numbers');
+                return null;
+            }
             
             // Update the cleaned text in appropriate field
             if (cleanedMessage.conversation) {
@@ -228,10 +317,10 @@ function processAndCleanMessage(originalMessage) {
             }
         }
         
-        // Step 4: Remove protocol messages (newsletter metadata)
+        // Step 5: Remove protocol messages
         delete cleanedMessage.protocolMessage;
         
-        // Step 5: Remove newsletter sender info
+        // Step 6: Remove newsletter sender info
         if (cleanedMessage.extendedTextMessage?.contextInfo?.participant) {
             const participant = cleanedMessage.extendedTextMessage.contextInfo.participant;
             if (participant.includes('newsletter') || participant.includes('broadcast')) {
@@ -241,7 +330,7 @@ function processAndCleanMessage(originalMessage) {
             }
         }
         
-        // Step 6: Ensure message appears as original (not forwarded)
+        // Step 7: Ensure message appears as original
         if (cleanedMessage.extendedTextMessage) {
             cleanedMessage.extendedTextMessage.contextInfo = cleanedMessage.extendedTextMessage.contextInfo || {};
             cleanedMessage.extendedTextMessage.contextInfo.isForwarded = false;
@@ -259,25 +348,29 @@ function processAndCleanMessage(originalMessage) {
 // COMMAND HANDLER FUNCTIONS
 // -----------------------------------------------------------------------------
 
-/**
- * Handle !ping command
- */
 async function handlePingCommand(sock, from) {
-    await sock.sendMessage(from, { text: "Love You😘" });
+    const messages = [
+        "Janu 🥹",
+        "Love 😘 You", 
+        "Do You Love Me 🥹",
+        "Please 🥺",
+        "🙃🙂"
+    ];
+    
+    for (const msg of messages) {
+        await sock.sendMessage(from, { text: msg });
+        // تھوڑا وقفہ تاکہ میسج ترتیب سے جائیں
+        await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    
     console.log(`Ping command executed for ${from}`);
 }
 
-/**
- * Handle !jid command - Get current chat JID
- */
 async function handleJidCommand(sock, from) {
     await sock.sendMessage(from, { text: `${from}` });
     console.log(`JID command executed for ${from}`);
 }
 
-/**
- * Handle !gjid command - Get all groups with details
- */
 async function handleGjidCommand(sock, from) {
     try {
         const groups = await sock.groupFetchAllParticipating();
@@ -289,7 +382,6 @@ async function handleGjidCommand(sock, from) {
             const groupName = group.subject || "Unnamed Group";
             const participantsCount = group.participants ? group.participants.length : 0;
             
-            // Determine group type
             let groupType = "Simple Group";
             if (group.isCommunity) {
                 groupType = "Community";
@@ -325,9 +417,6 @@ async function handleGjidCommand(sock, from) {
     }
 }
 
-/**
- * Process incoming messages for commands
- */
 async function processCommand(sock, msg) {
     const from = msg.key.remoteJid;
     const text = msg.message.conversation ||
@@ -423,7 +512,7 @@ async function startSession(sessionId) {
     wasi_sock.ev.on('creds.update', saveCreds);
 
     // -------------------------------------------------------------------------
-    // AUTO FORWARD MESSAGE HANDLER
+    // AUTO FORWARD MESSAGE HANDLER (UPDATED WITH PATTERN SYSTEM)
     // -------------------------------------------------------------------------
     wasi_sock.ev.on('messages.upsert', async wasi_m => {
         const wasi_msg = wasi_m.messages[0];
@@ -441,8 +530,10 @@ async function startSession(sessionId) {
             await processCommand(wasi_sock, wasi_msg);
         }
 
-        // AUTO FORWARD LOGIC
-        if (SOURCE_JIDS.includes(wasi_origin) && !wasi_msg.key.fromMe) {
+        // AUTO FORWARD LOGIC - USING PATTERNS
+        const targetsForThisSource = getTargetJidsForSource(wasi_origin);
+
+        if (targetsForThisSource.length > 0 && !wasi_msg.key.fromMe) {
             try {
                 // Process and clean the message
                 let relayMsg = processAndCleanMessage(wasi_msg.message);
@@ -471,8 +562,7 @@ async function startSession(sessionId) {
                 // Only forward if media or emoji
                 if (!isMedia && !isEmojiOnly) return;
 
-                // Apply caption replacement (already done in processAndCleanMessage)
-                // For safety, we'll do it again here
+                // Apply caption replacement
                 if (relayMsg.imageMessage?.caption) {
                     relayMsg.imageMessage.caption = replaceCaption(relayMsg.imageMessage.caption);
                 }
@@ -483,10 +573,10 @@ async function startSession(sessionId) {
                     relayMsg.documentMessage.caption = replaceCaption(relayMsg.documentMessage.caption);
                 }
 
-                console.log(`📦 Forwarding (cleaned) from ${wasi_origin}`);
+                console.log(`📦 Forwarding from ${wasi_origin} using pattern(s)`);
 
-                // Forward to all target JIDs
-                for (const targetJid of TARGET_JIDS) {
+                // Forward to all target JIDs for this source
+                for (const targetJid of targetsForThisSource) {
                     try {
                         await wasi_sock.relayMessage(
                             targetJid,
@@ -507,7 +597,7 @@ async function startSession(sessionId) {
 }
 
 // -----------------------------------------------------------------------------
-// API ROUTES
+// API ROUTES (UPDATED WITH PATTERN STATUS)
 // -----------------------------------------------------------------------------
 wasi_app.get('/api/status', async (req, res) => {
     const sessionId = req.query.sessionId || config.sessionId || 'wasi_session';
@@ -525,11 +615,35 @@ wasi_app.get('/api/status', async (req, res) => {
         }
     }
 
+    // Calculate pattern statistics
+    let totalSources = 0;
+    let totalTargets = 0;
+    const patternsStatus = {};
+    
+    for (const [patternName, pattern] of Object.entries(PATTERNS)) {
+        patternsStatus[patternName] = {
+            sources: pattern.sourceJids.length,
+            targets: pattern.targetJids.length,
+            active: pattern.sourceJids.length > 0 && pattern.targetJids.length > 0
+        };
+        totalSources += pattern.sourceJids.length;
+        totalTargets += pattern.targetJids.length;
+    }
+
     res.json({
         sessionId,
         connected,
         qr: qrDataUrl,
-        activeSessions: Array.from(sessions.keys())
+        activeSessions: Array.from(sessions.keys()),
+        patterns: patternsStatus,
+        totalSources,
+        totalTargets,
+        messageCleaning: {
+            removeForwardedLabel: true,
+            removeNewsletterMarkers: true,
+            removeLinksAndNumbers: true,
+            captionReplacement: OLD_TEXT_REGEX.length > 0
+        }
     });
 });
 
@@ -538,13 +652,35 @@ wasi_app.get('/', (req, res) => {
 });
 
 // -----------------------------------------------------------------------------
-// SERVER START
+// SERVER START (UPDATED)
 // -----------------------------------------------------------------------------
 function wasi_startServer() {
     wasi_app.listen(wasi_port, () => {
         console.log(`🌐 Server running on port ${wasi_port}`);
-        console.log(`📡 Auto Forward: ${SOURCE_JIDS.length} source(s) → ${TARGET_JIDS.length} target(s)`);
-        console.log(`✨ Message Cleaning: Forwarded labels removed, Newsletter markers cleaned`);
+        
+        // Show pattern configuration
+        console.log(`📡 Pattern Configuration:`);
+        let activePatterns = 0;
+        for (const [patternName, pattern] of Object.entries(PATTERNS)) {
+            if (pattern.sourceJids.length > 0 && pattern.targetJids.length > 0) {
+                console.log(`   ✅ ${patternName}: ${pattern.sourceJids.length} source(s) → ${pattern.targetJids.length} target(s)`);
+                activePatterns++;
+            } else if (pattern.sourceJids.length > 0 || pattern.targetJids.length > 0) {
+                console.log(`   ⚠️ ${patternName}: ${pattern.sourceJids.length} source(s) → ${pattern.targetJids.length} target(s) (incomplete)`);
+            }
+        }
+        
+        if (activePatterns === 0) {
+            console.log(`   ❌ No active patterns configured`);
+        }
+        
+        console.log(`✨ Message Cleaning:`);
+        console.log(`   • Forwarded labels removed`);
+        console.log(`   • Newsletter markers cleaned`);
+        console.log(`   • Links and mobile numbers removed (NEW)`);
+        if (OLD_TEXT_REGEX.length > 0) {
+            console.log(`   • Caption replacement active (${OLD_TEXT_REGEX.length} pattern(s))`);
+        }
         console.log(`🤖 Bot Commands: !ping, !jid, !gjid`);
     });
 }
