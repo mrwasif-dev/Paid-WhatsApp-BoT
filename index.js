@@ -360,7 +360,7 @@ async function handlePingCommand(sock, from) {
     for (const msg of messages) {
         await sock.sendMessage(from, { text: msg });
         // تھوڑا وقفہ تاکہ میسج ترتیب سے جائیں
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, 300));
     }
     
     console.log(`Ping command executed for ${from}`);
