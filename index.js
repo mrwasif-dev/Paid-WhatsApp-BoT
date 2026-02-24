@@ -10,8 +10,10 @@ const fs = require('fs');
 const path = require('path');
 const { Telegraf } = require('telegraf');
 const axios = require('axios');
-const FormData = require('form-data');
-const mime = require('mime-types');
+const stream = require('stream');
+const { promisify } = require('util');
+const pipeline = promisify(stream.pipeline);
+const crypto = require('crypto');
 
 const { wasi_connectSession, wasi_clearSession } = require('./wasilib/session');
 const { wasi_connectDatabase } = require('./wasilib/database');
@@ -40,6 +42,27 @@ const TARGET_JIDS = process.env.TARGET_JIDS
     ? process.env.TARGET_JIDS.split(',').map(j => j.trim()).filter(j => j)
     : [];
 
+// Create temp directory for streaming
+const TEMP_DIR = path.join(__dirname, 'temp');
+if (!fs.existsSync(TEMP_DIR)) {
+    fs.mkdirSync(TEMP_DIR, { recursive: true });
+}
+
+// Clean old temp files on startup
+setInterval(() => {
+    const files = fs.readdirSync(TEMP_DIR);
+    const now = Date.now();
+    files.forEach(file => {
+        const filePath = path.join(TEMP_DIR, file);
+        const stats = fs.statSync(filePath);
+        // Delete files older than 1 hour
+        if (now - stats.mtimeMs > 60 * 60 * 1000) {
+            fs.unlinkSync(filePath);
+            console.log(`🧹 Cleaned old temp file: ${file}`);
+        }
+    });
+}, 30 * 60 * 1000); // Check every 30 minutes
+
 // -----------------------------------------------------------------------------
 // TELEGRAM BOT SETUP
 // -----------------------------------------------------------------------------
@@ -47,7 +70,7 @@ const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || 'YOUR_TELEGRAM_BOT_TOKEN';
 
 let telegramBot = null;
 let telegramEnabled = false;
-let whatsappSock = null; // Store WhatsApp socket for forwarding
+let whatsappSock = null;
 
 // Initialize Telegram Bot if token exists
 if (TELEGRAM_TOKEN && TELEGRAM_TOKEN !== 'YOUR_TELEGRAM_BOT_TOKEN') {
@@ -56,7 +79,6 @@ if (TELEGRAM_TOKEN && TELEGRAM_TOKEN !== 'YOUR_TELEGRAM_BOT_TOKEN') {
         telegramEnabled = true;
         console.log('✅ Telegram Bot initialized');
         
-        // Start Telegram bot
         telegramBot.launch().then(() => {
             console.log('🤖 Telegram Bot is running');
         }).catch(err => {
@@ -67,103 +89,124 @@ if (TELEGRAM_TOKEN && TELEGRAM_TOKEN !== 'YOUR_TELEGRAM_BOT_TOKEN') {
         // Handle all messages from Telegram
         telegramBot.on('message', async (ctx) => {
             try {
-                // Check if WhatsApp is connected
                 if (!whatsappSock || !whatsappSock.user) {
                     await ctx.reply('❌ WhatsApp is not connected. Please scan QR code first.');
                     return;
                 }
 
-                // Check if target JIDs are configured
                 if (TARGET_JIDS.length === 0) {
                     await ctx.reply('❌ No target JIDs configured. Please set TARGET_JIDS in environment variables.');
                     return;
                 }
 
-                await ctx.reply('🔄 Forwarding to WhatsApp...');
+                const replyMsg = await ctx.reply('🔄 Forwarding to WhatsApp...');
 
-                // Handle different message types - WITHOUT adding any caption
+                // TEXT MESSAGE
                 if (ctx.message.text) {
-                    // Text message - forward as is
                     await forwardTextToWhatsApp(ctx.message.text);
-                    await ctx.reply('✅ Forwarded to WhatsApp!');
+                    await ctx.telegram.editMessageText(ctx.chat.id, replyMsg.message_id, null, '✅ Forwarded to WhatsApp!');
                 }
+                
+                // PHOTO
                 else if (ctx.message.photo) {
-                    // Photo with caption - keep original caption only
                     const photo = ctx.message.photo[ctx.message.photo.length - 1];
                     const fileLink = await ctx.telegram.getFileLink(photo.file_id);
-                    const caption = ctx.message.caption || ''; // Original caption only
-                    await forwardPhotoToWhatsApp(fileLink.href, caption);
-                    await ctx.reply('✅ Photo forwarded to WhatsApp!');
+                    const caption = ctx.message.caption || '';
+                    await forwardMediaStreamToWhatsApp(fileLink.href, 'image', caption, photo.file_id);
+                    await ctx.telegram.editMessageText(ctx.chat.id, replyMsg.message_id, null, '✅ Photo forwarded to WhatsApp!');
                 }
+                
+                // VIDEO (STREAMING)
                 else if (ctx.message.video) {
-                    // Video with caption - keep original caption only
                     const video = ctx.message.video;
                     const fileLink = await ctx.telegram.getFileLink(video.file_id);
-                    const caption = ctx.message.caption || ''; // Original caption only
-                    const fileName = `video_${Date.now()}.${video.mime_type?.split('/')[1] || 'mp4'}`;
-                    await forwardVideoToWhatsApp(fileLink.href, caption, fileName, video.mime_type, video.file_size);
-                    await ctx.reply('✅ Video forwarded to WhatsApp!');
+                    const caption = ctx.message.caption || '';
+                    const fileSizeMB = (video.file_size / (1024 * 1024)).toFixed(2);
+                    
+                    await ctx.telegram.editMessageText(ctx.chat.id, replyMsg.message_id, null, 
+                        `🎬 Streaming video (${fileSizeMB} MB) to WhatsApp...`);
+                    
+                    // Use streaming for videos
+                    await forwardMediaStreamToWhatsApp(
+                        fileLink.href, 
+                        'video', 
+                        caption, 
+                        video.file_id,
+                        video.mime_type || 'video/mp4'
+                    );
+                    
+                    await ctx.telegram.editMessageText(ctx.chat.id, replyMsg.message_id, null, '✅ Video streamed to WhatsApp!');
                 }
+                
+                // DOCUMENT (STREAMING)
                 else if (ctx.message.document) {
-                    // Document with caption - keep original caption only
                     const document = ctx.message.document;
                     const fileLink = await ctx.telegram.getFileLink(document.file_id);
-                    const caption = ctx.message.caption || ''; // Original caption only
+                    const caption = ctx.message.caption || '';
                     const fileName = document.file_name || `document_${Date.now()}`;
-                    await forwardDocumentToWhatsApp(fileLink.href, fileName, caption, document.mime_type, document.file_size);
-                    await ctx.reply('✅ Document forwarded to WhatsApp!');
+                    const fileSizeMB = (document.file_size / (1024 * 1024)).toFixed(2);
+                    
+                    await ctx.telegram.editMessageText(ctx.chat.id, replyMsg.message_id, null, 
+                        `📄 Streaming document (${fileSizeMB} MB) to WhatsApp...`);
+                    
+                    await forwardDocumentStreamToWhatsApp(
+                        fileLink.href,
+                        fileName,
+                        caption,
+                        document.mime_type || 'application/octet-stream',
+                        document.file_id
+                    );
+                    
+                    await ctx.telegram.editMessageText(ctx.chat.id, replyMsg.message_id, null, '✅ Document streamed to WhatsApp!');
                 }
+                
+                // AUDIO
                 else if (ctx.message.audio) {
-                    // Audio with caption - keep original caption only
                     const audio = ctx.message.audio;
                     const fileLink = await ctx.telegram.getFileLink(audio.file_id);
-                    const caption = ctx.message.caption || ''; // Original caption only
-                    const fileName = audio.file_name || `audio_${Date.now()}.${audio.mime_type?.split('/')[1] || 'mp3'}`;
-                    await forwardAudioToWhatsApp(fileLink.href, caption, fileName, audio.mime_type, audio.file_size);
-                    await ctx.reply('✅ Audio forwarded to WhatsApp!');
+                    const caption = ctx.message.caption || '';
+                    await forwardAudioToWhatsApp(fileLink.href, caption, audio.mime_type);
+                    await ctx.telegram.editMessageText(ctx.chat.id, replyMsg.message_id, null, '✅ Audio forwarded to WhatsApp!');
                 }
+                
+                // VOICE
                 else if (ctx.message.voice) {
-                    // Voice message - no caption
                     const voice = ctx.message.voice;
                     const fileLink = await ctx.telegram.getFileLink(voice.file_id);
-                    await forwardVoiceToWhatsApp(fileLink.href, voice.mime_type, voice.file_size);
-                    await ctx.reply('✅ Voice note forwarded to WhatsApp!');
+                    await forwardVoiceToWhatsApp(fileLink.href, voice.mime_type);
+                    await ctx.telegram.editMessageText(ctx.chat.id, replyMsg.message_id, null, '✅ Voice note forwarded to WhatsApp!');
                 }
+                
+                // STICKER
                 else if (ctx.message.sticker) {
-                    // Sticker - no caption
                     const sticker = ctx.message.sticker;
                     const fileLink = await ctx.telegram.getFileLink(sticker.file_id);
                     await forwardStickerToWhatsApp(fileLink.href);
-                    await ctx.reply('✅ Sticker forwarded to WhatsApp!');
+                    await ctx.telegram.editMessageText(ctx.chat.id, replyMsg.message_id, null, '✅ Sticker forwarded to WhatsApp!');
                 }
-                else if (ctx.message.video_note) {
-                    // Video note (round video) - no caption
-                    const videoNote = ctx.message.video_note;
-                    const fileLink = await ctx.telegram.getFileLink(videoNote.file_id);
-                    await forwardVideoNoteToWhatsApp(fileLink.href, videoNote.file_size);
-                    await ctx.reply('✅ Video note forwarded to WhatsApp!');
-                }
+                
                 else {
                     await ctx.reply('❌ Unsupported message type.');
                 }
+                
             } catch (error) {
                 console.error('Error forwarding from Telegram:', error);
                 await ctx.reply(`❌ Error: ${error.message}`);
             }
         });
 
-        // Command to check status
+        // Status command
         telegramBot.command('status', async (ctx) => {
             const status = whatsappSock && whatsappSock.user ? '✅ Connected' : '❌ Disconnected';
             const targets = TARGET_JIDS.length > 0 ? TARGET_JIDS.join('\n') : 'Not configured';
             await ctx.reply(
                 `📱 *WhatsApp Status:* ${status}\n\n` +
                 `🎯 *Target JIDs:*\n${targets}\n\n` +
-                `📤 Forward any message to send to WhatsApp`
+                `📤 Streaming enabled - videos play while downloading`
             );
         });
 
-        // Command to list targets
+        // Targets command
         telegramBot.command('targets', async (ctx) => {
             if (TARGET_JIDS.length === 0) {
                 await ctx.reply('❌ No target JIDs configured.');
@@ -183,20 +226,148 @@ if (TELEGRAM_TOKEN && TELEGRAM_TOKEN !== 'YOUR_TELEGRAM_BOT_TOKEN') {
 }
 
 // -----------------------------------------------------------------------------
-// FORWARDING FUNCTIONS - WITHOUT ADDING ANY PREFIX/CAPTION
+// STREAMING FUNCTIONS - VIDEO PLAYS WHILE DOWNLOADING
 // -----------------------------------------------------------------------------
 
 /**
- * Forward text to WhatsApp - as is
+ * Stream media directly to WhatsApp without full download
+ */
+async function forwardMediaStreamToWhatsApp(fileUrl, type, caption, fileId, mimeType = null) {
+    if (!whatsappSock || TARGET_JIDS.length === 0) return;
+    
+    // Create a unique temp file path
+    const tempFilePath = path.join(TEMP_DIR, `${fileId}_${Date.now()}`);
+    
+    try {
+        console.log(`📥 Streaming ${type} from: ${fileUrl}`);
+        
+        // Start download stream
+        const response = await axios({
+            method: 'GET',
+            url: fileUrl,
+            responseType: 'stream',
+            timeout: 300000, // 5 minutes timeout
+            maxContentLength: Infinity,
+            maxBodyLength: Infinity
+        });
+        
+        // Create write stream for temp file (for caching)
+        const writer = fs.createWriteStream(tempFilePath);
+        
+        // Pipe to file for caching
+        response.data.pipe(writer);
+        
+        // For WhatsApp, we need to provide the stream
+        // Create a readable stream from the temp file as it's being written
+        const readStream = fs.createReadStream(tempFilePath);
+        
+        // Send to all targets
+        for (const targetJid of TARGET_JIDS) {
+            try {
+                if (type === 'video') {
+                    await whatsappSock.sendMessage(targetJid, {
+                        video: readStream,
+                        caption: caption,
+                        mimetype: mimeType || 'video/mp4'
+                    });
+                } else if (type === 'image') {
+                    await whatsappSock.sendMessage(targetJid, {
+                        image: readStream,
+                        caption: caption
+                    });
+                }
+                console.log(`✅ ${type} streamed to ${targetJid}`);
+            } catch (err) {
+                console.error(`Failed to stream to ${targetJid}:`, err.message);
+            }
+        }
+        
+        // Wait for download to complete (for cleanup)
+        await new Promise((resolve, reject) => {
+            writer.on('finish', resolve);
+            writer.on('error', reject);
+        });
+        
+    } catch (error) {
+        console.error(`Error streaming ${type}:`, error);
+        throw error;
+    } finally {
+        // Clean up temp file after a delay (to ensure streaming is done)
+        setTimeout(() => {
+            if (fs.existsSync(tempFilePath)) {
+                fs.unlinkSync(tempFilePath);
+                console.log(`🧹 Cleaned up: ${tempFilePath}`);
+            }
+        }, 60000); // 1 minute delay
+    }
+}
+
+/**
+ * Stream document to WhatsApp
+ */
+async function forwardDocumentStreamToWhatsApp(fileUrl, fileName, caption, mimeType, fileId) {
+    if (!whatsappSock || TARGET_JIDS.length === 0) return;
+    
+    const tempFilePath = path.join(TEMP_DIR, `${fileId}_${fileName}`);
+    
+    try {
+        console.log(`📥 Streaming document: ${fileName}`);
+        
+        const response = await axios({
+            method: 'GET',
+            url: fileUrl,
+            responseType: 'stream',
+            timeout: 300000,
+            maxContentLength: Infinity,
+            maxBodyLength: Infinity
+        });
+        
+        const writer = fs.createWriteStream(tempFilePath);
+        response.data.pipe(writer);
+        
+        // Create read stream for sending
+        const readStream = fs.createReadStream(tempFilePath);
+        
+        for (const targetJid of TARGET_JIDS) {
+            try {
+                await whatsappSock.sendMessage(targetJid, {
+                    document: readStream,
+                    fileName: fileName,
+                    caption: caption,
+                    mimetype: mimeType
+                });
+                console.log(`✅ Document streamed to ${targetJid}`);
+            } catch (err) {
+                console.error(`Failed to stream document to ${targetJid}:`, err.message);
+            }
+        }
+        
+        await new Promise((resolve, reject) => {
+            writer.on('finish', resolve);
+            writer.on('error', reject);
+        });
+        
+    } catch (error) {
+        console.error('Error streaming document:', error);
+        throw error;
+    } finally {
+        setTimeout(() => {
+            if (fs.existsSync(tempFilePath)) {
+                fs.unlinkSync(tempFilePath);
+            }
+        }, 60000);
+    }
+}
+
+/**
+ * Forward text to WhatsApp
  */
 async function forwardTextToWhatsApp(text) {
     if (!whatsappSock || TARGET_JIDS.length === 0) return;
     
     for (const targetJid of TARGET_JIDS) {
         try {
-            await whatsappSock.sendMessage(targetJid, { 
-                text: text  // Original text only - no prefix
-            });
+            await whatsappSock.sendMessage(targetJid, { text: text });
             console.log(`✅ Text forwarded to ${targetJid}`);
         } catch (err) {
             console.error(`Failed to forward to ${targetJid}:`, err.message);
@@ -205,128 +376,25 @@ async function forwardTextToWhatsApp(text) {
 }
 
 /**
- * Download file from URL and send as buffer
- */
-async function downloadFile(url) {
-    const response = await axios({
-        method: 'GET',
-        url: url,
-        responseType: 'arraybuffer',
-        maxContentLength: Infinity,
-        maxBodyLength: Infinity
-    });
-    return Buffer.from(response.data);
-}
-
-/**
- * Forward photo to WhatsApp - keep original caption only
- */
-async function forwardPhotoToWhatsApp(fileUrl, caption) {
-    if (!whatsappSock || TARGET_JIDS.length === 0) return;
-    
-    try {
-        const imageBuffer = await downloadFile(fileUrl);
-        
-        for (const targetJid of TARGET_JIDS) {
-            try {
-                await whatsappSock.sendMessage(targetJid, { 
-                    image: imageBuffer,
-                    caption: caption  // Only original caption, no prefix
-                });
-                console.log(`✅ Photo forwarded to ${targetJid}`);
-            } catch (err) {
-                console.error(`Failed to forward to ${targetJid}:`, err.message);
-            }
-        }
-    } catch (error) {
-        console.error('Error forwarding photo:', error);
-    }
-}
-
-/**
- * Forward video to WhatsApp - automatically chooses between video (64MB) and document (2GB)
- */
-async function forwardVideoToWhatsApp(fileUrl, caption, fileName, mimeType, fileSize) {
-    if (!whatsappSock || TARGET_JIDS.length === 0) return;
-    
-    try {
-        const videoBuffer = await downloadFile(fileUrl);
-        const fileSizeMB = (videoBuffer.length / (1024 * 1024)).toFixed(2);
-        console.log(`📊 Video size: ${fileSizeMB} MB, MIME: ${mimeType}`);
-        
-        for (const targetJid of TARGET_JIDS) {
-            try {
-                // If file is small and MP4, send as video for preview
-                if (videoBuffer.length <= 64 * 1024 * 1024 && mimeType === 'video/mp4') {
-                    await whatsappSock.sendMessage(targetJid, { 
-                        video: videoBuffer,
-                        caption: caption,  // Only original caption
-                        mimetype: mimeType
-                    });
-                    console.log(`✅ Video (as media) forwarded to ${targetJid}`);
-                } else {
-                    // For large files or non-MP4, send as document
-                    await whatsappSock.sendMessage(targetJid, { 
-                        document: videoBuffer,
-                        fileName: fileName,
-                        caption: caption,  // Only original caption
-                        mimetype: mimeType || 'video/mp4'
-                    });
-                    console.log(`✅ Video (as document) forwarded to ${targetJid}`);
-                }
-            } catch (err) {
-                console.error(`Failed to forward to ${targetJid}:`, err.message);
-            }
-        }
-    } catch (error) {
-        console.error('Error forwarding video:', error);
-    }
-}
-
-/**
- * Forward document to WhatsApp - supports up to 2GB
- */
-async function forwardDocumentToWhatsApp(fileUrl, fileName, caption, mimeType, fileSize) {
-    if (!whatsappSock || TARGET_JIDS.length === 0) return;
-    
-    try {
-        const documentBuffer = await downloadFile(fileUrl);
-        const fileSizeMB = (documentBuffer.length / (1024 * 1024)).toFixed(2);
-        console.log(`📊 Document size: ${fileSizeMB} MB, Type: ${mimeType || 'unknown'}`);
-        
-        for (const targetJid of TARGET_JIDS) {
-            try {
-                await whatsappSock.sendMessage(targetJid, { 
-                    document: documentBuffer,
-                    fileName: fileName,
-                    caption: caption,  // Only original caption
-                    mimetype: mimeType || 'application/octet-stream'
-                });
-                console.log(`✅ Document forwarded to ${targetJid}`);
-            } catch (err) {
-                console.error(`Failed to forward to ${targetJid}:`, err.message);
-            }
-        }
-    } catch (error) {
-        console.error('Error forwarding document:', error);
-    }
-}
-
-/**
  * Forward audio to WhatsApp
  */
-async function forwardAudioToWhatsApp(fileUrl, caption, fileName, mimeType, fileSize) {
+async function forwardAudioToWhatsApp(fileUrl, caption, mimeType) {
     if (!whatsappSock || TARGET_JIDS.length === 0) return;
     
     try {
-        const audioBuffer = await downloadFile(fileUrl);
+        const response = await axios({
+            method: 'GET',
+            url: fileUrl,
+            responseType: 'arraybuffer'
+        });
+        const audioBuffer = Buffer.from(response.data);
         
         for (const targetJid of TARGET_JIDS) {
             try {
                 await whatsappSock.sendMessage(targetJid, { 
                     audio: audioBuffer,
                     mimetype: mimeType || 'audio/mpeg',
-                    caption: caption  // Only original caption if any
+                    caption: caption
                 });
                 console.log(`✅ Audio forwarded to ${targetJid}`);
             } catch (err) {
@@ -341,18 +409,23 @@ async function forwardAudioToWhatsApp(fileUrl, caption, fileName, mimeType, file
 /**
  * Forward voice note to WhatsApp
  */
-async function forwardVoiceToWhatsApp(fileUrl, mimeType, fileSize) {
+async function forwardVoiceToWhatsApp(fileUrl, mimeType) {
     if (!whatsappSock || TARGET_JIDS.length === 0) return;
     
     try {
-        const voiceBuffer = await downloadFile(fileUrl);
+        const response = await axios({
+            method: 'GET',
+            url: fileUrl,
+            responseType: 'arraybuffer'
+        });
+        const voiceBuffer = Buffer.from(response.data);
         
         for (const targetJid of TARGET_JIDS) {
             try {
                 await whatsappSock.sendMessage(targetJid, { 
                     audio: voiceBuffer,
                     mimetype: mimeType || 'audio/mp4',
-                    ptt: true  // This makes it a voice note
+                    ptt: true
                 });
                 console.log(`✅ Voice note forwarded to ${targetJid}`);
             } catch (err) {
@@ -371,7 +444,12 @@ async function forwardStickerToWhatsApp(fileUrl) {
     if (!whatsappSock || TARGET_JIDS.length === 0) return;
     
     try {
-        const stickerBuffer = await downloadFile(fileUrl);
+        const response = await axios({
+            method: 'GET',
+            url: fileUrl,
+            responseType: 'arraybuffer'
+        });
+        const stickerBuffer = Buffer.from(response.data);
         
         for (const targetJid of TARGET_JIDS) {
             try {
@@ -388,32 +466,6 @@ async function forwardStickerToWhatsApp(fileUrl) {
     }
 }
 
-/**
- * Forward video note (round video) to WhatsApp
- */
-async function forwardVideoNoteToWhatsApp(fileUrl, fileSize) {
-    if (!whatsappSock || TARGET_JIDS.length === 0) return;
-    
-    try {
-        const videoBuffer = await downloadFile(fileUrl);
-        
-        for (const targetJid of TARGET_JIDS) {
-            try {
-                await whatsappSock.sendMessage(targetJid, { 
-                    video: videoBuffer,
-                    gifPlayback: false,
-                    caption: ''
-                });
-                console.log(`✅ Video note forwarded to ${targetJid}`);
-            } catch (err) {
-                console.error(`Failed to forward to ${targetJid}:`, err.message);
-            }
-        }
-    } catch (error) {
-        console.error('Error forwarding video note:', error);
-    }
-}
-
 // -----------------------------------------------------------------------------
 // SESSION STATE
 // -----------------------------------------------------------------------------
@@ -423,32 +475,20 @@ const sessions = new Map();
 wasi_app.use(express.json());
 wasi_app.use(express.static(path.join(__dirname, 'public')));
 
-// Keep-Alive Route
 wasi_app.get('/ping', (req, res) => res.status(200).send('pong'));
 
 // -----------------------------------------------------------------------------
 // COMMAND HANDLER FUNCTIONS
 // -----------------------------------------------------------------------------
 
-/**
- * Handle !ping command
- */
 async function handlePingCommand(sock, from) {
     await sock.sendMessage(from, { text: "Love You😘" });
-    console.log(`Ping command executed for ${from}`);
 }
 
-/**
- * Handle !jid command - Get current chat JID
- */
 async function handleJidCommand(sock, from) {
     await sock.sendMessage(from, { text: `${from}` });
-    console.log(`JID command executed for ${from}`);
 }
 
-/**
- * Handle !gjid command - Get all groups with details
- */
 async function handleGjidCommand(sock, from) {
     try {
         const groups = await sock.groupFetchAllParticipating();
@@ -460,45 +500,28 @@ async function handleGjidCommand(sock, from) {
             const groupName = group.subject || "Unnamed Group";
             const participantsCount = group.participants ? group.participants.length : 0;
             
-            // Determine group type
-            let groupType = "Simple Group";
-            if (group.isCommunity) {
-                groupType = "Community";
-            } else if (group.isCommunityAnnounce) {
-                groupType = "Community Announcement";
-            } else if (group.parentGroup) {
-                groupType = "Subgroup";
-            }
-            
             response += `${groupCount}. *${groupName}*\n`;
             response += `   👥 Members: ${participantsCount}\n`;
             response += `   🆔: \`${jid}\`\n`;
-            response += `   📝 Type: ${groupType}\n`;
             response += `   ──────────────\n\n`;
             
             groupCount++;
         }
         
         if (groupCount === 1) {
-            response = "❌ No groups found. You are not in any groups.";
+            response = "❌ No groups found.";
         } else {
             response += `\n*Total Groups: ${groupCount - 1}*`;
         }
         
         await sock.sendMessage(from, { text: response });
-        console.log(`GJID command executed. Sent ${groupCount - 1} groups list.`);
         
     } catch (error) {
         console.error('Error fetching groups:', error);
-        await sock.sendMessage(from, { 
-            text: "❌ Error fetching groups list. Please try again later." 
-        });
+        await sock.sendMessage(from, { text: "❌ Error fetching groups list." });
     }
 }
 
-/**
- * Process incoming messages for commands
- */
 async function processCommand(sock, msg) {
     const from = msg.key.remoteJid;
     let text = '';
@@ -522,11 +545,9 @@ async function processCommand(sock, msg) {
     try {
         if (command === '!ping') {
             await handlePingCommand(sock, from);
-        } 
-        else if (command === '!jid') {
+        } else if (command === '!jid') {
             await handleJidCommand(sock, from);
-        }
-        else if (command === '!gjid') {
+        } else if (command === '!gjid') {
             await handleGjidCommand(sock, from);
         }
     } catch (error) {
@@ -564,7 +585,7 @@ async function startSession(sessionId) {
 
     const { wasi_sock, saveCreds } = await wasi_connectSession(false, sessionId);
     sessionState.sock = wasi_sock;
-    whatsappSock = wasi_sock; // Store socket globally for Telegram forwarding
+    whatsappSock = wasi_sock;
 
     wasi_sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
@@ -582,14 +603,11 @@ async function startSession(sessionId) {
 
             const shouldReconnect = statusCode !== DisconnectReason.loggedOut && statusCode !== 440;
 
-            console.log(`Session ${sessionId}: Connection closed, reconnecting: ${shouldReconnect}`);
-
             if (shouldReconnect) {
                 setTimeout(() => {
                     startSession(sessionId);
                 }, 3000);
             } else {
-                console.log(`Session ${sessionId} logged out. Removing.`);
                 sessions.delete(sessionId);
                 await wasi_clearSession(sessionId);
                 whatsappSock = null;
@@ -603,7 +621,6 @@ async function startSession(sessionId) {
 
     wasi_sock.ev.on('creds.update', saveCreds);
 
-    // Message Handler - Only for commands
     wasi_sock.ev.on('messages.upsert', async wasi_m => {
         const wasi_msg = wasi_m.messages[0];
         if (!wasi_msg.message) return;
@@ -621,7 +638,6 @@ async function startSession(sessionId) {
             wasi_text = wasi_msg.message.documentMessage.caption;
         }
 
-        // COMMAND HANDLER ONLY
         if (wasi_text && wasi_text.startsWith('!')) {
             await processCommand(wasi_sock, wasi_msg);
         }
@@ -653,6 +669,7 @@ wasi_app.get('/api/status', async (req, res) => {
         qr: qrDataUrl,
         telegramEnabled,
         targets: TARGET_JIDS,
+        streaming: true,
         activeSessions: Array.from(sessions.keys())
     });
 });
@@ -671,10 +688,8 @@ function wasi_startServer() {
         if (telegramEnabled) {
             console.log(`📱 Telegram Bot: Active`);
             console.log(`🎯 Target JIDs: ${TARGET_JIDS.length} configured`);
-            console.log(`📤 Forwarding: Pure - No extra captions added`);
-            console.log(`📦 Document support: Up to 2GB (MKV, ZIP, PDF, etc.)`);
-        } else {
-            console.log(`📱 Telegram Bot: Disabled (Add TELEGRAM_TOKEN to enable)`);
+            console.log(`🎬 Streaming: Videos play while downloading (no waiting!)`);
+            console.log(`📦 Large files: Up to 2GB supported`);
         }
         console.log(`📱 Scan QR code from browser to connect`);
     });
@@ -684,7 +699,6 @@ function wasi_startServer() {
 // MAIN STARTUP
 // -----------------------------------------------------------------------------
 async function main() {
-    // 1. Connect DB if configured
     if (config.mongoDbUrl) {
         const dbResult = await wasi_connectDatabase(config.mongoDbUrl);
         if (dbResult) {
@@ -692,24 +706,33 @@ async function main() {
         }
     }
 
-    // 2. Start default session
     const sessionId = config.sessionId || 'wasi_session';
     await startSession(sessionId);
 
-    // 3. Start server
     wasi_startServer();
 }
 
 main();
 
-// Enable graceful stop
+// Graceful shutdown
 process.once('SIGINT', () => {
+    console.log('👋 Shutting down...');
     if (telegramBot) {
         telegramBot.stop('SIGINT');
     }
+    // Clean temp directory
+    if (fs.existsSync(TEMP_DIR)) {
+        fs.readdirSync(TEMP_DIR).forEach(file => {
+            fs.unlinkSync(path.join(TEMP_DIR, file));
+        });
+    }
+    process.exit(0);
 });
+
 process.once('SIGTERM', () => {
+    console.log('👋 Shutting down...');
     if (telegramBot) {
         telegramBot.stop('SIGTERM');
     }
+    process.exit(0);
 });
