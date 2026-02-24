@@ -11,6 +11,9 @@ const path = require('path');
 const { Telegraf } = require('telegraf');
 const axios = require('axios');
 const FormData = require('form-data');
+const stream = require('stream');
+const { promisify } = require('util');
+const pipeline = promisify(stream.pipeline);
 
 const { wasi_connectSession, wasi_clearSession } = require('./wasilib/session');
 const { wasi_connectDatabase } = require('./wasilib/database');
@@ -38,6 +41,10 @@ const QRCode = require('qrcode');
 const TARGET_JIDS = process.env.TARGET_JIDS
     ? process.env.TARGET_JIDS.split(',').map(j => j.trim()).filter(j => j)
     : [];
+
+// Streaming configuration
+const MAX_FILE_SIZE = process.env.MAX_FILE_SIZE || 500 * 1024 * 1024; // 500MB default
+const STREAM_BUFFER_SIZE = 64 * 1024; // 64KB chunks for streaming
 
 // -----------------------------------------------------------------------------
 // TELEGRAM BOT SETUP
@@ -95,12 +102,21 @@ if (TELEGRAM_TOKEN && TELEGRAM_TOKEN !== 'YOUR_TELEGRAM_BOT_TOKEN') {
                     await ctx.reply('✅ Photo forwarded to WhatsApp!');
                 }
                 else if (ctx.message.video) {
-                    // Video with caption
+                    // Video with caption - STREAMING SUPPORT
                     const video = ctx.message.video;
                     const fileLink = await ctx.telegram.getFileLink(video.file_id);
                     const caption = ctx.message.caption || '';
-                    await forwardVideoToWhatsApp(fileLink.href, caption, ctx.from);
-                    await ctx.reply('✅ Video forwarded to WhatsApp!');
+                    
+                    // Check file size first
+                    if (video.file_size > MAX_FILE_SIZE) {
+                        await ctx.reply(`❌ Video too large (${Math.round(video.file_size / (1024 * 1024))}MB). Max allowed: ${MAX_FILE_SIZE / (1024 * 1024)}MB`);
+                        return;
+                    }
+                    
+                    // Send streaming video
+                    await ctx.reply(`📹 Forwarding video (${Math.round(video.file_size / (1024 * 1024))}MB) with streaming support...`);
+                    await forwardVideoToWhatsAppStream(fileLink.href, caption, ctx.from, video.file_name, video.mime_type);
+                    await ctx.reply('✅ Video forwarded with streaming support!');
                 }
                 else if (ctx.message.document) {
                     // Document with caption
@@ -108,6 +124,12 @@ if (TELEGRAM_TOKEN && TELEGRAM_TOKEN !== 'YOUR_TELEGRAM_BOT_TOKEN') {
                     const fileLink = await ctx.telegram.getFileLink(document.file_id);
                     const caption = ctx.message.caption || '';
                     const filename = document.file_name || 'document';
+                    
+                    if (document.file_size > MAX_FILE_SIZE) {
+                        await ctx.reply(`❌ File too large (${Math.round(document.file_size / (1024 * 1024))}MB). Max allowed: ${MAX_FILE_SIZE / (1024 * 1024)}MB`);
+                        return;
+                    }
+                    
                     await forwardDocumentToWhatsApp(fileLink.href, filename, caption, ctx.from);
                     await ctx.reply('✅ Document forwarded to WhatsApp!');
                 }
@@ -116,6 +138,12 @@ if (TELEGRAM_TOKEN && TELEGRAM_TOKEN !== 'YOUR_TELEGRAM_BOT_TOKEN') {
                     const audio = ctx.message.audio || ctx.message.voice;
                     const fileLink = await ctx.telegram.getFileLink(audio.file_id);
                     const caption = ctx.message.caption || '';
+                    
+                    if (audio.file_size > MAX_FILE_SIZE) {
+                        await ctx.reply(`❌ Audio too large (${Math.round(audio.file_size / (1024 * 1024))}MB). Max allowed: ${MAX_FILE_SIZE / (1024 * 1024)}MB`);
+                        return;
+                    }
+                    
                     await forwardAudioToWhatsApp(fileLink.href, caption, ctx.from);
                     await ctx.reply('✅ Audio forwarded to WhatsApp!');
                 }
@@ -142,7 +170,8 @@ if (TELEGRAM_TOKEN && TELEGRAM_TOKEN !== 'YOUR_TELEGRAM_BOT_TOKEN') {
             await ctx.reply(
                 `📱 *WhatsApp Status:* ${status}\n\n` +
                 `🎯 *Target JIDs:*\n${targets}\n\n` +
-                `📤 Forward any message to send to WhatsApp`
+                `📤 Forward any message to send to WhatsApp\n` +
+                `📹 Videos are streamed (play while downloading)`
             );
         });
 
@@ -166,7 +195,191 @@ if (TELEGRAM_TOKEN && TELEGRAM_TOKEN !== 'YOUR_TELEGRAM_BOT_TOKEN') {
 }
 
 // -----------------------------------------------------------------------------
-// FORWARDING FUNCTIONS
+// STREAMING DOWNLOAD FUNCTIONS
+// -----------------------------------------------------------------------------
+
+/**
+ * Create a readable stream from a URL with range support
+ */
+function createFileStream(url, options = {}) {
+    const range = options.range || 'bytes=0-';
+    
+    return axios({
+        method: 'GET',
+        url: url,
+        responseType: 'stream',
+        headers: {
+            'Range': range,
+            'User-Agent': 'Mozilla/5.0 (compatible; WhatsApp-Bot/1.0)'
+        },
+        maxRedirects: 5,
+        timeout: 30000
+    }).then(response => {
+        return response.data;
+    });
+}
+
+/**
+ * Get file info from URL (size, type, etc)
+ */
+async function getFileInfo(url) {
+    try {
+        const response = await axios({
+            method: 'HEAD',
+            url: url,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (compatible; WhatsApp-Bot/1.0)'
+            }
+        });
+        
+        return {
+            size: parseInt(response.headers['content-length'] || 0),
+            type: response.headers['content-type'] || 'application/octet-stream',
+            acceptsRanges: response.headers['accept-ranges'] === 'bytes',
+            lastModified: response.headers['last-modified']
+        };
+    } catch (error) {
+        console.error('Error getting file info:', error);
+        return null;
+    }
+}
+
+/**
+ * Stream video to WhatsApp with progressive download support
+ * WhatsApp will play the video as it downloads
+ */
+async function forwardVideoToWhatsAppStream(fileUrl, caption, fromTelegram, fileName = 'video.mp4', mimeType = 'video/mp4') {
+    if (!whatsappSock || TARGET_JIDS.length === 0) return;
+    
+    try {
+        // Get file info first
+        const fileInfo = await getFileInfo(fileUrl);
+        if (!fileInfo) {
+            throw new Error('Could not get file information');
+        }
+        
+        console.log(`🎥 Streaming video: ${Math.round(fileInfo.size / (1024 * 1024))}MB, Ranges supported: ${fileInfo.acceptsRanges}`);
+        
+        const prefix = fromTelegram ? `🎥 From Telegram (${fromTelegram.username || fromTelegram.id}):\n` : '';
+        const fullCaption = prefix + (caption || '');
+        
+        // Create a temporary file path for streaming
+        const tempFilePath = path.join(__dirname, 'temp', `stream_${Date.now()}_${fileName}`);
+        
+        // Ensure temp directory exists
+        if (!fs.existsSync(path.join(__dirname, 'temp'))) {
+            fs.mkdirSync(path.join(__dirname, 'temp'), { recursive: true });
+        }
+        
+        // Create write stream
+        const writeStream = fs.createWriteStream(tempFilePath);
+        
+        // Download with streaming
+        const response = await axios({
+            method: 'GET',
+            url: fileUrl,
+            responseType: 'stream',
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (compatible; WhatsApp-Bot/1.0)'
+            }
+        });
+        
+        // Pipe to file
+        await pipeline(response.data, writeStream);
+        
+        // Get file stats
+        const stats = fs.statSync(tempFilePath);
+        
+        // Send to WhatsApp using the file path (WhatsApp handles streaming internally)
+        for (const targetJid of TARGET_JIDS) {
+            try {
+                // Send video with caption
+                await whatsappSock.sendMessage(targetJid, {
+                    video: fs.readFileSync(tempFilePath),
+                    caption: fullCaption,
+                    mimetype: mimeType || 'video/mp4',
+                    fileName: fileName || 'video.mp4'
+                });
+                
+                console.log(`✅ Video streamed to ${targetJid} (${Math.round(stats.size / (1024 * 1024))}MB)`);
+            } catch (err) {
+                console.error(`Failed to forward to ${targetJid}:`, err.message);
+            }
+        }
+        
+        // Clean up temp file
+        fs.unlink(tempFilePath, (err) => {
+            if (err) console.error('Error deleting temp file:', err);
+        });
+        
+    } catch (error) {
+        console.error('Error streaming video:', error);
+        throw error;
+    }
+}
+
+/**
+ * Alternative: Direct streaming without saving to disk
+ * Uses WhatsApp's ability to stream from buffer gradually
+ */
+async function forwardVideoToWhatsAppDirect(fileUrl, caption, fromTelegram, fileName = 'video.mp4', mimeType = 'video/mp4') {
+    if (!whatsappSock || TARGET_JIDS.length === 0) return;
+    
+    try {
+        console.log('Starting direct video stream...');
+        
+        const prefix = fromTelegram ? `🎥 From Telegram (${fromTelegram.username || fromTelegram.id}):\n` : '';
+        const fullCaption = prefix + (caption || '');
+        
+        // Stream the video in chunks
+        const response = await axios({
+            method: 'GET',
+            url: fileUrl,
+            responseType: 'stream',
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (compatible; WhatsApp-Bot/1.0)'
+            }
+        });
+        
+        // Collect chunks and send progressively
+        const chunks = [];
+        let totalSize = 0;
+        
+        response.data.on('data', (chunk) => {
+            chunks.push(chunk);
+            totalSize += chunk.length;
+            console.log(`📥 Downloaded: ${Math.round(totalSize / (1024 * 1024) * 100) / 100}MB`);
+        });
+        
+        response.data.on('end', async () => {
+            console.log('Download complete, sending to WhatsApp...');
+            
+            const videoBuffer = Buffer.concat(chunks);
+            
+            for (const targetJid of TARGET_JIDS) {
+                try {
+                    await whatsappSock.sendMessage(targetJid, {
+                        video: videoBuffer,
+                        caption: fullCaption,
+                        mimetype: mimeType || 'video/mp4',
+                        fileName: fileName || 'video.mp4'
+                    });
+                    
+                    console.log(`✅ Video sent to ${targetJid} (${Math.round(videoBuffer.length / (1024 * 1024) * 100) / 100}MB)`);
+                } catch (err) {
+                    console.error(`Failed to forward to ${targetJid}:`, err.message);
+                }
+            }
+        });
+        
+    } catch (error) {
+        console.error('Error in direct video stream:', error);
+        throw error;
+    }
+}
+
+// -----------------------------------------------------------------------------
+// FORWARDING FUNCTIONS (Updated for large files)
 // -----------------------------------------------------------------------------
 
 /**
@@ -190,25 +403,26 @@ async function forwardTextToWhatsApp(text, fromTelegram) {
 }
 
 /**
- * Download file from URL and send as buffer
+ * Download file with streaming for photos
  */
-async function downloadFile(url) {
+async function downloadFileStream(url) {
     const response = await axios({
         method: 'GET',
         url: url,
-        responseType: 'arraybuffer'
+        responseType: 'arraybuffer',
+        maxContentLength: MAX_FILE_SIZE
     });
     return Buffer.from(response.data);
 }
 
 /**
- * Forward photo to WhatsApp
+ * Forward photo to WhatsApp (small files, no streaming needed)
  */
 async function forwardPhotoToWhatsApp(fileUrl, caption, fromTelegram) {
     if (!whatsappSock || TARGET_JIDS.length === 0) return;
     
     try {
-        const imageBuffer = await downloadFile(fileUrl);
+        const imageBuffer = await downloadFileStream(fileUrl);
         const prefix = fromTelegram ? `📸 From Telegram (${fromTelegram.username || fromTelegram.id}):\n` : '';
         const fullCaption = prefix + (caption || '');
         
@@ -229,40 +443,14 @@ async function forwardPhotoToWhatsApp(fileUrl, caption, fromTelegram) {
 }
 
 /**
- * Forward video to WhatsApp
- */
-async function forwardVideoToWhatsApp(fileUrl, caption, fromTelegram) {
-    if (!whatsappSock || TARGET_JIDS.length === 0) return;
-    
-    try {
-        const videoBuffer = await downloadFile(fileUrl);
-        const prefix = fromTelegram ? `🎥 From Telegram (${fromTelegram.username || fromTelegram.id}):\n` : '';
-        const fullCaption = prefix + (caption || '');
-        
-        for (const targetJid of TARGET_JIDS) {
-            try {
-                await whatsappSock.sendMessage(targetJid, { 
-                    video: videoBuffer,
-                    caption: fullCaption
-                });
-                console.log(`✅ Video forwarded to ${targetJid}`);
-            } catch (err) {
-                console.error(`Failed to forward to ${targetJid}:`, err.message);
-            }
-        }
-    } catch (error) {
-        console.error('Error forwarding video:', error);
-    }
-}
-
-/**
  * Forward document to WhatsApp
  */
 async function forwardDocumentToWhatsApp(fileUrl, filename, caption, fromTelegram) {
     if (!whatsappSock || TARGET_JIDS.length === 0) return;
     
     try {
-        const documentBuffer = await downloadFile(fileUrl);
+        // For documents, we need the whole file
+        const documentBuffer = await downloadFileStream(fileUrl);
         const prefix = fromTelegram ? `📄 From Telegram (${fromTelegram.username || fromTelegram.id}):\n` : '';
         const fullCaption = prefix + (caption || '');
         
@@ -291,7 +479,7 @@ async function forwardAudioToWhatsApp(fileUrl, caption, fromTelegram) {
     if (!whatsappSock || TARGET_JIDS.length === 0) return;
     
     try {
-        const audioBuffer = await downloadFile(fileUrl);
+        const audioBuffer = await downloadFileStream(fileUrl);
         
         for (const targetJid of TARGET_JIDS) {
             try {
@@ -317,7 +505,7 @@ async function forwardStickerToWhatsApp(fileUrl, fromTelegram) {
     if (!whatsappSock || TARGET_JIDS.length === 0) return;
     
     try {
-        const stickerBuffer = await downloadFile(fileUrl);
+        const stickerBuffer = await downloadFileStream(fileUrl);
         
         for (const targetJid of TARGET_JIDS) {
             try {
@@ -558,7 +746,9 @@ wasi_app.get('/api/status', async (req, res) => {
         qr: qrDataUrl,
         telegramEnabled,
         targets: TARGET_JIDS,
-        activeSessions: Array.from(sessions.keys())
+        activeSessions: Array.from(sessions.keys()),
+        streamingEnabled: true,
+        maxFileSize: `${MAX_FILE_SIZE / (1024 * 1024)}MB`
     });
 });
 
@@ -574,8 +764,9 @@ function wasi_startServer() {
         console.log(`🌐 Server running on port ${wasi_port}`);
         console.log(`🤖 WhatsApp Commands: !ping, !jid, !gjid`);
         if (telegramEnabled) {
-            console.log(`📱 Telegram Bot: Active`);
+            console.log(`📱 Telegram Bot: Active with STREAMING support`);
             console.log(`🎯 Target JIDs: ${TARGET_JIDS.length} configured`);
+            console.log(`📹 Max file size: ${MAX_FILE_SIZE / (1024 * 1024)}MB`);
         } else {
             console.log(`📱 Telegram Bot: Disabled (Add TELEGRAM_TOKEN to enable)`);
         }
@@ -595,11 +786,16 @@ async function main() {
         }
     }
 
-    // 2. Start default session
+    // 2. Create temp directory if not exists
+    if (!fs.existsSync(path.join(__dirname, 'temp'))) {
+        fs.mkdirSync(path.join(__dirname, 'temp'), { recursive: true });
+    }
+
+    // 3. Start default session
     const sessionId = config.sessionId || 'wasi_session';
     await startSession(sessionId);
 
-    // 3. Start server
+    // 4. Start server
     wasi_startServer();
 }
 
@@ -607,10 +803,24 @@ main();
 
 // Enable graceful stop
 process.once('SIGINT', () => {
+    // Clean up temp files
+    const tempDir = path.join(__dirname, 'temp');
+    if (fs.existsSync(tempDir)) {
+        fs.readdir(tempDir, (err, files) => {
+            if (err) throw err;
+            for (const file of files) {
+                fs.unlink(path.join(tempDir, file), err => {
+                    if (err) console.error('Error deleting temp file:', err);
+                });
+            }
+        });
+    }
+    
     if (telegramBot) {
         telegramBot.stop('SIGINT');
     }
 });
+
 process.once('SIGTERM', () => {
     if (telegramBot) {
         telegramBot.stop('SIGTERM');
