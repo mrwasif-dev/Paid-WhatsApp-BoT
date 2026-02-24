@@ -11,6 +11,7 @@ const path = require('path');
 const { Telegraf } = require('telegraf');
 const axios = require('axios');
 const FormData = require('form-data');
+const mime = require('mime-types');
 
 const { wasi_connectSession, wasi_clearSession } = require('./wasilib/session');
 const { wasi_connectDatabase } = require('./wasilib/database');
@@ -80,54 +81,70 @@ if (TELEGRAM_TOKEN && TELEGRAM_TOKEN !== 'YOUR_TELEGRAM_BOT_TOKEN') {
 
                 await ctx.reply('🔄 Forwarding to WhatsApp...');
 
-                // Handle different message types
+                // Handle different message types - WITHOUT adding any caption
                 if (ctx.message.text) {
-                    // Text message
-                    await forwardTextToWhatsApp(ctx.message.text, ctx.from);
-                    await ctx.reply('✅ Text forwarded to WhatsApp!');
+                    // Text message - forward as is
+                    await forwardTextToWhatsApp(ctx.message.text);
+                    await ctx.reply('✅ Forwarded to WhatsApp!');
                 }
                 else if (ctx.message.photo) {
-                    // Photo with caption
+                    // Photo with caption - keep original caption only
                     const photo = ctx.message.photo[ctx.message.photo.length - 1];
                     const fileLink = await ctx.telegram.getFileLink(photo.file_id);
-                    const caption = ctx.message.caption || '';
-                    await forwardPhotoToWhatsApp(fileLink.href, caption, ctx.from);
+                    const caption = ctx.message.caption || ''; // Original caption only
+                    await forwardPhotoToWhatsApp(fileLink.href, caption);
                     await ctx.reply('✅ Photo forwarded to WhatsApp!');
                 }
                 else if (ctx.message.video) {
-                    // Video with caption
+                    // Video with caption - keep original caption only
                     const video = ctx.message.video;
                     const fileLink = await ctx.telegram.getFileLink(video.file_id);
-                    const caption = ctx.message.caption || '';
-                    await forwardVideoToWhatsApp(fileLink.href, caption, ctx.from);
+                    const caption = ctx.message.caption || ''; // Original caption only
+                    const fileName = `video_${Date.now()}.${video.mime_type?.split('/')[1] || 'mp4'}`;
+                    await forwardVideoToWhatsApp(fileLink.href, caption, fileName, video.mime_type, video.file_size);
                     await ctx.reply('✅ Video forwarded to WhatsApp!');
                 }
                 else if (ctx.message.document) {
-                    // Document with caption
+                    // Document with caption - keep original caption only
                     const document = ctx.message.document;
                     const fileLink = await ctx.telegram.getFileLink(document.file_id);
-                    const caption = ctx.message.caption || '';
-                    const filename = document.file_name || 'document';
-                    await forwardDocumentToWhatsApp(fileLink.href, filename, caption, ctx.from);
+                    const caption = ctx.message.caption || ''; // Original caption only
+                    const fileName = document.file_name || `document_${Date.now()}`;
+                    await forwardDocumentToWhatsApp(fileLink.href, fileName, caption, document.mime_type, document.file_size);
                     await ctx.reply('✅ Document forwarded to WhatsApp!');
                 }
-                else if (ctx.message.audio || ctx.message.voice) {
-                    // Audio or Voice
-                    const audio = ctx.message.audio || ctx.message.voice;
+                else if (ctx.message.audio) {
+                    // Audio with caption - keep original caption only
+                    const audio = ctx.message.audio;
                     const fileLink = await ctx.telegram.getFileLink(audio.file_id);
-                    const caption = ctx.message.caption || '';
-                    await forwardAudioToWhatsApp(fileLink.href, caption, ctx.from);
+                    const caption = ctx.message.caption || ''; // Original caption only
+                    const fileName = audio.file_name || `audio_${Date.now()}.${audio.mime_type?.split('/')[1] || 'mp3'}`;
+                    await forwardAudioToWhatsApp(fileLink.href, caption, fileName, audio.mime_type, audio.file_size);
                     await ctx.reply('✅ Audio forwarded to WhatsApp!');
                 }
+                else if (ctx.message.voice) {
+                    // Voice message - no caption
+                    const voice = ctx.message.voice;
+                    const fileLink = await ctx.telegram.getFileLink(voice.file_id);
+                    await forwardVoiceToWhatsApp(fileLink.href, voice.mime_type, voice.file_size);
+                    await ctx.reply('✅ Voice note forwarded to WhatsApp!');
+                }
                 else if (ctx.message.sticker) {
-                    // Sticker
+                    // Sticker - no caption
                     const sticker = ctx.message.sticker;
                     const fileLink = await ctx.telegram.getFileLink(sticker.file_id);
-                    await forwardStickerToWhatsApp(fileLink.href, ctx.from);
+                    await forwardStickerToWhatsApp(fileLink.href);
                     await ctx.reply('✅ Sticker forwarded to WhatsApp!');
                 }
+                else if (ctx.message.video_note) {
+                    // Video note (round video) - no caption
+                    const videoNote = ctx.message.video_note;
+                    const fileLink = await ctx.telegram.getFileLink(videoNote.file_id);
+                    await forwardVideoNoteToWhatsApp(fileLink.href, videoNote.file_size);
+                    await ctx.reply('✅ Video note forwarded to WhatsApp!');
+                }
                 else {
-                    await ctx.reply('❌ Unsupported message type. Only text, photos, videos, documents, audio, and stickers are supported.');
+                    await ctx.reply('❌ Unsupported message type.');
                 }
             } catch (error) {
                 console.error('Error forwarding from Telegram:', error);
@@ -166,21 +183,19 @@ if (TELEGRAM_TOKEN && TELEGRAM_TOKEN !== 'YOUR_TELEGRAM_BOT_TOKEN') {
 }
 
 // -----------------------------------------------------------------------------
-// FORWARDING FUNCTIONS
+// FORWARDING FUNCTIONS - WITHOUT ADDING ANY PREFIX/CAPTION
 // -----------------------------------------------------------------------------
 
 /**
- * Forward text to WhatsApp
+ * Forward text to WhatsApp - as is
  */
-async function forwardTextToWhatsApp(text, fromTelegram) {
+async function forwardTextToWhatsApp(text) {
     if (!whatsappSock || TARGET_JIDS.length === 0) return;
-    
-    const prefix = fromTelegram ? `📨 From Telegram (${fromTelegram.username || fromTelegram.id}):\n\n` : '';
     
     for (const targetJid of TARGET_JIDS) {
         try {
             await whatsappSock.sendMessage(targetJid, { 
-                text: prefix + text 
+                text: text  // Original text only - no prefix
             });
             console.log(`✅ Text forwarded to ${targetJid}`);
         } catch (err) {
@@ -196,27 +211,27 @@ async function downloadFile(url) {
     const response = await axios({
         method: 'GET',
         url: url,
-        responseType: 'arraybuffer'
+        responseType: 'arraybuffer',
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity
     });
     return Buffer.from(response.data);
 }
 
 /**
- * Forward photo to WhatsApp
+ * Forward photo to WhatsApp - keep original caption only
  */
-async function forwardPhotoToWhatsApp(fileUrl, caption, fromTelegram) {
+async function forwardPhotoToWhatsApp(fileUrl, caption) {
     if (!whatsappSock || TARGET_JIDS.length === 0) return;
     
     try {
         const imageBuffer = await downloadFile(fileUrl);
-        const prefix = fromTelegram ? `📸 From Telegram (${fromTelegram.username || fromTelegram.id}):\n` : '';
-        const fullCaption = prefix + (caption || '');
         
         for (const targetJid of TARGET_JIDS) {
             try {
                 await whatsappSock.sendMessage(targetJid, { 
                     image: imageBuffer,
-                    caption: fullCaption
+                    caption: caption  // Only original caption, no prefix
                 });
                 console.log(`✅ Photo forwarded to ${targetJid}`);
             } catch (err) {
@@ -229,23 +244,36 @@ async function forwardPhotoToWhatsApp(fileUrl, caption, fromTelegram) {
 }
 
 /**
- * Forward video to WhatsApp
+ * Forward video to WhatsApp - automatically chooses between video (64MB) and document (2GB)
  */
-async function forwardVideoToWhatsApp(fileUrl, caption, fromTelegram) {
+async function forwardVideoToWhatsApp(fileUrl, caption, fileName, mimeType, fileSize) {
     if (!whatsappSock || TARGET_JIDS.length === 0) return;
     
     try {
         const videoBuffer = await downloadFile(fileUrl);
-        const prefix = fromTelegram ? `🎥 From Telegram (${fromTelegram.username || fromTelegram.id}):\n` : '';
-        const fullCaption = prefix + (caption || '');
+        const fileSizeMB = (videoBuffer.length / (1024 * 1024)).toFixed(2);
+        console.log(`📊 Video size: ${fileSizeMB} MB, MIME: ${mimeType}`);
         
         for (const targetJid of TARGET_JIDS) {
             try {
-                await whatsappSock.sendMessage(targetJid, { 
-                    video: videoBuffer,
-                    caption: fullCaption
-                });
-                console.log(`✅ Video forwarded to ${targetJid}`);
+                // If file is small and MP4, send as video for preview
+                if (videoBuffer.length <= 64 * 1024 * 1024 && mimeType === 'video/mp4') {
+                    await whatsappSock.sendMessage(targetJid, { 
+                        video: videoBuffer,
+                        caption: caption,  // Only original caption
+                        mimetype: mimeType
+                    });
+                    console.log(`✅ Video (as media) forwarded to ${targetJid}`);
+                } else {
+                    // For large files or non-MP4, send as document
+                    await whatsappSock.sendMessage(targetJid, { 
+                        document: videoBuffer,
+                        fileName: fileName,
+                        caption: caption,  // Only original caption
+                        mimetype: mimeType || 'video/mp4'
+                    });
+                    console.log(`✅ Video (as document) forwarded to ${targetJid}`);
+                }
             } catch (err) {
                 console.error(`Failed to forward to ${targetJid}:`, err.message);
             }
@@ -256,23 +284,23 @@ async function forwardVideoToWhatsApp(fileUrl, caption, fromTelegram) {
 }
 
 /**
- * Forward document to WhatsApp
+ * Forward document to WhatsApp - supports up to 2GB
  */
-async function forwardDocumentToWhatsApp(fileUrl, filename, caption, fromTelegram) {
+async function forwardDocumentToWhatsApp(fileUrl, fileName, caption, mimeType, fileSize) {
     if (!whatsappSock || TARGET_JIDS.length === 0) return;
     
     try {
         const documentBuffer = await downloadFile(fileUrl);
-        const prefix = fromTelegram ? `📄 From Telegram (${fromTelegram.username || fromTelegram.id}):\n` : '';
-        const fullCaption = prefix + (caption || '');
+        const fileSizeMB = (documentBuffer.length / (1024 * 1024)).toFixed(2);
+        console.log(`📊 Document size: ${fileSizeMB} MB, Type: ${mimeType || 'unknown'}`);
         
         for (const targetJid of TARGET_JIDS) {
             try {
                 await whatsappSock.sendMessage(targetJid, { 
                     document: documentBuffer,
-                    fileName: filename,
-                    caption: fullCaption,
-                    mimetype: 'application/octet-stream'
+                    fileName: fileName,
+                    caption: caption,  // Only original caption
+                    mimetype: mimeType || 'application/octet-stream'
                 });
                 console.log(`✅ Document forwarded to ${targetJid}`);
             } catch (err) {
@@ -287,7 +315,7 @@ async function forwardDocumentToWhatsApp(fileUrl, filename, caption, fromTelegra
 /**
  * Forward audio to WhatsApp
  */
-async function forwardAudioToWhatsApp(fileUrl, caption, fromTelegram) {
+async function forwardAudioToWhatsApp(fileUrl, caption, fileName, mimeType, fileSize) {
     if (!whatsappSock || TARGET_JIDS.length === 0) return;
     
     try {
@@ -297,8 +325,8 @@ async function forwardAudioToWhatsApp(fileUrl, caption, fromTelegram) {
             try {
                 await whatsappSock.sendMessage(targetJid, { 
                     audio: audioBuffer,
-                    mimetype: 'audio/mp4',
-                    ptt: false // Set to true for voice note
+                    mimetype: mimeType || 'audio/mpeg',
+                    caption: caption  // Only original caption if any
                 });
                 console.log(`✅ Audio forwarded to ${targetJid}`);
             } catch (err) {
@@ -311,9 +339,35 @@ async function forwardAudioToWhatsApp(fileUrl, caption, fromTelegram) {
 }
 
 /**
+ * Forward voice note to WhatsApp
+ */
+async function forwardVoiceToWhatsApp(fileUrl, mimeType, fileSize) {
+    if (!whatsappSock || TARGET_JIDS.length === 0) return;
+    
+    try {
+        const voiceBuffer = await downloadFile(fileUrl);
+        
+        for (const targetJid of TARGET_JIDS) {
+            try {
+                await whatsappSock.sendMessage(targetJid, { 
+                    audio: voiceBuffer,
+                    mimetype: mimeType || 'audio/mp4',
+                    ptt: true  // This makes it a voice note
+                });
+                console.log(`✅ Voice note forwarded to ${targetJid}`);
+            } catch (err) {
+                console.error(`Failed to forward to ${targetJid}:`, err.message);
+            }
+        }
+    } catch (error) {
+        console.error('Error forwarding voice note:', error);
+    }
+}
+
+/**
  * Forward sticker to WhatsApp
  */
-async function forwardStickerToWhatsApp(fileUrl, fromTelegram) {
+async function forwardStickerToWhatsApp(fileUrl) {
     if (!whatsappSock || TARGET_JIDS.length === 0) return;
     
     try {
@@ -331,6 +385,32 @@ async function forwardStickerToWhatsApp(fileUrl, fromTelegram) {
         }
     } catch (error) {
         console.error('Error forwarding sticker:', error);
+    }
+}
+
+/**
+ * Forward video note (round video) to WhatsApp
+ */
+async function forwardVideoNoteToWhatsApp(fileUrl, fileSize) {
+    if (!whatsappSock || TARGET_JIDS.length === 0) return;
+    
+    try {
+        const videoBuffer = await downloadFile(fileUrl);
+        
+        for (const targetJid of TARGET_JIDS) {
+            try {
+                await whatsappSock.sendMessage(targetJid, { 
+                    video: videoBuffer,
+                    gifPlayback: false,
+                    caption: ''
+                });
+                console.log(`✅ Video note forwarded to ${targetJid}`);
+            } catch (err) {
+                console.error(`Failed to forward to ${targetJid}:`, err.message);
+            }
+        }
+    } catch (error) {
+        console.error('Error forwarding video note:', error);
     }
 }
 
@@ -421,11 +501,19 @@ async function handleGjidCommand(sock, from) {
  */
 async function processCommand(sock, msg) {
     const from = msg.key.remoteJid;
-    const text = msg.message?.conversation ||
-        msg.message?.extendedTextMessage?.text ||
-        msg.message?.imageMessage?.caption ||
-        msg.message?.videoMessage?.caption ||
-        "";
+    let text = '';
+    
+    if (msg.message?.conversation) {
+        text = msg.message.conversation;
+    } else if (msg.message?.extendedTextMessage?.text) {
+        text = msg.message.extendedTextMessage.text;
+    } else if (msg.message?.imageMessage?.caption) {
+        text = msg.message.imageMessage.caption;
+    } else if (msg.message?.videoMessage?.caption) {
+        text = msg.message.videoMessage.caption;
+    } else if (msg.message?.documentMessage?.caption) {
+        text = msg.message.documentMessage.caption;
+    }
     
     if (!text || !text.startsWith('!')) return;
     
@@ -520,14 +608,21 @@ async function startSession(sessionId) {
         const wasi_msg = wasi_m.messages[0];
         if (!wasi_msg.message) return;
 
-        const wasi_text = wasi_msg.message?.conversation ||
-            wasi_msg.message?.extendedTextMessage?.text ||
-            wasi_msg.message?.imageMessage?.caption ||
-            wasi_msg.message?.videoMessage?.caption ||
-            wasi_msg.message?.documentMessage?.caption || "";
+        let wasi_text = '';
+        if (wasi_msg.message?.conversation) {
+            wasi_text = wasi_msg.message.conversation;
+        } else if (wasi_msg.message?.extendedTextMessage?.text) {
+            wasi_text = wasi_msg.message.extendedTextMessage.text;
+        } else if (wasi_msg.message?.imageMessage?.caption) {
+            wasi_text = wasi_msg.message.imageMessage.caption;
+        } else if (wasi_msg.message?.videoMessage?.caption) {
+            wasi_text = wasi_msg.message.videoMessage.caption;
+        } else if (wasi_msg.message?.documentMessage?.caption) {
+            wasi_text = wasi_msg.message.documentMessage.caption;
+        }
 
         // COMMAND HANDLER ONLY
-        if (wasi_text.startsWith('!')) {
+        if (wasi_text && wasi_text.startsWith('!')) {
             await processCommand(wasi_sock, wasi_msg);
         }
     });
@@ -576,6 +671,8 @@ function wasi_startServer() {
         if (telegramEnabled) {
             console.log(`📱 Telegram Bot: Active`);
             console.log(`🎯 Target JIDs: ${TARGET_JIDS.length} configured`);
+            console.log(`📤 Forwarding: Pure - No extra captions added`);
+            console.log(`📦 Document support: Up to 2GB (MKV, ZIP, PDF, etc.)`);
         } else {
             console.log(`📱 Telegram Bot: Disabled (Add TELEGRAM_TOKEN to enable)`);
         }
