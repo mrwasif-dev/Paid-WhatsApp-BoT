@@ -9,6 +9,8 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const { Telegraf } = require('telegraf');
+const axios = require('axios');
+const FormData = require('form-data');
 
 const { wasi_connectSession, wasi_clearSession } = require('./wasilib/session');
 const { wasi_connectDatabase } = require('./wasilib/database');
@@ -31,12 +33,20 @@ const wasi_port = process.env.PORT || 3000;
 const QRCode = require('qrcode');
 
 // -----------------------------------------------------------------------------
+// CONFIGURATION
+// -----------------------------------------------------------------------------
+const TARGET_JIDS = process.env.TARGET_JIDS
+    ? process.env.TARGET_JIDS.split(',').map(j => j.trim()).filter(j => j)
+    : [];
+
+// -----------------------------------------------------------------------------
 // TELEGRAM BOT SETUP
 // -----------------------------------------------------------------------------
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || 'YOUR_TELEGRAM_BOT_TOKEN';
 
 let telegramBot = null;
 let telegramEnabled = false;
+let whatsappSock = null; // Store WhatsApp socket for forwarding
 
 // Initialize Telegram Bot if token exists
 if (TELEGRAM_TOKEN && TELEGRAM_TOKEN !== 'YOUR_TELEGRAM_BOT_TOKEN') {
@@ -53,29 +63,274 @@ if (TELEGRAM_TOKEN && TELEGRAM_TOKEN !== 'YOUR_TELEGRAM_BOT_TOKEN') {
             telegramEnabled = false;
         });
         
-        // Basic commands for Telegram bot
-        telegramBot.start((ctx) => {
-            ctx.reply('👋 Welcome to WhatsApp Bot Controller!\n\nCommands:\n/status - Check bot status\n/help - Show this message');
+        // Handle all messages from Telegram
+        telegramBot.on('message', async (ctx) => {
+            try {
+                // Check if WhatsApp is connected
+                if (!whatsappSock || !whatsappSock.user) {
+                    await ctx.reply('❌ WhatsApp is not connected. Please scan QR code first.');
+                    return;
+                }
+
+                // Check if target JIDs are configured
+                if (TARGET_JIDS.length === 0) {
+                    await ctx.reply('❌ No target JIDs configured. Please set TARGET_JIDS in environment variables.');
+                    return;
+                }
+
+                await ctx.reply('🔄 Forwarding to WhatsApp...');
+
+                // Handle different message types
+                if (ctx.message.text) {
+                    // Text message
+                    await forwardTextToWhatsApp(ctx.message.text, ctx.from);
+                    await ctx.reply('✅ Text forwarded to WhatsApp!');
+                }
+                else if (ctx.message.photo) {
+                    // Photo with caption
+                    const photo = ctx.message.photo[ctx.message.photo.length - 1];
+                    const fileLink = await ctx.telegram.getFileLink(photo.file_id);
+                    const caption = ctx.message.caption || '';
+                    await forwardPhotoToWhatsApp(fileLink.href, caption, ctx.from);
+                    await ctx.reply('✅ Photo forwarded to WhatsApp!');
+                }
+                else if (ctx.message.video) {
+                    // Video with caption
+                    const video = ctx.message.video;
+                    const fileLink = await ctx.telegram.getFileLink(video.file_id);
+                    const caption = ctx.message.caption || '';
+                    await forwardVideoToWhatsApp(fileLink.href, caption, ctx.from);
+                    await ctx.reply('✅ Video forwarded to WhatsApp!');
+                }
+                else if (ctx.message.document) {
+                    // Document with caption
+                    const document = ctx.message.document;
+                    const fileLink = await ctx.telegram.getFileLink(document.file_id);
+                    const caption = ctx.message.caption || '';
+                    const filename = document.file_name || 'document';
+                    await forwardDocumentToWhatsApp(fileLink.href, filename, caption, ctx.from);
+                    await ctx.reply('✅ Document forwarded to WhatsApp!');
+                }
+                else if (ctx.message.audio || ctx.message.voice) {
+                    // Audio or Voice
+                    const audio = ctx.message.audio || ctx.message.voice;
+                    const fileLink = await ctx.telegram.getFileLink(audio.file_id);
+                    const caption = ctx.message.caption || '';
+                    await forwardAudioToWhatsApp(fileLink.href, caption, ctx.from);
+                    await ctx.reply('✅ Audio forwarded to WhatsApp!');
+                }
+                else if (ctx.message.sticker) {
+                    // Sticker
+                    const sticker = ctx.message.sticker;
+                    const fileLink = await ctx.telegram.getFileLink(sticker.file_id);
+                    await forwardStickerToWhatsApp(fileLink.href, ctx.from);
+                    await ctx.reply('✅ Sticker forwarded to WhatsApp!');
+                }
+                else {
+                    await ctx.reply('❌ Unsupported message type. Only text, photos, videos, documents, audio, and stickers are supported.');
+                }
+            } catch (error) {
+                console.error('Error forwarding from Telegram:', error);
+                await ctx.reply(`❌ Error: ${error.message}`);
+            }
         });
-        
-        telegramBot.help((ctx) => {
-            ctx.reply('Available Commands:\n/status - Check WhatsApp bot status');
-        });
-        
+
+        // Command to check status
         telegramBot.command('status', async (ctx) => {
-            const sessionId = config.sessionId || 'wasi_session';
-            const session = sessions.get(sessionId);
-            
-            if (session && session.isConnected) {
-                ctx.reply('✅ WhatsApp Bot is Connected and Running');
+            const status = whatsappSock && whatsappSock.user ? '✅ Connected' : '❌ Disconnected';
+            const targets = TARGET_JIDS.length > 0 ? TARGET_JIDS.join('\n') : 'Not configured';
+            await ctx.reply(
+                `📱 *WhatsApp Status:* ${status}\n\n` +
+                `🎯 *Target JIDs:*\n${targets}\n\n` +
+                `📤 Forward any message to send to WhatsApp`
+            );
+        });
+
+        // Command to list targets
+        telegramBot.command('targets', async (ctx) => {
+            if (TARGET_JIDS.length === 0) {
+                await ctx.reply('❌ No target JIDs configured.');
             } else {
-                ctx.reply('❌ WhatsApp Bot is Disconnected');
+                let response = '🎯 *Target JIDs:*\n\n';
+                TARGET_JIDS.forEach((jid, index) => {
+                    response += `${index + 1}. \`${jid}\`\n`;
+                });
+                await ctx.reply(response);
             }
         });
         
     } catch (error) {
         console.error('Telegram bot initialization error:', error);
         telegramEnabled = false;
+    }
+}
+
+// -----------------------------------------------------------------------------
+// FORWARDING FUNCTIONS
+// -----------------------------------------------------------------------------
+
+/**
+ * Forward text to WhatsApp
+ */
+async function forwardTextToWhatsApp(text, fromTelegram) {
+    if (!whatsappSock || TARGET_JIDS.length === 0) return;
+    
+    const prefix = fromTelegram ? `📨 From Telegram (${fromTelegram.username || fromTelegram.id}):\n\n` : '';
+    
+    for (const targetJid of TARGET_JIDS) {
+        try {
+            await whatsappSock.sendMessage(targetJid, { 
+                text: prefix + text 
+            });
+            console.log(`✅ Text forwarded to ${targetJid}`);
+        } catch (err) {
+            console.error(`Failed to forward to ${targetJid}:`, err.message);
+        }
+    }
+}
+
+/**
+ * Download file from URL and send as buffer
+ */
+async function downloadFile(url) {
+    const response = await axios({
+        method: 'GET',
+        url: url,
+        responseType: 'arraybuffer'
+    });
+    return Buffer.from(response.data);
+}
+
+/**
+ * Forward photo to WhatsApp
+ */
+async function forwardPhotoToWhatsApp(fileUrl, caption, fromTelegram) {
+    if (!whatsappSock || TARGET_JIDS.length === 0) return;
+    
+    try {
+        const imageBuffer = await downloadFile(fileUrl);
+        const prefix = fromTelegram ? `📸 From Telegram (${fromTelegram.username || fromTelegram.id}):\n` : '';
+        const fullCaption = prefix + (caption || '');
+        
+        for (const targetJid of TARGET_JIDS) {
+            try {
+                await whatsappSock.sendMessage(targetJid, { 
+                    image: imageBuffer,
+                    caption: fullCaption
+                });
+                console.log(`✅ Photo forwarded to ${targetJid}`);
+            } catch (err) {
+                console.error(`Failed to forward to ${targetJid}:`, err.message);
+            }
+        }
+    } catch (error) {
+        console.error('Error forwarding photo:', error);
+    }
+}
+
+/**
+ * Forward video to WhatsApp
+ */
+async function forwardVideoToWhatsApp(fileUrl, caption, fromTelegram) {
+    if (!whatsappSock || TARGET_JIDS.length === 0) return;
+    
+    try {
+        const videoBuffer = await downloadFile(fileUrl);
+        const prefix = fromTelegram ? `🎥 From Telegram (${fromTelegram.username || fromTelegram.id}):\n` : '';
+        const fullCaption = prefix + (caption || '');
+        
+        for (const targetJid of TARGET_JIDS) {
+            try {
+                await whatsappSock.sendMessage(targetJid, { 
+                    video: videoBuffer,
+                    caption: fullCaption
+                });
+                console.log(`✅ Video forwarded to ${targetJid}`);
+            } catch (err) {
+                console.error(`Failed to forward to ${targetJid}:`, err.message);
+            }
+        }
+    } catch (error) {
+        console.error('Error forwarding video:', error);
+    }
+}
+
+/**
+ * Forward document to WhatsApp
+ */
+async function forwardDocumentToWhatsApp(fileUrl, filename, caption, fromTelegram) {
+    if (!whatsappSock || TARGET_JIDS.length === 0) return;
+    
+    try {
+        const documentBuffer = await downloadFile(fileUrl);
+        const prefix = fromTelegram ? `📄 From Telegram (${fromTelegram.username || fromTelegram.id}):\n` : '';
+        const fullCaption = prefix + (caption || '');
+        
+        for (const targetJid of TARGET_JIDS) {
+            try {
+                await whatsappSock.sendMessage(targetJid, { 
+                    document: documentBuffer,
+                    fileName: filename,
+                    caption: fullCaption,
+                    mimetype: 'application/octet-stream'
+                });
+                console.log(`✅ Document forwarded to ${targetJid}`);
+            } catch (err) {
+                console.error(`Failed to forward to ${targetJid}:`, err.message);
+            }
+        }
+    } catch (error) {
+        console.error('Error forwarding document:', error);
+    }
+}
+
+/**
+ * Forward audio to WhatsApp
+ */
+async function forwardAudioToWhatsApp(fileUrl, caption, fromTelegram) {
+    if (!whatsappSock || TARGET_JIDS.length === 0) return;
+    
+    try {
+        const audioBuffer = await downloadFile(fileUrl);
+        
+        for (const targetJid of TARGET_JIDS) {
+            try {
+                await whatsappSock.sendMessage(targetJid, { 
+                    audio: audioBuffer,
+                    mimetype: 'audio/mp4',
+                    ptt: false // Set to true for voice note
+                });
+                console.log(`✅ Audio forwarded to ${targetJid}`);
+            } catch (err) {
+                console.error(`Failed to forward to ${targetJid}:`, err.message);
+            }
+        }
+    } catch (error) {
+        console.error('Error forwarding audio:', error);
+    }
+}
+
+/**
+ * Forward sticker to WhatsApp
+ */
+async function forwardStickerToWhatsApp(fileUrl, fromTelegram) {
+    if (!whatsappSock || TARGET_JIDS.length === 0) return;
+    
+    try {
+        const stickerBuffer = await downloadFile(fileUrl);
+        
+        for (const targetJid of TARGET_JIDS) {
+            try {
+                await whatsappSock.sendMessage(targetJid, { 
+                    sticker: stickerBuffer
+                });
+                console.log(`✅ Sticker forwarded to ${targetJid}`);
+            } catch (err) {
+                console.error(`Failed to forward to ${targetJid}:`, err.message);
+            }
+        }
+    } catch (error) {
+        console.error('Error forwarding sticker:', error);
     }
 }
 
@@ -221,6 +476,7 @@ async function startSession(sessionId) {
 
     const { wasi_sock, saveCreds } = await wasi_connectSession(false, sessionId);
     sessionState.sock = wasi_sock;
+    whatsappSock = wasi_sock; // Store socket globally for Telegram forwarding
 
     wasi_sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
@@ -229,16 +485,6 @@ async function startSession(sessionId) {
             sessionState.qr = qr;
             sessionState.isConnected = false;
             console.log(`QR generated for session: ${sessionId}`);
-            
-            // Notify on Telegram about QR generation
-            if (telegramEnabled && telegramBot) {
-                try {
-                    // You can send QR as photo or just notification
-                    console.log('QR Ready - Scan with WhatsApp');
-                } catch (e) {
-                    console.error('Failed to send Telegram notification:', e);
-                }
-            }
         }
 
         if (connection === 'close') {
@@ -258,25 +504,12 @@ async function startSession(sessionId) {
                 console.log(`Session ${sessionId} logged out. Removing.`);
                 sessions.delete(sessionId);
                 await wasi_clearSession(sessionId);
-                
-                // Notify on Telegram about logout
-                if (telegramEnabled && telegramBot) {
-                    try {
-                        console.log('Bot logged out');
-                    } catch (e) {}
-                }
+                whatsappSock = null;
             }
         } else if (connection === 'open') {
             sessionState.isConnected = true;
             sessionState.qr = null;
             console.log(`✅ ${sessionId}: Connected to WhatsApp`);
-            
-            // Notify on Telegram about successful connection
-            if (telegramEnabled && telegramBot) {
-                try {
-                    console.log('WhatsApp Bot Connected Successfully');
-                } catch (e) {}
-            }
         }
     });
 
@@ -324,6 +557,7 @@ wasi_app.get('/api/status', async (req, res) => {
         connected,
         qr: qrDataUrl,
         telegramEnabled,
+        targets: TARGET_JIDS,
         activeSessions: Array.from(sessions.keys())
     });
 });
@@ -341,6 +575,7 @@ function wasi_startServer() {
         console.log(`🤖 WhatsApp Commands: !ping, !jid, !gjid`);
         if (telegramEnabled) {
             console.log(`📱 Telegram Bot: Active`);
+            console.log(`🎯 Target JIDs: ${TARGET_JIDS.length} configured`);
         } else {
             console.log(`📱 Telegram Bot: Disabled (Add TELEGRAM_TOKEN to enable)`);
         }
