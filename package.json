@@ -4,7 +4,7 @@
   "description": "WASI-MD WhatsApp Bot - A powerful modular WhatsApp bot",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
+    "start": "python bot.py",
     "reset": "node scripts/reset-auth.js",
     "pm2": "pm2 start ecosystem.config.json",
     "pm2:stop": "pm2 stop wasi-bot",
