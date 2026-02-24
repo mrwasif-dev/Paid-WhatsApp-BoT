@@ -1,3 +1,20 @@
+// MongoDB warnings کو مکمل خاموش کریں
+process.env.MONGOOSE_DEPRECATION_WARNINGS = 'false';
+process.env.NO_DEPRECATION = 'mongoose';
+
+// تمام warnings کو فلٹر کریں
+const originalEmit = process.emit;
+process.emit = function (name, data, ...args) {
+    if (name === 'warning' && 
+        data && 
+        data.name === 'MongooseWarning' && 
+        data.message && 
+        data.message.includes('findOneAndUpdate')) {
+        return false;
+    }
+    return originalEmit.call(process, name, data, ...args);
+};
+
 require('dotenv').config();
 const {
 DisconnectReason
@@ -23,13 +40,11 @@ const wasi_port = process.env.PORT || 3000;
 const QRCode = require('qrcode');
 
 // -----------------------------------------------------------------------------
-// TELEGRAM BOT SETUP
+// TELEGRAM BOT SETUP - PUBLIC ACCESS
 // -----------------------------------------------------------------------------
 let telegramBot = null;
 const telegramEnabled = process.env.TELEGRAM_ENABLED === 'true' || false;
 const telegramToken = process.env.TELEGRAM_BOT_TOKEN || '';
-const telegramAllowedChats = process.env.TELEGRAM_ALLOWED_CHATS ? 
-    process.env.TELEGRAM_ALLOWED_CHATS.split(',').map(id => id.trim()) : [];
 const telegramTargetJids = process.env.TELEGRAM_TARGET_JIDS ?
     process.env.TELEGRAM_TARGET_JIDS.split(',').map(jid => jid.trim()) : [];
 
@@ -50,7 +65,7 @@ wasi_app.use(express.static(path.join(__dirname, 'public')));
 wasi_app.get('/ping', (req, res) => res.status(200).send('pong'));
 
 // -----------------------------------------------------------------------------
-// COMMAND HANDLER FUNCTIONS (صرف یہ تین کمانڈز)
+// COMMAND HANDLER FUNCTIONS
 // -----------------------------------------------------------------------------
 
 async function handlePingCommand(sock, from) {
@@ -125,7 +140,7 @@ async function processCommand(sock, msg) {
 }
 
 // -----------------------------------------------------------------------------
-// TELEGRAM BOT FUNCTIONS
+// TELEGRAM BOT FUNCTIONS - PUBLIC ACCESS (کوئی authorization نہیں)
 // -----------------------------------------------------------------------------
 
 async function downloadTelegramFile(fileId, fileExt) {
@@ -145,13 +160,6 @@ async function downloadTelegramFile(fileId, fileExt) {
         console.error('Error downloading:', error);
         return null;
     }
-}
-
-function isTelegramAuthorized(ctx) {
-    const chatId = ctx.chat?.id?.toString();
-    const fromId = ctx.from?.id?.toString();
-    if (!telegramAllowedChats || telegramAllowedChats.length === 0) return true;
-    return telegramAllowedChats.includes(chatId) || telegramAllowedChats.includes(fromId);
 }
 
 async function sendToWhatsApp(mediaType, filePath, caption = '') {
@@ -203,14 +211,31 @@ async function startTelegramBot() {
     try {
         telegramBot = new Telegraf(telegramToken);
 
+        // Start command - سب کے لیے کھلا
         telegramBot.start((ctx) => {
-            if (!isTelegramAuthorized(ctx)) return ctx.reply('⛔ Unauthorized');
-            ctx.reply('✅ WhatsApp Bot Connected!\n\nSend me any media to forward to WhatsApp.');
+            ctx.reply('✅ *WhatsApp Bot Connected!*\n\n' +
+                     'Send me any media or message and it will be forwarded to WhatsApp.\n\n' +
+                     'Supported formats:\n' +
+                     '• Photos 📸\n' +
+                     '• Videos 🎥\n' +
+                     '• Documents 📄\n' +
+                     '• Audio 🎵\n' +
+                     '• Voice Messages 🎤\n' +
+                     '• Text Messages 💬', 
+                     { parse_mode: 'Markdown' });
         });
 
+        // Help command
+        telegramBot.help((ctx) => {
+            ctx.reply('Just send me any media or message!\n\n' +
+                     'I will forward it to WhatsApp group.');
+        });
+
+        // Text messages - سب کے لیے کھلا
         telegramBot.on('text', async (ctx) => {
-            if (!isTelegramAuthorized(ctx)) return;
-            if (!telegramTargetJids.length) return ctx.reply('❌ No WhatsApp targets');
+            if (!telegramTargetJids.length) {
+                return ctx.reply('❌ No WhatsApp targets configured');
+            }
             
             const session = sessions.get(config.sessionId || 'wasi_session');
             if (!session || !session.sock || !session.isConnected) {
@@ -223,11 +248,11 @@ async function startTelegramBot() {
             ctx.reply(`✅ Message sent to WhatsApp`);
         });
 
+        // Photos - سب کے لیے کھلا
         telegramBot.on('photo', async (ctx) => {
-            if (!isTelegramAuthorized(ctx)) return;
             const photo = ctx.message.photo[ctx.message.photo.length - 1];
             const caption = ctx.message.caption || '';
-            ctx.reply('📥 Downloading...');
+            ctx.reply('📥 Downloading photo...');
             const filePath = await downloadTelegramFile(photo.file_id, 'jpg');
             if (filePath) {
                 await sendToWhatsApp('photo', filePath, caption);
@@ -235,11 +260,11 @@ async function startTelegramBot() {
             }
         });
 
+        // Videos - سب کے لیے کھلا
         telegramBot.on('video', async (ctx) => {
-            if (!isTelegramAuthorized(ctx)) return;
             const video = ctx.message.video;
             const caption = ctx.message.caption || '';
-            ctx.reply('📥 Downloading...');
+            ctx.reply('📥 Downloading video...');
             const filePath = await downloadTelegramFile(video.file_id, 'mp4');
             if (filePath) {
                 await sendToWhatsApp('video', filePath, caption);
@@ -247,11 +272,11 @@ async function startTelegramBot() {
             }
         });
 
+        // Documents - سب کے لیے کھلا
         telegramBot.on('document', async (ctx) => {
-            if (!isTelegramAuthorized(ctx)) return;
             const document = ctx.message.document;
             const caption = ctx.message.caption || '';
-            ctx.reply('📥 Downloading...');
+            ctx.reply('📥 Downloading document...');
             const fileExt = document.file_name ? document.file_name.split('.').pop() : 'bin';
             const filePath = await downloadTelegramFile(document.file_id, fileExt);
             if (filePath) {
@@ -260,13 +285,65 @@ async function startTelegramBot() {
             }
         });
 
-        telegramBot.launch();
-        console.log('🤖 Telegram bot started');
-        console.log(`📱 Allowed chats: ${telegramAllowedChats.length ? telegramAllowedChats.join(', ') : 'All'}`);
+        // Audio - سب کے لیے کھلا
+        telegramBot.on('audio', async (ctx) => {
+            const audio = ctx.message.audio;
+            const caption = ctx.message.caption || '';
+            ctx.reply('📥 Downloading audio...');
+            const filePath = await downloadTelegramFile(audio.file_id, 'mp3');
+            if (filePath) {
+                await sendToWhatsApp('audio', filePath, caption);
+                ctx.reply('✅ Audio sent to WhatsApp');
+            }
+        });
+
+        // Voice - سب کے لیے کھلا
+        telegramBot.on('voice', async (ctx) => {
+            const voice = ctx.message.voice;
+            ctx.reply('📥 Downloading voice message...');
+            const filePath = await downloadTelegramFile(voice.file_id, 'ogg');
+            if (filePath) {
+                await sendToWhatsApp('voice', filePath, '');
+                ctx.reply('✅ Voice message sent to WhatsApp');
+            }
+        });
+
+        // Stickers - سب کے لیے کھلا
+        telegramBot.on('sticker', async (ctx) => {
+            const sticker = ctx.message.sticker;
+            ctx.reply('📥 Downloading sticker...');
+            const fileExt = sticker.is_animated ? 'tgs' : 'webp';
+            const filePath = await downloadTelegramFile(sticker.file_id, fileExt);
+            if (filePath) {
+                const session = sessions.get(config.sessionId || 'wasi_session');
+                if (session && session.sock && session.isConnected) {
+                    for (const targetJid of telegramTargetJids) {
+                        await session.sock.sendMessage(targetJid, { 
+                            sticker: { url: filePath } 
+                        });
+                    }
+                    ctx.reply('✅ Sticker sent to WhatsApp');
+                }
+                fs.unlink(filePath, () => {});
+            }
+        });
+
+        // Error handling
+        telegramBot.catch((err, ctx) => {
+            console.error('Telegram bot error:', err);
+            ctx.reply('❌ An error occurred').catch(() => {});
+        });
+
+        // Launch bot
+        await telegramBot.launch();
+        console.log('🤖 Telegram bot started - PUBLIC ACCESS');
         console.log(`🎯 WhatsApp targets: ${telegramTargetJids.length ? telegramTargetJids.join(', ') : 'None'}`);
 
+        process.once('SIGINT', () => telegramBot.stop('SIGINT'));
+        process.once('SIGTERM', () => telegramBot.stop('SIGTERM'));
+
     } catch (error) {
-        console.error('Telegram bot error:', error);
+        console.error('Failed to start Telegram bot:', error);
     }
 }
 
@@ -348,7 +425,7 @@ wasi_app.get('/api/status', async (req, res) => {
         telegram: {
             enabled: telegramEnabled,
             botRunning: telegramBot !== null,
-            allowedChats: telegramAllowedChats,
+            publicAccess: true,
             targetJids: telegramTargetJids
         }
     }); 
@@ -364,9 +441,9 @@ wasi_app.get('/', (req, res) => {
 function wasi_startServer() {
     wasi_app.listen(wasi_port, () => {
         console.log(`🌐 Server running on port ${wasi_port}`);
-        console.log(`\n🤖 Telegram Bot:`);
-        console.log(` • Enabled: ${telegramEnabled ? '✅' : '❌'}`);
+        console.log(`\n🤖 Telegram Bot: ${telegramEnabled ? '✅ ENABLED - PUBLIC ACCESS' : '❌ DISABLED'}`);
         console.log(`🤖 WhatsApp Commands: !ping, !jid, !gjid`);
+        console.log(`\n✨ No warnings - Clean boot!`);
     }); 
 }
 
