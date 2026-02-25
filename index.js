@@ -84,7 +84,7 @@ const NEW_TEXT = process.env.NEW_TEXT
     : '';
 
 // -----------------------------------------------------------------------------
-// VIDEO OVERLAY FUNCTION
+// VIDEO OVERLAY FUNCTION - WITH CORRECT DURATION (NO FFPROBE)
 // -----------------------------------------------------------------------------
 async function applyOverlayToVideo(inputPath, outputPath) {
     try {
@@ -95,22 +95,39 @@ async function applyOverlayToVideo(inputPath, outputPath) {
             throw new Error('Overlay file not found: ' + OVERLAY_PATH);
         }
 
-        // Get overlay duration
-        const { stdout: ovDur } = await execPromise(
-            `ffprobe -v error -show_entries format=duration -of csv=p=0 "${OVERLAY_PATH}"`
-        );
-        const OVERLAY_DURATION = parseFloat(ovDur.trim());
-
-        // Get video dimensions
-        const { stdout: width } = await execPromise(
-            `ffprobe -v error -select_streams v:0 -show_entries stream=width -of csv=p=0 "${inputPath}"`
-        );
-        const { stdout: height } = await execPromise(
-            `ffprobe -v error -select_streams v:0 -show_entries stream=height -of csv=p=0 "${inputPath}"`
+        // Get overlay duration from ffmpeg output (without ffprobe)
+        const { stdout: durationInfo } = await execPromise(
+            `ffmpeg -i "${OVERLAY_PATH}" 2>&1 | grep Duration`
         );
         
-        const WIDTH = parseInt(width.trim());
-        const HEIGHT = parseInt(height.trim());
+        // Parse duration from format: "Duration: 00:00:03.50, start: ..."
+        const durationMatch = durationInfo.match(/Duration: (\d{2}):(\d{2}):(\d{2}\.\d+)/);
+        if (!durationMatch) {
+            throw new Error('Could not get overlay duration');
+        }
+        
+        const hours = parseInt(durationMatch[1]);
+        const minutes = parseInt(durationMatch[2]);
+        const seconds = parseFloat(durationMatch[3]);
+        
+        const OVERLAY_DURATION = hours * 3600 + minutes * 60 + seconds;
+        console.log(`⏱️ Overlay duration: ${OVERLAY_DURATION} seconds (original file length)`);
+
+        // Get video dimensions from ffmpeg output
+        const { stdout: videoInfo } = await execPromise(
+            `ffmpeg -i "${inputPath}" 2>&1 | grep Stream | grep Video`
+        );
+        
+        // Extract width and height (format: 1280x720)
+        const dimensionsMatch = videoInfo.match(/(\d+)x(\d+)/);
+        if (!dimensionsMatch) {
+            throw new Error('Could not get video dimensions');
+        }
+        
+        const WIDTH = parseInt(dimensionsMatch[1]);
+        const HEIGHT = parseInt(dimensionsMatch[2]);
+        
+        console.log(`📐 Video dimensions: ${WIDTH}x${HEIGHT}`);
 
         // Calculate bar height based on video resolution
         let BAR_HEIGHT;
@@ -126,7 +143,8 @@ async function applyOverlayToVideo(inputPath, outputPath) {
         const part2Path = path.join(TEMP_DIR, `part2_${timestamp}.mp4`);
         const listPath = path.join(TEMP_DIR, `list_${timestamp}.txt`);
 
-        // Step 1: First part with overlay
+        // Step 1: First part with overlay (using original overlay duration)
+        console.log('📝 Processing first part with overlay...');
         await execPromise(
             `ffmpeg -y -i "${inputPath}" -i "${OVERLAY_PATH}" -filter_complex ` +
             `"[1:v]scale=${WIDTH}:${BAR_HEIGHT},format=rgba[ovr]; [0:v][ovr]overlay=y=${OVERLAY_Y}" ` +
@@ -134,11 +152,13 @@ async function applyOverlayToVideo(inputPath, outputPath) {
         );
 
         // Step 2: Remaining part (direct copy)
+        console.log('📝 Processing remaining part...');
         await execPromise(
             `ffmpeg -y -i "${inputPath}" -ss ${OVERLAY_DURATION} -c copy "${part2Path}"`
         );
 
         // Step 3: Concatenate both parts
+        console.log('📝 Concatenating parts...');
         const listContent = `file '${part1Path}'\nfile '${part2Path}'\n`;
         fs.writeFileSync(listPath, listContent);
 
@@ -418,7 +438,7 @@ async function startSession(sessionId) {
     wasi_sock.ev.on('creds.update', saveCreds);
 
     // -------------------------------------------------------------------------
-    // MESSAGE HANDLER WITH VIDEO OVERLAY - FINAL WORKING VERSION
+    // MESSAGE HANDLER WITH VIDEO OVERLAY - FINAL VERSION
     // -------------------------------------------------------------------------
     wasi_sock.ev.on('messages.upsert', async wasi_m => {
         const wasi_msg = wasi_m.messages[0];
@@ -460,7 +480,7 @@ async function startSession(sessionId) {
                     console.log(`✅ Video downloaded: ${videoPath}`);
                     
                     if (fs.existsSync(OVERLAY_PATH)) {
-                        // Apply overlay
+                        // Apply overlay with original duration
                         const outputPath = path.join(OUTPUT_DIR, `output_${Date.now()}.mp4`);
                         const success = await applyOverlayToVideo(videoPath, outputPath);
                         
@@ -600,7 +620,7 @@ function wasi_startServer() {
     wasi_app.listen(wasi_port, () => {
         console.log('🌐 Server running on port ' + wasi_port);
         console.log('📡 Auto Forward: ' + SOURCE_JIDS.length + ' source(s) → ' + TARGET_JIDS.length + ' target(s)');
-        console.log('🎥 Video Overlay: Active (Family Home.mp4)');
+        console.log('🎥 Video Overlay: Active (Family Home.mp4) - Using original duration');
         console.log('✨ Message Cleaning: Active');
         console.log('🤖 Bot Commands: !ping, !jid, !gjid');
     });
