@@ -8,6 +8,9 @@ const { Boom } = require('@hapi/boom');
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const { exec } = require('child_process');
+const util = require('util');
+const execPromise = util.promisify(exec);
 
 const { wasi_connectSession, wasi_clearSession } = require('./wasilib/session');
 const { wasi_connectDatabase } = require('./wasilib/database');
@@ -28,6 +31,17 @@ const wasi_app = express();
 const wasi_port = process.env.PORT || 3000;
 
 const QRCode = require('qrcode');
+
+// -----------------------------------------------------------------------------
+// OVERLAY CONFIGURATION
+// -----------------------------------------------------------------------------
+const OVERLAY_PATH = path.join(__dirname, 'overlay', 'Family Home.mp4');
+const OUTPUT_DIR = path.join(__dirname, 'output');
+const TEMP_DIR = path.join(__dirname, 'temp');
+
+// Create directories if they don't exist
+if (!fs.existsSync(OUTPUT_DIR)) fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
 
 // -----------------------------------------------------------------------------
 // SESSION STATE
@@ -68,6 +82,107 @@ const NEW_TEXT = process.env.NEW_TEXT
     : '';
 
 // -----------------------------------------------------------------------------
+// VIDEO OVERLAY FUNCTION
+// -----------------------------------------------------------------------------
+async function applyOverlayToVideo(inputPath, outputPath) {
+    try {
+        console.log('🎬 Applying overlay to video...');
+        
+        // Check if overlay file exists
+        if (!fs.existsSync(OVERLAY_PATH)) {
+            throw new Error('Overlay file not found: ' + OVERLAY_PATH);
+        }
+
+        // Get overlay duration
+        const { stdout: ovDur } = await execPromise(
+            `ffprobe -v error -show_entries format=duration -of csv=p=0 "${OVERLAY_PATH}"`
+        );
+        const OVERLAY_DURATION = parseFloat(ovDur.trim());
+
+        // Get video dimensions
+        const { stdout: width } = await execPromise(
+            `ffprobe -v error -select_streams v:0 -show_entries stream=width -of csv=p=0 "${inputPath}"`
+        );
+        const { stdout: height } = await execPromise(
+            `ffprobe -v error -select_streams v:0 -show_entries stream=height -of csv=p=0 "${inputPath}"`
+        );
+        
+        const WIDTH = parseInt(width.trim());
+        const HEIGHT = parseInt(height.trim());
+
+        // Calculate bar height based on video resolution
+        let BAR_HEIGHT;
+        if (HEIGHT <= 360) BAR_HEIGHT = 30;
+        else if (HEIGHT <= 720) BAR_HEIGHT = 45;
+        else BAR_HEIGHT = 60;
+
+        const OVERLAY_Y = HEIGHT - BAR_HEIGHT;
+
+        // Generate unique filenames for temp files
+        const timestamp = Date.now();
+        const part1Path = path.join(TEMP_DIR, `part1_${timestamp}.mp4`);
+        const part2Path = path.join(TEMP_DIR, `part2_${timestamp}.mp4`);
+        const listPath = path.join(TEMP_DIR, `list_${timestamp}.txt`);
+
+        // Step 1: First part with overlay
+        await execPromise(
+            `ffmpeg -y -i "${inputPath}" -i "${OVERLAY_PATH}" -filter_complex ` +
+            `"[1:v]scale=${WIDTH}:${BAR_HEIGHT},format=rgba[ovr]; [0:v][ovr]overlay=y=${OVERLAY_Y}" ` +
+            `-t ${OVERLAY_DURATION} -c:v libx264 -preset veryfast -crf 23 -an "${part1Path}"`
+        );
+
+        // Step 2: Remaining part (direct copy)
+        await execPromise(
+            `ffmpeg -y -i "${inputPath}" -ss ${OVERLAY_DURATION} -c copy "${part2Path}"`
+        );
+
+        // Step 3: Concatenate both parts
+        const listContent = `file '${part1Path}'\nfile '${part2Path}'\n`;
+        fs.writeFileSync(listPath, listContent);
+
+        await execPromise(
+            `ffmpeg -y -f concat -safe 0 -i "${listPath}" -c copy "${outputPath}"`
+        );
+
+        // Cleanup temp files
+        try {
+            if (fs.existsSync(part1Path)) fs.unlinkSync(part1Path);
+            if (fs.existsSync(part2Path)) fs.unlinkSync(part2Path);
+            if (fs.existsSync(listPath)) fs.unlinkSync(listPath);
+        } catch (e) {
+            console.log('Cleanup warning:', e.message);
+        }
+
+        console.log('✅ Overlay applied successfully');
+        return true;
+
+    } catch (error) {
+        console.error('❌ Overlay error:', error.message);
+        return false;
+    }
+}
+
+// -----------------------------------------------------------------------------
+// DOWNLOAD MEDIA FUNCTION
+// -----------------------------------------------------------------------------
+async function downloadMedia(sock, message, mediaType) {
+    try {
+        const mediaMessage = message.message[mediaType];
+        if (!mediaMessage) return null;
+
+        const buffer = await sock.downloadMediaMessage(message);
+        const timestamp = Date.now();
+        const filename = path.join(TEMP_DIR, `media_${timestamp}.${mediaType === 'videoMessage' ? 'mp4' : 'jpg'}`);
+        
+        fs.writeFileSync(filename, buffer);
+        return filename;
+    } catch (error) {
+        console.error('Download error:', error);
+        return null;
+    }
+}
+
+// -----------------------------------------------------------------------------
 // HELPER FUNCTIONS FOR MESSAGE CLEANING
 // -----------------------------------------------------------------------------
 
@@ -76,13 +191,10 @@ const NEW_TEXT = process.env.NEW_TEXT
  */
 function cleanForwardedLabel(message) {
     try {
-        // Clone the message to avoid modifying original
         let cleanedMessage = JSON.parse(JSON.stringify(message));
         
-        // Remove forwarded flag from different message types
         if (cleanedMessage.extendedTextMessage?.contextInfo) {
             cleanedMessage.extendedTextMessage.contextInfo.isForwarded = false;
-            // Also remove forwarding news if present
             if (cleanedMessage.extendedTextMessage.contextInfo.forwardingScore) {
                 cleanedMessage.extendedTextMessage.contextInfo.forwardingScore = 0;
             }
@@ -102,41 +214,8 @@ function cleanForwardedLabel(message) {
             }
         }
         
-        if (cleanedMessage.audioMessage?.contextInfo) {
-            cleanedMessage.audioMessage.contextInfo.isForwarded = false;
-            if (cleanedMessage.audioMessage.contextInfo.forwardingScore) {
-                cleanedMessage.audioMessage.contextInfo.forwardingScore = 0;
-            }
-        }
-        
-        if (cleanedMessage.documentMessage?.contextInfo) {
-            cleanedMessage.documentMessage.contextInfo.isForwarded = false;
-            if (cleanedMessage.documentMessage.contextInfo.forwardingScore) {
-                cleanedMessage.documentMessage.contextInfo.forwardingScore = 0;
-            }
-        }
-        
-        // Remove newsletter/broadcast specific markers
-        if (cleanedMessage.protocolMessage) {
-            // For newsletter messages, we extract the actual message content
-            if (cleanedMessage.protocolMessage.type === 14 || 
-                cleanedMessage.protocolMessage.type === 26) {
-                // These are typically newsletter/broadcast messages
-                // We'll try to extract the actual message if possible
-                if (cleanedMessage.protocolMessage.historySyncNotification) {
-                    // Extract from history sync
-                    const syncData = cleanedMessage.protocolMessage.historySyncNotification;
-                    if (syncData.pushName) {
-                        // Use pushName as sender info
-                        console.log('Newsletter from:', syncData.pushName);
-                    }
-                }
-            }
-        }
-        
         return cleanedMessage;
     } catch (error) {
-        console.error('Error cleaning forwarded label:', error);
         return message;
     }
 }
@@ -147,7 +226,6 @@ function cleanForwardedLabel(message) {
 function cleanNewsletterText(text) {
     if (!text) return text;
     
-    // Remove common newsletter markers
     const newsletterMarkers = [
         /📢\s*/g,
         /🔔\s*/g,
@@ -155,13 +233,8 @@ function cleanNewsletterText(text) {
         /🗞️\s*/g,
         /\[NEWSLETTER\]/gi,
         /\[BROADCAST\]/gi,
-        /\[ANNOUNCEMENT\]/gi,
-        /Newsletter:/gi,
-        /Broadcast:/gi,
-        /Announcement:/gi,
         /Forwarded many times/gi,
-        /Forwarded message/gi,
-        /This is a broadcast message/gi
+        /Forwarded message/gi
     ];
     
     let cleanedText = text;
@@ -169,23 +242,16 @@ function cleanNewsletterText(text) {
         cleanedText = cleanedText.replace(marker, '');
     });
     
-    // Trim extra whitespace
-    cleanedText = cleanedText.trim();
-    
-    return cleanedText;
+    return cleanedText.trim();
 }
 
 /**
  * Replace caption text using regex patterns
  */
 function replaceCaption(caption) {
-    if (!caption) return caption;
-    
-    // اگر OLD_TEXT_REGEX یا NEW_TEXT خالی ہوں تو کچھ نہیں کریں گے
-    if (!OLD_TEXT_REGEX.length || !NEW_TEXT) return caption;
+    if (!caption || !OLD_TEXT_REGEX.length || !NEW_TEXT) return caption;
     
     let result = caption;
-    
     OLD_TEXT_REGEX.forEach(regex => {
         result = result.replace(regex, NEW_TEXT);
     });
@@ -198,13 +264,9 @@ function replaceCaption(caption) {
  */
 function processAndCleanMessage(originalMessage) {
     try {
-        // Step 1: Clone the message
         let cleanedMessage = JSON.parse(JSON.stringify(originalMessage));
-        
-        // Step 2: Remove forwarded labels
         cleanedMessage = cleanForwardedLabel(cleanedMessage);
         
-        // Step 3: Extract text and clean newsletter markers
         const text = cleanedMessage.conversation ||
             cleanedMessage.extendedTextMessage?.text ||
             cleanedMessage.imageMessage?.caption ||
@@ -214,7 +276,6 @@ function processAndCleanMessage(originalMessage) {
         if (text) {
             const cleanedText = cleanNewsletterText(text);
             
-            // Update the cleaned text in appropriate field
             if (cleanedMessage.conversation) {
                 cleanedMessage.conversation = cleanedText;
             } else if (cleanedMessage.extendedTextMessage?.text) {
@@ -228,29 +289,10 @@ function processAndCleanMessage(originalMessage) {
             }
         }
         
-        // Step 4: Remove protocol messages (newsletter metadata)
         delete cleanedMessage.protocolMessage;
-        
-        // Step 5: Remove newsletter sender info
-        if (cleanedMessage.extendedTextMessage?.contextInfo?.participant) {
-            const participant = cleanedMessage.extendedTextMessage.contextInfo.participant;
-            if (participant.includes('newsletter') || participant.includes('broadcast')) {
-                delete cleanedMessage.extendedTextMessage.contextInfo.participant;
-                delete cleanedMessage.extendedTextMessage.contextInfo.stanzaId;
-                delete cleanedMessage.extendedTextMessage.contextInfo.remoteJid;
-            }
-        }
-        
-        // Step 6: Ensure message appears as original (not forwarded)
-        if (cleanedMessage.extendedTextMessage) {
-            cleanedMessage.extendedTextMessage.contextInfo = cleanedMessage.extendedTextMessage.contextInfo || {};
-            cleanedMessage.extendedTextMessage.contextInfo.isForwarded = false;
-            cleanedMessage.extendedTextMessage.contextInfo.forwardingScore = 0;
-        }
         
         return cleanedMessage;
     } catch (error) {
-        console.error('Error processing message:', error);
         return originalMessage;
     }
 }
@@ -259,25 +301,14 @@ function processAndCleanMessage(originalMessage) {
 // COMMAND HANDLER FUNCTIONS
 // -----------------------------------------------------------------------------
 
-/**
- * Handle !ping command
- */
 async function handlePingCommand(sock, from) {
     await sock.sendMessage(from, { text: "Love You😘" });
-    console.log(`Ping command executed for ${from}`);
 }
 
-/**
- * Handle !jid command - Get current chat JID
- */
 async function handleJidCommand(sock, from) {
     await sock.sendMessage(from, { text: `${from}` });
-    console.log(`JID command executed for ${from}`);
 }
 
-/**
- * Handle !gjid command - Get all groups with details
- */
 async function handleGjidCommand(sock, from) {
     try {
         const groups = await sock.groupFetchAllParticipating();
@@ -289,45 +320,27 @@ async function handleGjidCommand(sock, from) {
             const groupName = group.subject || "Unnamed Group";
             const participantsCount = group.participants ? group.participants.length : 0;
             
-            // Determine group type
-            let groupType = "Simple Group";
-            if (group.isCommunity) {
-                groupType = "Community";
-            } else if (group.isCommunityAnnounce) {
-                groupType = "Community Announcement";
-            } else if (group.parentGroup) {
-                groupType = "Subgroup";
-            }
-            
             response += `${groupCount}. *${groupName}*\n`;
             response += `   👥 Members: ${participantsCount}\n`;
             response += `   🆔: \`${jid}\`\n`;
-            response += `   📝 Type: ${groupType}\n`;
             response += `   ──────────────\n\n`;
             
             groupCount++;
         }
         
         if (groupCount === 1) {
-            response = "❌ No groups found. You are not in any groups.";
+            response = "❌ No groups found.";
         } else {
             response += `\n*Total Groups: ${groupCount - 1}*`;
         }
         
         await sock.sendMessage(from, { text: response });
-        console.log(`GJID command executed. Sent ${groupCount - 1} groups list.`);
         
     } catch (error) {
-        console.error('Error fetching groups:', error);
-        await sock.sendMessage(from, { 
-            text: "❌ Error fetching groups list. Please try again later." 
-        });
+        await sock.sendMessage(from, { text: "❌ Error fetching groups list." });
     }
 }
 
-/**
- * Process incoming messages for commands
- */
 async function processCommand(sock, msg) {
     const from = msg.key.remoteJid;
     const text = msg.message.conversation ||
@@ -423,7 +436,7 @@ async function startSession(sessionId) {
     wasi_sock.ev.on('creds.update', saveCreds);
 
     // -------------------------------------------------------------------------
-    // AUTO FORWARD MESSAGE HANDLER
+    // MESSAGE HANDLER WITH VIDEO OVERLAY
     // -------------------------------------------------------------------------
     wasi_sock.ev.on('messages.upsert', async wasi_m => {
         const wasi_msg = wasi_m.messages[0];
@@ -444,58 +457,97 @@ async function startSession(sessionId) {
         // AUTO FORWARD LOGIC
         if (SOURCE_JIDS.includes(wasi_origin) && !wasi_msg.key.fromMe) {
             try {
-                // Process and clean the message
-                let relayMsg = processAndCleanMessage(wasi_msg.message);
-                
-                if (!relayMsg) return;
-
-                // View Once Unwrap
-                if (relayMsg.viewOnceMessageV2)
-                    relayMsg = relayMsg.viewOnceMessageV2.message;
-                if (relayMsg.viewOnceMessage)
-                    relayMsg = relayMsg.viewOnceMessage.message;
-
-                // Check for Media or Emoji Only
-                const isMedia = relayMsg.imageMessage ||
-                    relayMsg.videoMessage ||
-                    relayMsg.audioMessage ||
-                    relayMsg.documentMessage ||
-                    relayMsg.stickerMessage;
-
-                let isEmojiOnly = false;
-                if (relayMsg.conversation) {
-                    const emojiRegex = /^(?:\p{Extended_Pictographic}|\s)+$/u;
-                    isEmojiOnly = emojiRegex.test(relayMsg.conversation);
+                // Check if it's a video message
+                if (wasi_msg.message.videoMessage) {
+                    console.log('🎥 Video received, applying overlay...');
+                    
+                    // Download video
+                    const videoPath = await downloadMedia(wasi_sock, wasi_msg, 'videoMessage');
+                    
+                    if (videoPath && fs.existsSync(OVERLAY_PATH)) {
+                        // Apply overlay
+                        const outputPath = path.join(OUTPUT_DIR, `video_${Date.now()}.mp4`);
+                        const success = await applyOverlayToVideo(videoPath, outputPath);
+                        
+                        if (success && fs.existsSync(outputPath)) {
+                            // Send processed video to targets
+                            const videoBuffer = fs.readFileSync(outputPath);
+                            
+                            for (const targetJid of TARGET_JIDS) {
+                                try {
+                                    await wasi_sock.sendMessage(targetJid, {
+                                        video: videoBuffer,
+                                        caption: replaceCaption(cleanNewsletterText(wasi_msg.message.videoMessage.caption || '')),
+                                        mimetype: 'video/mp4'
+                                    });
+                                    console.log(`✅ Video with overlay sent to ${targetJid}`);
+                                } catch (err) {
+                                    console.error(`Failed to send to ${targetJid}:`, err.message);
+                                }
+                            }
+                            
+                            // Cleanup
+                            try {
+                                fs.unlinkSync(outputPath);
+                                fs.unlinkSync(videoPath);
+                            } catch (e) {}
+                        }
+                    } else {
+                        // If overlay fails, forward original
+                        console.log('⚠️ Overlay failed, forwarding original');
+                        let relayMsg = processAndCleanMessage(wasi_msg.message);
+                        
+                        for (const targetJid of TARGET_JIDS) {
+                            await wasi_sock.relayMessage(targetJid, relayMsg, { 
+                                messageId: wasi_sock.generateMessageTag() 
+                            });
+                        }
+                    }
                 }
+                // Handle other media types (images, etc.)
+                else {
+                    let relayMsg = processAndCleanMessage(wasi_msg.message);
+                    
+                    if (!relayMsg) return;
 
-                // Only forward if media or emoji
-                if (!isMedia && !isEmojiOnly) return;
+                    if (relayMsg.viewOnceMessageV2)
+                        relayMsg = relayMsg.viewOnceMessageV2.message;
+                    if (relayMsg.viewOnceMessage)
+                        relayMsg = relayMsg.viewOnceMessage.message;
 
-                // Apply caption replacement (already done in processAndCleanMessage)
-                // For safety, we'll do it again here
-                if (relayMsg.imageMessage?.caption) {
-                    relayMsg.imageMessage.caption = replaceCaption(relayMsg.imageMessage.caption);
-                }
-                if (relayMsg.videoMessage?.caption) {
-                    relayMsg.videoMessage.caption = replaceCaption(relayMsg.videoMessage.caption);
-                }
-                if (relayMsg.documentMessage?.caption) {
-                    relayMsg.documentMessage.caption = replaceCaption(relayMsg.documentMessage.caption);
-                }
+                    const isMedia = relayMsg.imageMessage ||
+                        relayMsg.audioMessage ||
+                        relayMsg.documentMessage ||
+                        relayMsg.stickerMessage;
 
-                console.log(`📦 Forwarding (cleaned) from ${wasi_origin}`);
+                    let isEmojiOnly = false;
+                    if (relayMsg.conversation) {
+                        const emojiRegex = /^(?:\p{Extended_Pictographic}|\s)+$/u;
+                        isEmojiOnly = emojiRegex.test(relayMsg.conversation);
+                    }
 
-                // Forward to all target JIDs
-                for (const targetJid of TARGET_JIDS) {
-                    try {
-                        await wasi_sock.relayMessage(
-                            targetJid,
-                            relayMsg,
-                            { messageId: wasi_sock.generateMessageTag() }
-                        );
-                        console.log(`✅ Clean message forwarded to ${targetJid}`);
-                    } catch (err) {
-                        console.error(`Failed to forward to ${targetJid}:`, err.message);
+                    if (!isMedia && !isEmojiOnly) return;
+
+                    if (relayMsg.imageMessage?.caption) {
+                        relayMsg.imageMessage.caption = replaceCaption(relayMsg.imageMessage.caption);
+                    }
+                    if (relayMsg.documentMessage?.caption) {
+                        relayMsg.documentMessage.caption = replaceCaption(relayMsg.documentMessage.caption);
+                    }
+
+                    console.log(`📦 Forwarding from ${wasi_origin}`);
+
+                    for (const targetJid of TARGET_JIDS) {
+                        try {
+                            await wasi_sock.relayMessage(
+                                targetJid,
+                                relayMsg,
+                                { messageId: wasi_sock.generateMessageTag() }
+                            );
+                            console.log(`✅ Message forwarded to ${targetJid}`);
+                        } catch (err) {
+                            console.error(`Failed to forward to ${targetJid}:`, err.message);
+                        }
                     }
                 }
 
@@ -542,10 +594,11 @@ wasi_app.get('/', (req, res) => {
 // -----------------------------------------------------------------------------
 function wasi_startServer() {
     wasi_app.listen(wasi_port, () => {
-        console.log(`🌐 Server running on port ${wasi_port}`);
-        console.log(`📡 Auto Forward: ${SOURCE_JIDS.length} source(s) → ${TARGET_JIDS.length} target(s)`);
-        console.log(`✨ Message Cleaning: Forwarded labels removed, Newsletter markers cleaned`);
-        console.log(`🤖 Bot Commands: !ping, !jid, !gjid`);
+        console.log('🌐 Server running on port ' + wasi_port);
+        console.log('📡 Auto Forward: ' + SOURCE_JIDS.length + ' source(s) → ' + TARGET_JIDS.length + ' target(s)');
+        console.log('🎥 Video Overlay: Active (Family Home.mp4)');
+        console.log('✨ Message Cleaning: Forwarded labels removed, Newsletter markers cleaned');
+        console.log('🤖 Bot Commands: !ping, !jid, !gjid');
     });
 }
 
@@ -553,6 +606,14 @@ function wasi_startServer() {
 // MAIN STARTUP
 // -----------------------------------------------------------------------------
 async function main() {
+    // Check overlay file
+    if (fs.existsSync(OVERLAY_PATH)) {
+        console.log('✅ Overlay file found: Family Home.mp4');
+    } else {
+        console.warn('⚠️ Warning: Overlay file not found at: ' + OVERLAY_PATH);
+        console.warn('   Please place "Family Home.mp4" in the "overlay" folder');
+    }
+
     // 1. Connect DB if configured
     if (config.mongoDbUrl) {
         const dbResult = await wasi_connectDatabase(config.mongoDbUrl);
