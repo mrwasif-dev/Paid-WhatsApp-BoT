@@ -12,6 +12,7 @@ const path = require('path');
 const { exec } = require('child_process');
 const util = require('util');
 const execPromise = util.promisify(exec);
+const stream = require('stream');
 
 const { wasi_connectSession, wasi_clearSession } = require('./wasilib/session');
 const { wasi_connectDatabase } = require('./wasilib/database');
@@ -161,6 +162,18 @@ async function applyOverlayToVideo(inputPath, outputPath) {
         console.error('❌ Overlay error:', error.message);
         return false;
     }
+}
+
+// -----------------------------------------------------------------------------
+// HELPER FUNCTION TO CONVERT STREAM TO BUFFER
+// -----------------------------------------------------------------------------
+async function streamToBuffer(stream) {
+    return new Promise((resolve, reject) => {
+        const chunks = [];
+        stream.on('data', chunk => chunks.push(chunk));
+        stream.on('end', () => resolve(Buffer.concat(chunks)));
+        stream.on('error', reject);
+    });
 }
 
 // -----------------------------------------------------------------------------
@@ -405,7 +418,7 @@ async function startSession(sessionId) {
     wasi_sock.ev.on('creds.update', saveCreds);
 
     // -------------------------------------------------------------------------
-    // MESSAGE HANDLER WITH VIDEO OVERLAY - FINAL FIXED VERSION
+    // MESSAGE HANDLER WITH VIDEO OVERLAY - FINAL WORKING VERSION
     // -------------------------------------------------------------------------
     wasi_sock.ev.on('messages.upsert', async wasi_m => {
         const wasi_msg = wasi_m.messages[0];
@@ -430,15 +443,21 @@ async function startSession(sessionId) {
                 if (wasi_msg.message.videoMessage) {
                     console.log('🎥 Video received, applying overlay...');
                     
-                    // Download video - CORRECT FIXED METHOD
-                    const videoBuffer = await downloadMediaMessage(
+                    // Download video as stream and convert to buffer
+                    const videoStream = await downloadMediaMessage(
                         wasi_msg, 
                         wasi_sock, 
                         { logger: console }
                     );
                     
+                    // Convert stream to buffer
+                    const videoBuffer = await streamToBuffer(videoStream);
+                    
+                    // Save to temp file
                     const videoPath = path.join(TEMP_DIR, `video_${Date.now()}.mp4`);
                     fs.writeFileSync(videoPath, videoBuffer);
+                    
+                    console.log(`✅ Video downloaded: ${videoPath}`);
                     
                     if (fs.existsSync(OVERLAY_PATH)) {
                         // Apply overlay
