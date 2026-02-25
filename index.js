@@ -2,7 +2,8 @@ require('dotenv').config();
 const {
     DisconnectReason,
     jidNormalizedUser,
-    proto
+    proto,
+    downloadMediaMessage
 } = require('@whiskeysockets/baileys');
 const { Boom } = require('@hapi/boom');
 const express = require('express');
@@ -80,26 +81,6 @@ const OLD_TEXT_REGEX = process.env.OLD_TEXT_REGEX
 const NEW_TEXT = process.env.NEW_TEXT
     ? process.env.NEW_TEXT
     : '';
-
-// -----------------------------------------------------------------------------
-// DOWNLOAD MEDIA FUNCTION - FIXED
-// -----------------------------------------------------------------------------
-async function downloadMedia(sock, message) {
-    try {
-        console.log('📥 Downloading media...');
-        // Correct Baileys download method
-        const buffer = await sock.downloadMediaMessage(message);
-        const timestamp = Date.now();
-        const filename = path.join(TEMP_DIR, `video_${timestamp}.mp4`);
-        
-        fs.writeFileSync(filename, buffer);
-        console.log(`✅ Downloaded: ${filename}`);
-        return filename;
-    } catch (error) {
-        console.error('Download error:', error);
-        return null;
-    }
-}
 
 // -----------------------------------------------------------------------------
 // VIDEO OVERLAY FUNCTION
@@ -424,7 +405,7 @@ async function startSession(sessionId) {
     wasi_sock.ev.on('creds.update', saveCreds);
 
     // -------------------------------------------------------------------------
-    // MESSAGE HANDLER WITH VIDEO OVERLAY - FIXED
+    // MESSAGE HANDLER WITH VIDEO OVERLAY - FINAL FIXED VERSION
     // -------------------------------------------------------------------------
     wasi_sock.ev.on('messages.upsert', async wasi_m => {
         const wasi_msg = wasi_m.messages[0];
@@ -449,8 +430,13 @@ async function startSession(sessionId) {
                 if (wasi_msg.message.videoMessage) {
                     console.log('🎥 Video received, applying overlay...');
                     
-                    // Download video - FIXED METHOD
-                    const videoBuffer = await wasi_sock.downloadMediaMessage(wasi_msg);
+                    // Download video - CORRECT FIXED METHOD
+                    const videoBuffer = await downloadMediaMessage(
+                        wasi_msg, 
+                        wasi_sock, 
+                        { logger: console }
+                    );
+                    
                     const videoPath = path.join(TEMP_DIR, `video_${Date.now()}.mp4`);
                     fs.writeFileSync(videoPath, videoBuffer);
                     
