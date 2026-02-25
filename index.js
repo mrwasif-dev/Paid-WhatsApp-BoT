@@ -10,6 +10,11 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const cluster = require('cluster');
+const { Worker } = require('worker_threads');
+const QRCode = require('qrcode');
+const Redis = require('ioredis');
+const pLimit = require('p-limit');
+const { Pool } = require('worker-threads-pool');
 
 const { wasi_connectSession, wasi_clearSession } = require('./wasilib/session');
 const { wasi_connectDatabase } = require('./wasilib/database');
@@ -29,41 +34,227 @@ try {
 const wasi_app = express();
 const wasi_port = process.env.PORT || 3000;
 
-const QRCode = require('qrcode');
+// -----------------------------------------------------------------------------
+// PERFORMANCE OPTIMIZATION SETTINGS
+// -----------------------------------------------------------------------------
+const PERFORMANCE_CONFIG = {
+    MAX_CONCURRENT_MESSAGES: 100, // Parallel messages processing
+    BATCH_SIZE: 50, // Batch size for message forwarding
+    MESSAGE_QUEUE_SIZE: 1000, // Queue size for messages
+    WORKER_THREADS: os.cpus().length, // Use all CPU cores
+    USE_CLUSTER: true, // Enable clustering
+    USE_REDIS_CACHE: true, // Use Redis for caching
+    MESSAGE_TIMEOUT: 5000, // 5 seconds timeout
+    MAX_RETRIES: 3, // Max retry attempts
+    CIRCUIT_BREAKER_THRESHOLD: 10, // Circuit breaker threshold
+};
 
 // -----------------------------------------------------------------------------
-// PERFORMANCE OPTIMIZATIONS (compression hata diya)
+// ADVANCED CACHE SYSTEM
 // -----------------------------------------------------------------------------
+class PerformanceCache {
+    constructor() {
+        this.cache = new Map();
+        this.stats = {
+            hits: 0,
+            misses: 0,
+            total: 0
+        };
+    }
 
-// Cache for QR codes
-const qrCache = new Map();
-const QR_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+    get(key) {
+        this.stats.total++;
+        const item = this.cache.get(key);
+        if (item && Date.now() < item.expiry) {
+            this.stats.hits++;
+            return item.value;
+        }
+        this.stats.misses++;
+        return null;
+    }
 
-// Message queue for better performance
-const messageQueue = [];
-let isProcessingQueue = false;
+    set(key, value, ttl = 60000) {
+        this.cache.set(key, {
+            value,
+            expiry: Date.now() + ttl
+        });
+    }
 
-// Session state with optimizations
+    clear() {
+        this.cache.clear();
+    }
+
+    getStats() {
+        const hitRate = this.stats.total > 0 
+            ? (this.stats.hits / this.stats.total * 100).toFixed(2) 
+            : 0;
+        return {
+            ...this.stats,
+            hitRate: `${hitRate}%`,
+            size: this.cache.size
+        };
+    }
+}
+
+// -----------------------------------------------------------------------------
+// MESSAGE QUEUE SYSTEM
+// -----------------------------------------------------------------------------
+class MessageQueue {
+    constructor(maxConcurrent = PERFORMANCE_CONFIG.MAX_CONCURRENT_MESSAGES) {
+        this.queue = [];
+        this.processing = new Set();
+        this.maxConcurrent = maxConcurrent;
+        this.stats = {
+            processed: 0,
+            failed: 0,
+            queueTime: 0
+        };
+    }
+
+    async add(message, processor) {
+        return new Promise((resolve, reject) => {
+            this.queue.push({
+                message,
+                processor,
+                resolve,
+                reject,
+                timestamp: Date.now()
+            });
+            this.process();
+        });
+    }
+
+    async process() {
+        if (this.processing.size >= this.maxConcurrent || this.queue.length === 0) {
+            return;
+        }
+
+        const item = this.queue.shift();
+        this.processing.add(item);
+
+        try {
+            const queueTime = Date.now() - item.timestamp;
+            this.stats.queueTime = (this.stats.queueTime + queueTime) / 2;
+            
+            const result = await Promise.race([
+                item.processor(item.message),
+                new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Timeout')), 
+                    PERFORMANCE_CONFIG.MESSAGE_TIMEOUT)
+                )
+            ]);
+            
+            item.resolve(result);
+            this.stats.processed++;
+        } catch (error) {
+            item.reject(error);
+            this.stats.failed++;
+        } finally {
+            this.processing.delete(item);
+            this.process(); // Process next item
+        }
+    }
+
+    getStats() {
+        return {
+            ...this.stats,
+            queueLength: this.queue.length,
+            processingCount: this.processing.size
+        };
+    }
+}
+
+// -----------------------------------------------------------------------------
+// CIRCUIT BREAKER
+// -----------------------------------------------------------------------------
+class CircuitBreaker {
+    constructor(failureThreshold = PERFORMANCE_CONFIG.CIRCUIT_BREAKER_THRESHOLD, timeout = 30000) {
+        this.failureThreshold = failureThreshold;
+        this.timeout = timeout;
+        this.failures = 0;
+        this.state = 'CLOSED'; // CLOSED, OPEN, HALF_OPEN
+        this.nextAttempt = Date.now();
+    }
+
+    async call(fn) {
+        if (this.state === 'OPEN') {
+            if (Date.now() > this.nextAttempt) {
+                this.state = 'HALF_OPEN';
+            } else {
+                throw new Error('Circuit breaker is OPEN');
+            }
+        }
+
+        try {
+            const result = await fn();
+            if (this.state === 'HALF_OPEN') {
+                this.reset();
+            }
+            return result;
+        } catch (error) {
+            this.failures++;
+            
+            if (this.failures >= this.failureThreshold) {
+                this.state = 'OPEN';
+                this.nextAttempt = Date.now() + this.timeout;
+            }
+            
+            throw error;
+        }
+    }
+
+    reset() {
+        this.failures = 0;
+        this.state = 'CLOSED';
+    }
+}
+
+// -----------------------------------------------------------------------------
+// SESSION STATE WITH ADVANCED FEATURES
+// -----------------------------------------------------------------------------
 const sessions = new Map();
+const messageQueue = new MessageQueue();
+const cache = new PerformanceCache();
+const circuitBreaker = new CircuitBreaker();
 
-// Middleware with optimizations
-wasi_app.use(express.json({ limit: '50mb' }));
-wasi_app.use(express.urlencoded({ extended: true, limit: '50mb' }));
-wasi_app.use(express.static(path.join(__dirname, 'public'), {
-    maxAge: '1d',
-    etag: true
-}));
+// Redis client for distributed caching (optional)
+let redis;
+if (PERFORMANCE_CONFIG.USE_REDIS_CACHE && process.env.REDIS_URL) {
+    redis = new Redis(process.env.REDIS_URL);
+    redis.on('error', (err) => console.error('Redis error:', err));
+}
 
-// Keep-Alive Route with minimal response
-wasi_app.get('/ping', (req, res) => res.status(200).end('pong'));
+// Worker thread pool for CPU-intensive tasks
+const workerPool = new Pool({ max: PERFORMANCE_CONFIG.WORKER_THREADS });
+
+// Middleware
+wasi_app.use(express.json());
+wasi_app.use(express.static(path.join(__dirname, 'public')));
+
+// Performance monitoring middleware
+wasi_app.use((req, res, next) => {
+    req.startTime = Date.now();
+    res.on('finish', () => {
+        const duration = Date.now() - req.startTime;
+        console.log(`${req.method} ${req.url} - ${duration}ms`);
+    });
+    next();
+});
+
+// Keep-Alive Route
+wasi_app.get('/ping', (req, res) => res.status(200).send('pong'));
 
 // -----------------------------------------------------------------------------
-// AUTO FORWARD CONFIGURATION (OPTIMIZED)
+// AUTO FORWARD CONFIGURATION
 // -----------------------------------------------------------------------------
-const SOURCE_JIDS = new Set(process.env.SOURCE_JIDS ? process.env.SOURCE_JIDS.split(',') : []);
-const TARGET_JIDS = process.env.TARGET_JIDS ? process.env.TARGET_JIDS.split(',') : [];
+const SOURCE_JIDS = process.env.SOURCE_JIDS
+    ? process.env.SOURCE_JIDS.split(',')
+    : [];
 
-// Pre-compile regex patterns
+const TARGET_JIDS = process.env.TARGET_JIDS
+    ? process.env.TARGET_JIDS.split(',')
+    : [];
+
 const OLD_TEXT_REGEX = process.env.OLD_TEXT_REGEX
     ? process.env.OLD_TEXT_REGEX.split(',').map(pattern => {
         try {
@@ -75,14 +266,12 @@ const OLD_TEXT_REGEX = process.env.OLD_TEXT_REGEX
       }).filter(regex => regex !== null)
     : [];
 
-const NEW_TEXT = process.env.NEW_TEXT || '';
-
-// -----------------------------------------------------------------------------
-// OPTIMIZED MESSAGE CLEANING FUNCTIONS
-// -----------------------------------------------------------------------------
+const NEW_TEXT = process.env.NEW_TEXT
+    ? process.env.NEW_TEXT
+    : '';
 
 // Pre-compiled regex patterns
-const NEWSLETTER_PATTERNS = [
+const NEWSLETTER_MARKERS = [
     /📢\s*/g,
     /🔔\s*/g,
     /📰\s*/g,
@@ -100,467 +289,504 @@ const NEWSLETTER_PATTERNS = [
 
 const EMOJI_REGEX = /^(?:\p{Extended_Pictographic}|\s)+$/u;
 
-/**
- * Fast message cloning using Object.assign
- */
-function fastClone(obj) {
-    return Object.assign({}, obj);
-}
+// -----------------------------------------------------------------------------
+// OPTIMIZED MESSAGE PROCESSING
+// -----------------------------------------------------------------------------
 
 /**
- * Optimized forwarded label cleaner
+ * Ultra-fast message cleaning with caching
  */
-function cleanForwardedLabelFast(message) {
-    if (!message) return message;
-    
-    // Direct property access for better performance
-    const msgTypes = ['extendedTextMessage', 'imageMessage', 'videoMessage', 'audioMessage', 'documentMessage'];
-    
-    for (const type of msgTypes) {
-        const msg = message[type];
-        if (msg?.contextInfo) {
-            msg.contextInfo.isForwarded = false;
-            if (msg.contextInfo.forwardingScore) {
-                msg.contextInfo.forwardingScore = 0;
+function fastCleanMessage(message, cacheKey = null) {
+    // Check cache first
+    if (cacheKey) {
+        const cached = cache.get(cacheKey);
+        if (cached) return cached;
+    }
+
+    try {
+        // Use structuredClone for faster cloning (Node 17+)
+        let cleanedMessage = structuredClone ? 
+            structuredClone(message) : 
+            JSON.parse(JSON.stringify(message));
+
+        // Batch remove context info
+        const messageTypes = [
+            'extendedTextMessage',
+            'imageMessage',
+            'videoMessage',
+            'audioMessage',
+            'documentMessage'
+        ];
+
+        for (const type of messageTypes) {
+            if (cleanedMessage[type]?.contextInfo) {
+                cleanedMessage[type].contextInfo.isForwarded = false;
+                cleanedMessage[type].contextInfo.forwardingScore = 0;
+                
+                // Clean participant info if needed
+                if (cleanedMessage[type].contextInfo.participant?.includes('newsletter')) {
+                    delete cleanedMessage[type].contextInfo.participant;
+                    delete cleanedMessage[type].contextInfo.stanzaId;
+                    delete cleanedMessage[type].contextInfo.remoteJid;
+                }
             }
         }
+
+        // Fast text cleaning
+        const textFields = [
+            'conversation',
+            'extendedTextMessage?.text',
+            'imageMessage?.caption',
+            'videoMessage?.caption',
+            'documentMessage?.caption'
+        ];
+
+        for (const field of textFields) {
+            const value = getNestedValue(cleanedMessage, field);
+            if (value) {
+                const cleaned = fastCleanText(value);
+                setNestedValue(cleanedMessage, field, cleaned);
+            }
+        }
+
+        // Remove protocol messages
+        delete cleanedMessage.protocolMessage;
+
+        // Cache result
+        if (cacheKey) {
+            cache.set(cacheKey, cleanedMessage, 30000); // 30 seconds cache
+        }
+
+        return cleanedMessage;
+    } catch (error) {
+        console.error('Fast message cleaning error:', error);
+        return message;
     }
-    
-    return message;
 }
 
 /**
- * Optimized text cleaner
+ * Helper functions for nested object access
  */
-function cleanNewsletterTextFast(text) {
-    if (!text || typeof text !== 'string') return text;
+function getNestedValue(obj, path) {
+    return path.split('?.').reduce((o, key) => o?.[key], obj);
+}
+
+function setNestedValue(obj, path, value) {
+    const keys = path.split('?.');
+    let current = obj;
+    
+    for (let i = 0; i < keys.length - 1; i++) {
+        if (!current[keys[i]]) current[keys[i]] = {};
+        current = current[keys[i]];
+    }
+    
+    current[keys[keys.length - 1]] = value;
+}
+
+/**
+ * Fast text cleaning with pre-compiled regex
+ */
+function fastCleanText(text) {
+    if (!text) return text;
     
     let cleaned = text;
-    for (const pattern of NEWSLETTER_PATTERNS) {
-        cleaned = cleaned.replace(pattern, '');
+    
+    // Apply all newsletter markers in one pass
+    for (const marker of NEWSLETTER_MARKERS) {
+        cleaned = cleaned.replace(marker, '');
+    }
+    
+    // Apply regex replacements if configured
+    if (OLD_TEXT_REGEX.length && NEW_TEXT) {
+        for (const regex of OLD_TEXT_REGEX) {
+            cleaned = cleaned.replace(regex, NEW_TEXT);
+        }
     }
     
     return cleaned.trim();
 }
 
 /**
- * Optimized caption replacement
+ * Batch message processing
  */
-function replaceCaptionFast(caption) {
-    if (!caption || !OLD_TEXT_REGEX.length || !NEW_TEXT) return caption;
-    
-    let result = caption;
-    for (const regex of OLD_TEXT_REGEX) {
-        result = result.replace(regex, NEW_TEXT);
+async function processMessageBatch(messages, sock) {
+    const batchPromises = [];
+    const batchSize = PERFORMANCE_CONFIG.BATCH_SIZE;
+
+    for (let i = 0; i < messages.length; i += batchSize) {
+        const batch = messages.slice(i, i + batchSize);
+        batchPromises.push(processBatch(batch, sock));
     }
-    
-    return result;
+
+    return Promise.all(batchPromises);
 }
 
-/**
- * Ultra-fast message processor
- */
-function processMessageFast(originalMsg) {
+async function processBatch(batch, sock) {
+    const results = [];
+    
+    for (const msg of batch) {
+        try {
+            const result = await processSingleMessage(msg, sock);
+            results.push(result);
+        } catch (error) {
+            console.error('Batch processing error:', error);
+        }
+    }
+    
+    return results;
+}
+
+async function processSingleMessage(wasi_msg, wasi_sock) {
+    const wasi_origin = wasi_msg.key.remoteJid;
+    const wasi_text = wasi_msg.message.conversation ||
+        wasi_msg.message.extendedTextMessage?.text ||
+        wasi_msg.message.imageMessage?.caption ||
+        wasi_msg.message.videoMessage?.caption ||
+        wasi_msg.message.documentMessage?.caption || "";
+
+    // COMMAND HANDLER - Fast path
+    if (wasi_text.startsWith('!')) {
+        await processCommand(wasi_sock, wasi_msg);
+    }
+
+    // AUTO FORWARD LOGIC - Skip if not in sources
+    if (!SOURCE_JIDS.includes(wasi_origin) || wasi_msg.key.fromMe) {
+        return;
+    }
+
+    // Create cache key
+    const cacheKey = `msg_${wasi_msg.key.id}_${wasi_origin}`;
+    
+    // Fast message cleaning
+    let relayMsg = fastCleanMessage(wasi_msg.message, cacheKey);
+
+    if (!relayMsg) return;
+
+    // View Once Unwrap
+    if (relayMsg.viewOnceMessageV2)
+        relayMsg = relayMsg.viewOnceMessageV2.message;
+    if (relayMsg.viewOnceMessage)
+        relayMsg = relayMsg.viewOnceMessage.message;
+
+    // Fast media/emoji check
+    const isMedia = relayMsg.imageMessage ||
+        relayMsg.videoMessage ||
+        relayMsg.audioMessage ||
+        relayMsg.documentMessage ||
+        relayMsg.stickerMessage;
+
+    let isEmojiOnly = false;
+    if (relayMsg.conversation) {
+        isEmojiOnly = EMOJI_REGEX.test(relayMsg.conversation);
+    }
+
+    if (!isMedia && !isEmojiOnly) return;
+
+    console.log(`📦 Fast forwarding from ${wasi_origin}`);
+
+    // Parallel forwarding to all targets
+    const forwardPromises = TARGET_JIDS.map(targetJid => 
+        messageQueue.add(relayMsg, async (msg) => {
+            return circuitBreaker.call(async () => {
+                try {
+                    await wasi_sock.relayMessage(
+                        targetJid,
+                        msg,
+                        { 
+                            messageId: wasi_sock.generateMessageTag(),
+                            timeoutMs: PERFORMANCE_CONFIG.MESSAGE_TIMEOUT 
+                        }
+                    );
+                    return { success: true, target: targetJid };
+                } catch (err) {
+                    console.error(`Failed to forward to ${targetJid}:`, err.message);
+                    return { success: false, target: targetJid, error: err.message };
+                }
+            });
+        })
+    );
+
+    return Promise.all(forwardPromises);
+}
+
+// -----------------------------------------------------------------------------
+// COMMAND HANDLER FUNCTIONS (Optimized)
+// -----------------------------------------------------------------------------
+
+async function handlePingCommand(sock, from) {
+    await sock.sendMessage(from, { text: "Love You😘" });
+}
+
+async function handleJidCommand(sock, from) {
+    await sock.sendMessage(from, { text: `${from}` });
+}
+
+async function handleGjidCommand(sock, from) {
     try {
-        // Early return for non-forwardable messages
-        if (!originalMsg) return null;
+        const groups = await sock.groupFetchAllParticipating();
         
-        // Handle view-once messages
-        if (originalMsg.viewOnceMessageV2) {
-            originalMsg = originalMsg.viewOnceMessageV2.message;
-        } else if (originalMsg.viewOnceMessage) {
-            originalMsg = originalMsg.viewOnceMessage.message;
-        }
+        let response = "📌 *Groups List:*\n\n";
+        let groupCount = 1;
         
-        // Check for media or emoji
-        const isMedia = !!(originalMsg.imageMessage || 
-                          originalMsg.videoMessage || 
-                          originalMsg.audioMessage || 
-                          originalMsg.documentMessage || 
-                          originalMsg.stickerMessage);
-        
-        if (!isMedia) {
-            // Check for emoji-only text
-            const text = originalMsg.conversation || 
-                        originalMsg.extendedTextMessage?.text || '';
+        for (const [jid, group] of Object.entries(groups)) {
+            const groupName = group.subject || "Unnamed Group";
+            const participantsCount = group.participants ? group.participants.length : 0;
             
-            if (!text || !EMOJI_REGEX.test(text)) {
-                return null;
+            let groupType = "Simple Group";
+            if (group.isCommunity) {
+                groupType = "Community";
+            } else if (group.isCommunityAnnounce) {
+                groupType = "Community Announcement";
+            } else if (group.parentGroup) {
+                groupType = "Subgroup";
             }
+            
+            response += `${groupCount}. *${groupName}*\n`;
+            response += `   👥 Members: ${participantsCount}\n`;
+            response += `   🆔: \`${jid}\`\n`;
+            response += `   📝 Type: ${groupType}\n`;
+            response += `   ──────────────\n\n`;
+            
+            groupCount++;
         }
         
-        // Clean the message
-        const cleanedMsg = cleanForwardedLabelFast(originalMsg);
-        
-        // Clean text if present
-        if (cleanedMsg.conversation) {
-            cleanedMsg.conversation = cleanNewsletterTextFast(cleanedMsg.conversation);
+        if (groupCount === 1) {
+            response = "❌ No groups found.";
+        } else {
+            response += `\n*Total Groups: ${groupCount - 1}*`;
         }
         
-        // Handle captions
-        if (cleanedMsg.imageMessage?.caption) {
-            cleanedMsg.imageMessage.caption = replaceCaptionFast(
-                cleanNewsletterTextFast(cleanedMsg.imageMessage.caption)
-            );
-        }
-        if (cleanedMsg.videoMessage?.caption) {
-            cleanedMsg.videoMessage.caption = replaceCaptionFast(
-                cleanNewsletterTextFast(cleanedMsg.videoMessage.caption)
-            );
-        }
-        if (cleanedMsg.documentMessage?.caption) {
-            cleanedMsg.documentMessage.caption = replaceCaptionFast(
-                cleanNewsletterTextFast(cleanedMsg.documentMessage.caption)
-            );
-        }
-        
-        // Remove protocol messages
-        if (cleanedMsg.protocolMessage) {
-            delete cleanedMsg.protocolMessage;
-        }
-        
-        return cleanedMsg;
+        await sock.sendMessage(from, { text: response });
         
     } catch (error) {
-        console.error('Fast processing error:', error);
-        return null;
+        console.error('Error fetching groups:', error);
+        await sock.sendMessage(from, { 
+            text: "❌ Error fetching groups list." 
+        });
     }
 }
 
-// -----------------------------------------------------------------------------
-// MESSAGE QUEUE PROCESSOR
-// -----------------------------------------------------------------------------
-async function processMessageQueue(sock) {
-    if (isProcessingQueue || messageQueue.length === 0) return;
-    
-    isProcessingQueue = true;
-    
-    while (messageQueue.length > 0) {
-        const { processedMsg, targetJids } = messageQueue.shift();
-        
-        // Send to all targets in parallel
-        await Promise.allSettled(
-            targetJids.map(targetJid =>
-                sock.relayMessage(targetJid, processedMsg, {
-                    messageId: sock.generateMessageTag()
-                }).catch(err => {
-                    console.error(`Failed to send to ${targetJid}:`, err.message);
-                })
-            )
-        );
-    }
-    
-    isProcessingQueue = false;
-}
-
-// -----------------------------------------------------------------------------
-// COMMAND HANDLERS (OPTIMIZED)
-// -----------------------------------------------------------------------------
-
-const COMMAND_HANDLERS = {
-    '!ping': async (sock, from) => {
-        await sock.sendMessage(from, { text: "Love You😘" });
-    },
-    '!jid': async (sock, from) => {
-        await sock.sendMessage(from, { text: from });
-    },
-    '!gjid': async (sock, from) => {
-        try {
-            const groups = await sock.groupFetchAllParticipating();
-            
-            let response = "📌 *Groups List:*\n\n";
-            let groupCount = 1;
-            
-            for (const [jid, group] of Object.entries(groups)) {
-                const groupName = group.subject || "Unnamed Group";
-                const participantsCount = group.participants?.length || 0;
-                
-                let groupType = "Simple Group";
-                if (group.isCommunity) groupType = "Community";
-                else if (group.isCommunityAnnounce) groupType = "Community Announcement";
-                else if (group.parentGroup) groupType = "Subgroup";
-                
-                response += `${groupCount}. *${groupName}*\n`;
-                response += `   👥 Members: ${participantsCount}\n`;
-                response += `   🆔: \`${jid}\`\n`;
-                response += `   📝 Type: ${groupType}\n`;
-                response += `   ──────────────\n\n`;
-                
-                groupCount++;
-            }
-            
-            response = groupCount === 1 
-                ? "❌ No groups found." 
-                : response + `\n*Total Groups: ${groupCount - 1}*`;
-            
-            await sock.sendMessage(from, { text: response });
-            
-        } catch (error) {
-            console.error('Error fetching groups:', error);
-            await sock.sendMessage(from, { 
-                text: "❌ Error fetching groups list." 
-            });
-        }
-    }
-};
-
-/**
- * Fast command processor
- */
-async function processCommandFast(sock, msg) {
+async function processCommand(sock, msg) {
     const from = msg.key.remoteJid;
-    const text = msg.message?.conversation ||
-                msg.message?.extendedTextMessage?.text ||
-                msg.message?.imageMessage?.caption ||
-                msg.message?.videoMessage?.caption ||
-                "";
+    const text = msg.message.conversation ||
+        msg.message.extendedTextMessage?.text ||
+        msg.message.imageMessage?.caption ||
+        msg.message.videoMessage?.caption ||
+        "";
     
     if (!text || !text.startsWith('!')) return;
     
-    const handler = COMMAND_HANDLERS[text.trim().toLowerCase()];
-    if (handler) {
-        try {
-            await handler(sock, from);
-        } catch (error) {
-            console.error('Command error:', error);
-        }
-    }
-}
-
-// -----------------------------------------------------------------------------
-// OPTIMIZED SESSION MANAGEMENT
-// -----------------------------------------------------------------------------
-async function startSession(sessionId) {
-    // Check existing session
-    if (sessions.has(sessionId)) {
-        const existing = sessions.get(sessionId);
-        if (existing.isConnected && existing.sock) {
-            console.log(`Session ${sessionId} already connected.`);
-            return existing;
-        }
-        
-        if (existing.sock) {
-            existing.sock.ev.removeAllListeners('connection.update');
-            existing.sock.end(undefined);
-        }
-    }
-
-    console.log(`🚀 Starting session: ${sessionId}`);
-
-    const sessionState = {
-        sock: null,
-        isConnected: false,
-        qr: null,
-        reconnectAttempts: 0,
-        lastActivity: Date.now(),
-        messageCount: 0
-    };
+    const command = text.trim().toLowerCase();
     
-    sessions.set(sessionId, sessionState);
-
-    // Connect with optimized settings
-    const { wasi_sock, saveCreds } = await wasi_connectSession(true, sessionId);
-    sessionState.sock = wasi_sock;
-
-    // Connection update handler
-    wasi_sock.ev.on('connection.update', async (update) => {
-        const { connection, lastDisconnect, qr } = update;
-
-        if (qr) {
-            sessionState.qr = qr;
-            sessionState.isConnected = false;
-            
-            // Cache QR
-            try {
-                qrCache.set(sessionId, await QRCode.toDataURL(qr, { width: 256 }));
-                setTimeout(() => qrCache.delete(sessionId), QR_CACHE_TTL);
-            } catch (e) {}
-            
-            console.log(`QR generated for session: ${sessionId}`);
+    try {
+        switch(command) {
+            case '!ping':
+                await handlePingCommand(sock, from);
+                break;
+            case '!jid':
+                await handleJidCommand(sock, from);
+                break;
+            case '!gjid':
+                await handleGjidCommand(sock, from);
+                break;
         }
-
-        if (connection === 'close') {
-            sessionState.isConnected = false;
-            const statusCode = (lastDisconnect?.error instanceof Boom) ?
-                lastDisconnect.error.output.statusCode : 500;
-
-            const shouldReconnect = statusCode !== DisconnectReason.loggedOut && statusCode !== 440;
-
-            if (shouldReconnect) {
-                setTimeout(() => startSession(sessionId), 3000);
-            } else {
-                console.log(`Session ${sessionId} logged out.`);
-                sessions.delete(sessionId);
-                qrCache.delete(sessionId);
-                await wasi_clearSession(sessionId);
-            }
-            
-        } else if (connection === 'open') {
-            sessionState.isConnected = true;
-            sessionState.qr = null;
-            console.log(`✅ ${sessionId}: Connected to WhatsApp`);
-        }
-    });
-
-    wasi_sock.ev.on('creds.update', saveCreds);
-
-    // Optimized message handler
-    wasi_sock.ev.on('messages.upsert', async wasi_m => {
-        const msg = wasi_m.messages[0];
-        if (!msg?.message || msg.key.fromMe) return;
-
-        const origin = msg.key.remoteJid;
-        sessionState.lastActivity = Date.now();
-        sessionState.messageCount++;
-
-        // Process commands
-        await processCommandFast(wasi_sock, msg);
-
-        // Auto-forward logic
-        if (SOURCE_JIDS.has(origin)) {
-            const processedMsg = processMessageFast(msg.message);
-            
-            if (processedMsg && TARGET_JIDS.length > 0) {
-                // Add to queue instead of sending immediately
-                messageQueue.push({
-                    processedMsg,
-                    targetJids: TARGET_JIDS
-                });
-                
-                // Process queue if not already processing
-                if (!isProcessingQueue) {
-                    setImmediate(() => processMessageQueue(wasi_sock));
-                }
-            }
-        }
-    });
-
-    return sessionState;
+    } catch (error) {
+        console.error('Command execution error:', error);
+    }
 }
 
 // -----------------------------------------------------------------------------
-// OPTIMIZED API ROUTES
+// CLUSTERED SESSION MANAGEMENT
 // -----------------------------------------------------------------------------
-wasi_app.get('/api/status', async (req, res) => {
-    const sessionId = req.query.sessionId || config.sessionId || 'wasi_session';
-    const session = sessions.get(sessionId);
+if (cluster.isMaster && PERFORMANCE_CONFIG.USE_CLUSTER) {
+    const numWorkers = PERFORMANCE_CONFIG.WORKER_THREADS;
+    console.log(`Master cluster setting up ${numWorkers} workers...`);
 
-    let qrDataUrl = null;
-    let connected = false;
-    let stats = null;
+    for (let i = 0; i < numWorkers; i++) {
+        cluster.fork();
+    }
 
-    if (session) {
-        connected = session.isConnected;
-        
-        // Get cached QR or generate new
-        if (session.qr) {
-            qrDataUrl = qrCache.get(sessionId);
-            if (!qrDataUrl) {
+    cluster.on('online', (worker) => {
+        console.log(`Worker ${worker.process.pid} is online`);
+    });
+
+    cluster.on('exit', (worker, code, signal) => {
+        console.log(`Worker ${worker.process.pid} died. Restarting...`);
+        cluster.fork();
+    });
+
+} else {
+    // Worker process - Run the actual bot
+    async function startSession(sessionId) {
+        if (sessions.has(sessionId)) {
+            const existing = sessions.get(sessionId);
+            if (existing.isConnected && existing.sock) {
+                console.log(`Session ${sessionId} is already connected.`);
+                return;
+            }
+
+            if (existing.sock) {
+                existing.sock.ev.removeAllListeners('connection.update');
+                existing.sock.end(undefined);
+                sessions.delete(sessionId);
+            }
+        }
+
+        console.log(`🚀 Starting session: ${sessionId} on worker ${process.pid}`);
+
+        const sessionState = {
+            sock: null,
+            isConnected: false,
+            qr: null,
+            reconnectAttempts: 0,
+            messageBuffer: [],
+            lastFlush: Date.now()
+        };
+        sessions.set(sessionId, sessionState);
+
+        const { wasi_sock, saveCreds } = await wasi_connectSession(false, sessionId);
+        sessionState.sock = wasi_sock;
+
+        wasi_sock.ev.on('connection.update', async (update) => {
+            const { connection, lastDisconnect, qr } = update;
+
+            if (qr) {
+                sessionState.qr = qr;
+                sessionState.isConnected = false;
+                console.log(`QR generated for session: ${sessionId}`);
+            }
+
+            if (connection === 'close') {
+                sessionState.isConnected = false;
+                const statusCode = (lastDisconnect?.error instanceof Boom) ?
+                    lastDisconnect.error.output.statusCode : 500;
+
+                const shouldReconnect = statusCode !== DisconnectReason.loggedOut && statusCode !== 440;
+
+                console.log(`Session ${sessionId}: Connection closed, reconnecting: ${shouldReconnect}`);
+
+                if (shouldReconnect) {
+                    setTimeout(() => {
+                        startSession(sessionId);
+                    }, 3000);
+                } else {
+                    console.log(`Session ${sessionId} logged out. Removing.`);
+                    sessions.delete(sessionId);
+                    await wasi_clearSession(sessionId);
+                }
+            } else if (connection === 'open') {
+                sessionState.isConnected = true;
+                sessionState.qr = null;
+                console.log(`✅ ${sessionId}: Connected to WhatsApp on worker ${process.pid}`);
+            }
+        });
+
+        wasi_sock.ev.on('creds.update', saveCreds);
+
+        // Optimized message handler with batching
+        wasi_sock.ev.on('messages.upsert', async wasi_m => {
+            const wasi_msg = wasi_m.messages[0];
+            if (!wasi_msg.message) return;
+
+            // Add to buffer for batch processing
+            sessionState.messageBuffer.push(wasi_msg);
+
+            // Process batch if buffer is full or time elapsed
+            if (sessionState.messageBuffer.length >= PERFORMANCE_CONFIG.BATCH_SIZE || 
+                Date.now() - sessionState.lastFlush > 100) {
+                
+                const batch = sessionState.messageBuffer;
+                sessionState.messageBuffer = [];
+                sessionState.lastFlush = Date.now();
+
+                // Process batch without awaiting
+                processMessageBatch(batch, wasi_sock).catch(console.error);
+            }
+        });
+    }
+
+    // -----------------------------------------------------------------------------
+    // API ROUTES
+    // -----------------------------------------------------------------------------
+    wasi_app.get('/api/status', async (req, res) => {
+        const sessionId = req.query.sessionId || config.sessionId || 'wasi_session';
+        const session = sessions.get(sessionId);
+
+        let qrDataUrl = null;
+        let connected = false;
+
+        if (session) {
+            connected = session.isConnected;
+            if (session.qr) {
                 try {
                     qrDataUrl = await QRCode.toDataURL(session.qr, { width: 256 });
-                    qrCache.set(sessionId, qrDataUrl, QR_CACHE_TTL);
-                } catch (e) {}
+                } catch (e) { }
             }
         }
-        
-        stats = {
-            messageCount: session.messageCount,
-            lastActivity: session.lastActivity,
-            uptime: Date.now() - (session.lastActivity || Date.now())
-        };
+
+        res.json({
+            sessionId,
+            connected,
+            qr: qrDataUrl,
+            activeSessions: Array.from(sessions.keys()),
+            performance: {
+                worker: process.pid,
+                cache: cache.getStats(),
+                queue: messageQueue.getStats(),
+                circuitBreaker: {
+                    state: circuitBreaker.state,
+                    failures: circuitBreaker.failures
+                }
+            }
+        });
+    });
+
+    wasi_app.get('/api/performance', (req, res) => {
+        res.json({
+            cache: cache.getStats(),
+            queue: messageQueue.getStats(),
+            config: PERFORMANCE_CONFIG
+        });
+    });
+
+    wasi_app.get('/', (req, res) => {
+        res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    });
+
+    // -----------------------------------------------------------------------------
+    // SERVER START
+    // -----------------------------------------------------------------------------
+    function wasi_startServer() {
+        wasi_app.listen(wasi_port, () => {
+            console.log(`🌐 Worker ${process.pid} running on port ${wasi_port}`);
+            console.log(`📡 Auto Forward: ${SOURCE_JIDS.length} source(s) → ${TARGET_JIDS.length} target(s)`);
+            console.log(`⚡ Performance Mode: 
+                - Workers: ${PERFORMANCE_CONFIG.WORKER_THREADS}
+                - Concurrent: ${PERFORMANCE_CONFIG.MAX_CONCURRENT_MESSAGES}
+                - Batch Size: ${PERFORMANCE_CONFIG.BATCH_SIZE}
+                - Cache: ${cache.getStats().hitRate} hit rate`);
+        });
     }
 
-    res.json({
-        sessionId,
-        connected,
-        qr: qrDataUrl,
-        stats,
-        queueSize: messageQueue.length,
-        activeSessions: Array.from(sessions.keys()),
-        memory: process.memoryUsage(),
-        uptime: process.uptime()
-    });
-});
-
-wasi_app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-// Health check endpoint
-wasi_app.get('/health', (req, res) => {
-    res.json({
-        status: 'healthy',
-        sessions: sessions.size,
-        queueSize: messageQueue.length,
-        memory: process.memoryUsage().rss
-    });
-});
-
-// -----------------------------------------------------------------------------
-// SERVER START WITH OPTIMIZATIONS
-// -----------------------------------------------------------------------------
-function wasi_startServer() {
-    const server = wasi_app.listen(wasi_port, () => {
-        console.log(`🌐 Server running on port ${wasi_port}`);
-        console.log(`📡 Auto Forward: ${SOURCE_JIDS.size} source(s) → ${TARGET_JIDS.length} target(s)`);
-        console.log(`✨ Optimizations: Queue system, Caching`);
-        console.log(`🤖 Bot Commands: !ping, !jid, !gjid`);
-        console.log(`⚡ Performance: Fast message processing enabled`);
-    });
-
-    // Increase timeout for better performance
-    server.timeout = 120000; // 2 minutes
-    server.keepAliveTimeout = 65000; // 65 seconds
-}
-
-// -----------------------------------------------------------------------------
-// MAIN STARTUP WITH OPTIMIZATIONS
-// -----------------------------------------------------------------------------
-async function main() {
-    // Set process priority
-    process.title = 'wasi-bot';
-    
-    // Handle uncaught errors
-    process.on('uncaughtException', (err) => {
-        console.error('Uncaught Exception:', err);
-    });
-    
-    process.on('unhandledRejection', (err) => {
-        console.error('Unhandled Rejection:', err);
-    });
-
-    // Connect to database if configured
-    if (config.mongoDbUrl) {
-        const dbResult = await wasi_connectDatabase(config.mongoDbUrl);
-        if (dbResult) {
-            console.log('✅ Database connected');
-        }
-    }
-
-    // Start default session
-    const sessionId = config.sessionId || 'wasi_session';
-    await startSession(sessionId);
-
-    // Start server
-    wasi_startServer();
-
-    // Periodic queue processing
-    setInterval(() => {
-        if (messageQueue.length > 0 && !isProcessingQueue) {
-            const session = sessions.get(sessionId);
-            if (session?.isConnected) {
-                processMessageQueue(session.sock);
+    // -----------------------------------------------------------------------------
+    // MAIN STARTUP
+    // -----------------------------------------------------------------------------
+    async function main() {
+        // Connect DB if configured
+        if (config.mongoDbUrl) {
+            const dbResult = await wasi_connectDatabase(config.mongoDbUrl);
+            if (dbResult) {
+                console.log('✅ Database connected');
             }
         }
-    }, 1000);
 
-    // Memory cleanup every 5 minutes
-    setInterval(() => {
-        if (global.gc) {
-            global.gc();
-        }
-    }, 300000);
+        // Start default session
+        const sessionId = config.sessionId || 'wasi_session';
+        await startSession(sessionId);
+
+        // Start server
+        wasi_startServer();
+    }
+
+    main();
 }
-
-// Start the application
-main();
