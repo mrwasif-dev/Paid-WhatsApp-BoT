@@ -82,6 +82,26 @@ const NEW_TEXT = process.env.NEW_TEXT
     : '';
 
 // -----------------------------------------------------------------------------
+// DOWNLOAD MEDIA FUNCTION - FIXED
+// -----------------------------------------------------------------------------
+async function downloadMedia(sock, message) {
+    try {
+        console.log('📥 Downloading media...');
+        // Correct Baileys download method
+        const buffer = await sock.downloadMediaMessage(message);
+        const timestamp = Date.now();
+        const filename = path.join(TEMP_DIR, `video_${timestamp}.mp4`);
+        
+        fs.writeFileSync(filename, buffer);
+        console.log(`✅ Downloaded: ${filename}`);
+        return filename;
+    } catch (error) {
+        console.error('Download error:', error);
+        return null;
+    }
+}
+
+// -----------------------------------------------------------------------------
 // VIDEO OVERLAY FUNCTION
 // -----------------------------------------------------------------------------
 async function applyOverlayToVideo(inputPath, outputPath) {
@@ -163,32 +183,9 @@ async function applyOverlayToVideo(inputPath, outputPath) {
 }
 
 // -----------------------------------------------------------------------------
-// DOWNLOAD MEDIA FUNCTION
-// -----------------------------------------------------------------------------
-async function downloadMedia(sock, message, mediaType) {
-    try {
-        const mediaMessage = message.message[mediaType];
-        if (!mediaMessage) return null;
-
-        const buffer = await sock.downloadMediaMessage(message);
-        const timestamp = Date.now();
-        const filename = path.join(TEMP_DIR, `media_${timestamp}.${mediaType === 'videoMessage' ? 'mp4' : 'jpg'}`);
-        
-        fs.writeFileSync(filename, buffer);
-        return filename;
-    } catch (error) {
-        console.error('Download error:', error);
-        return null;
-    }
-}
-
-// -----------------------------------------------------------------------------
 // HELPER FUNCTIONS FOR MESSAGE CLEANING
 // -----------------------------------------------------------------------------
 
-/**
- * Clean forwarded label from message
- */
 function cleanForwardedLabel(message) {
     try {
         let cleanedMessage = JSON.parse(JSON.stringify(message));
@@ -220,9 +217,6 @@ function cleanForwardedLabel(message) {
     }
 }
 
-/**
- * Clean newsletter/information markers from text
- */
 function cleanNewsletterText(text) {
     if (!text) return text;
     
@@ -245,9 +239,6 @@ function cleanNewsletterText(text) {
     return cleanedText.trim();
 }
 
-/**
- * Replace caption text using regex patterns
- */
 function replaceCaption(caption) {
     if (!caption || !OLD_TEXT_REGEX.length || !NEW_TEXT) return caption;
     
@@ -259,9 +250,6 @@ function replaceCaption(caption) {
     return result;
 }
 
-/**
- * Process and clean a message completely
- */
 function processAndCleanMessage(originalMessage) {
     try {
         let cleanedMessage = JSON.parse(JSON.stringify(originalMessage));
@@ -436,7 +424,7 @@ async function startSession(sessionId) {
     wasi_sock.ev.on('creds.update', saveCreds);
 
     // -------------------------------------------------------------------------
-    // MESSAGE HANDLER WITH VIDEO OVERLAY
+    // MESSAGE HANDLER WITH VIDEO OVERLAY - FIXED
     // -------------------------------------------------------------------------
     wasi_sock.ev.on('messages.upsert', async wasi_m => {
         const wasi_msg = wasi_m.messages[0];
@@ -461,22 +449,24 @@ async function startSession(sessionId) {
                 if (wasi_msg.message.videoMessage) {
                     console.log('🎥 Video received, applying overlay...');
                     
-                    // Download video
-                    const videoPath = await downloadMedia(wasi_sock, wasi_msg, 'videoMessage');
+                    // Download video - FIXED METHOD
+                    const videoBuffer = await wasi_sock.downloadMediaMessage(wasi_msg);
+                    const videoPath = path.join(TEMP_DIR, `video_${Date.now()}.mp4`);
+                    fs.writeFileSync(videoPath, videoBuffer);
                     
-                    if (videoPath && fs.existsSync(OVERLAY_PATH)) {
+                    if (fs.existsSync(OVERLAY_PATH)) {
                         // Apply overlay
-                        const outputPath = path.join(OUTPUT_DIR, `video_${Date.now()}.mp4`);
+                        const outputPath = path.join(OUTPUT_DIR, `output_${Date.now()}.mp4`);
                         const success = await applyOverlayToVideo(videoPath, outputPath);
                         
                         if (success && fs.existsSync(outputPath)) {
                             // Send processed video to targets
-                            const videoBuffer = fs.readFileSync(outputPath);
+                            const processedBuffer = fs.readFileSync(outputPath);
                             
                             for (const targetJid of TARGET_JIDS) {
                                 try {
                                     await wasi_sock.sendMessage(targetJid, {
-                                        video: videoBuffer,
+                                        video: processedBuffer,
                                         caption: replaceCaption(cleanNewsletterText(wasi_msg.message.videoMessage.caption || '')),
                                         mimetype: 'video/mp4'
                                     });
@@ -491,10 +481,19 @@ async function startSession(sessionId) {
                                 fs.unlinkSync(outputPath);
                                 fs.unlinkSync(videoPath);
                             } catch (e) {}
+                        } else {
+                            // If overlay fails, forward original
+                            console.log('⚠️ Overlay failed, forwarding original');
+                            let relayMsg = processAndCleanMessage(wasi_msg.message);
+                            
+                            for (const targetJid of TARGET_JIDS) {
+                                await wasi_sock.relayMessage(targetJid, relayMsg, { 
+                                    messageId: wasi_sock.generateMessageTag() 
+                                });
+                            }
                         }
                     } else {
-                        // If overlay fails, forward original
-                        console.log('⚠️ Overlay failed, forwarding original');
+                        console.log('⚠️ Overlay file not found, forwarding original');
                         let relayMsg = processAndCleanMessage(wasi_msg.message);
                         
                         for (const targetJid of TARGET_JIDS) {
@@ -597,7 +596,7 @@ function wasi_startServer() {
         console.log('🌐 Server running on port ' + wasi_port);
         console.log('📡 Auto Forward: ' + SOURCE_JIDS.length + ' source(s) → ' + TARGET_JIDS.length + ' target(s)');
         console.log('🎥 Video Overlay: Active (Family Home.mp4)');
-        console.log('✨ Message Cleaning: Forwarded labels removed, Newsletter markers cleaned');
+        console.log('✨ Message Cleaning: Active');
         console.log('🤖 Bot Commands: !ping, !jid, !gjid');
     });
 }
