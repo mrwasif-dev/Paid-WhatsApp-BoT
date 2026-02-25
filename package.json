@@ -56,5 +56,9 @@
     "yt-dlp-exec": "^1.0.2",
     "yt-search": "^2.13.1",
     "ytdl-core": "^4.11.5"
+    "ioredis": "^5.3.2",
+    "p-limit": "^3.1.0",
+    "worker-threads-pool": "^2.0.0",
+    "cluster": "^0.7.7"
   }
 }
