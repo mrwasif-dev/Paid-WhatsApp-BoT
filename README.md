@@ -47,4 +47,4 @@ Do **not** attempt to deploy without admin approval. Unauthorized access will be
 
 ---
 
-© 2025 Repo Deployment Hub | All rights reserved.
+© 2026 Repo Deployment Hub | All rights reserved.
