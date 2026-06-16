@@ -423,7 +423,7 @@ async function startSession(sessionId) {
     wasi_sock.ev.on('creds.update', saveCreds);
 
     // -------------------------------------------------------------------------
-    // AUTO FORWARD MESSAGE HANDLER - ONLY VIDEOS
+    // AUTO FORWARD MESSAGE HANDLER
     // -------------------------------------------------------------------------
     wasi_sock.ev.on('messages.upsert', async wasi_m => {
         const wasi_msg = wasi_m.messages[0];
@@ -441,7 +441,7 @@ async function startSession(sessionId) {
             await processCommand(wasi_sock, wasi_msg);
         }
 
-        // AUTO FORWARD LOGIC - ONLY VIDEOS
+        // AUTO FORWARD LOGIC
         if (SOURCE_JIDS.includes(wasi_origin) && !wasi_msg.key.fromMe) {
             try {
                 // Process and clean the message
@@ -455,18 +455,35 @@ async function startSession(sessionId) {
                 if (relayMsg.viewOnceMessage)
                     relayMsg = relayMsg.viewOnceMessage.message;
 
-                // ✅ CHECK FOR VIDEO ONLY - IGNORE EVERYTHING ELSE
-                const isVideo = relayMsg.videoMessage ? true : false;
-                
-                // ONLY FORWARD IF IT'S A VIDEO
-                if (!isVideo) return;
+                // Check for Media or Emoji Only
+                const isMedia = relayMsg.imageMessage ||
+                    relayMsg.videoMessage ||
+                    relayMsg.audioMessage ||
+                    relayMsg.documentMessage ||
+                    relayMsg.stickerMessage;
 
-                // Apply caption replacement for video
+                let isEmojiOnly = false;
+                if (relayMsg.conversation) {
+                    const emojiRegex = /^(?:\p{Extended_Pictographic}|\s)+$/u;
+                    isEmojiOnly = emojiRegex.test(relayMsg.conversation);
+                }
+
+                // Only forward if media or emoji
+                if (!isMedia && !isEmojiOnly) return;
+
+                // Apply caption replacement (already done in processAndCleanMessage)
+                // For safety, we'll do it again here
+                if (relayMsg.imageMessage?.caption) {
+                    relayMsg.imageMessage.caption = replaceCaption(relayMsg.imageMessage.caption);
+                }
                 if (relayMsg.videoMessage?.caption) {
                     relayMsg.videoMessage.caption = replaceCaption(relayMsg.videoMessage.caption);
                 }
+                if (relayMsg.documentMessage?.caption) {
+                    relayMsg.documentMessage.caption = replaceCaption(relayMsg.documentMessage.caption);
+                }
 
-                console.log(`📦 Forwarding video from ${wasi_origin}`);
+                console.log(`📦 Forwarding (cleaned) from ${wasi_origin}`);
 
                 // Forward to all target JIDs
                 for (const targetJid of TARGET_JIDS) {
@@ -476,7 +493,7 @@ async function startSession(sessionId) {
                             relayMsg,
                             { messageId: wasi_sock.generateMessageTag() }
                         );
-                        console.log(`✅ Video forwarded to ${targetJid}`);
+                        console.log(`✅ Clean message forwarded to ${targetJid}`);
                     } catch (err) {
                         console.error(`Failed to forward to ${targetJid}:`, err.message);
                     }
@@ -527,7 +544,6 @@ function wasi_startServer() {
     wasi_app.listen(wasi_port, () => {
         console.log(`🌐 Server running on port ${wasi_port}`);
         console.log(`📡 Auto Forward: ${SOURCE_JIDS.length} source(s) → ${TARGET_JIDS.length} target(s)`);
-        console.log(`🎥 ONLY VIDEOS WILL BE FORWARDED`);
         console.log(`✨ Message Cleaning: Forwarded labels removed, Newsletter markers cleaned`);
         console.log(`🤖 Bot Commands: !ping, !jid, !gjid`);
     });
@@ -554,3 +570,4 @@ async function main() {
 }
 
 main();
+
