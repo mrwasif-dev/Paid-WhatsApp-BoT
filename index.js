@@ -2,9 +2,7 @@ require('dotenv').config();
 const {
     DisconnectReason,
     jidNormalizedUser,
-    proto,
-    makeWASocket,
-    useMultiFileAuthState
+    proto
 } = require('@whiskeysockets/baileys');
 const { Boom } = require('@hapi/boom');
 const express = require('express');
@@ -26,326 +24,266 @@ wasi_app.use(express.json());
 wasi_app.use(express.static(path.join(__dirname, 'public')));
 
 // ============================================================
-// SEND INTERACTIVE MESSAGE - یہ ہر ورژن پر کام کرتا ہے
+// STORE DATA (Simple in-memory for this test)
 // ============================================================
 
-async function sendInteractiveMessage(sock, to) {
+const STORE_FILE = path.join(__dirname, 'storeData.json');
+
+let storeData = {
+    products: [
+        { id: 'p1', name: 'iPhone 15 Pro Max', price: 350000, category: 'Electronics', description: '256GB, A17 Chip, 48MP Camera', stock: 10 },
+        { id: 'p2', name: 'Samsung Galaxy S24 Ultra', price: 280000, category: 'Electronics', description: '512GB, AI Features, S-Pen', stock: 15 },
+        { id: 'p3', name: 'Black Car Perfume', price: 5000, category: 'Accessories', description: 'Premium Long Lasting, 100ml', stock: 3 },
+        { id: 'p4', name: 'AirPods Pro', price: 45000, category: 'Accessories', description: 'Noise Cancellation, 24hr Battery', stock: 8 },
+        { id: 'p5', name: 'Smart Watch Series 9', price: 65000, category: 'Electronics', description: 'Health Monitor, GPS, Heart Rate', stock: 5 }
+    ],
+    orders: [],
+    tempOrders: {} // key: userJid, value: { products: [], step, name, phone, address, notes }
+};
+
+function loadStoreData() {
     try {
-        // یہ WhatsApp کا نیا interactive message طریقہ ہے
-        const interactiveMessage = {
-            text: '🛍️ *Welcome to Our Store!*\n\n' +
-                  '📱 *WhatsApp Business Store*\n\n' +
-                  '👇 *Choose an option:*',
-            footer: '🛍️ Store Bot',
-            interactive: {
-                type: 'button',
-                header: {
-                    type: 'text',
-                    text: '🛍️ Store Menu'
-                },
-                body: {
-                    text: 'Select an option from below:'
-                },
-                footer: {
-                    text: '🛍️ Store Bot'
-                },
-                action: {
-                    buttons: [
-                        {
-                            type: 'reply',
-                            reply: {
-                                id: 'products',
-                                title: '🛍️ Products',
-                                displayText: '🛍️ Products'
-                            }
-                        },
-                        {
-                            type: 'reply',
-                            reply: {
-                                id: 'cart',
-                                title: '🛒 My Cart',
-                                displayText: '🛒 My Cart'
-                            }
-                        },
-                        {
-                            type: 'reply',
-                            reply: {
-                                id: 'orders',
-                                title: '📦 My Orders',
-                                displayText: '📦 My Orders'
-                            }
-                        },
-                        {
-                            type: 'reply',
-                            reply: {
-                                id: 'categories',
-                                title: '📂 Categories',
-                                displayText: '📂 Categories'
-                            }
-                        },
-                        {
-                            type: 'reply',
-                            reply: {
-                                id: 'help',
-                                title: '🆘 Help',
-                                displayText: '🆘 Help'
-                            }
-                        }
-                    ]
-                }
-            }
-        };
-
-        // Interactive message بھیجیں
-        await sock.sendMessage(to, interactiveMessage);
-        console.log('✅ Interactive message sent!');
-        
-    } catch (error) {
-        console.error('Interactive error:', error);
-        
-        // Fallback - سادہ ٹیکسٹ
-        await sendFallbackMessage(sock, to);
-    }
-}
-
-// ============================================================
-// SEND FALLBACK MESSAGE - جب کچھ نہ چلے
-// ============================================================
-
-async function sendFallbackMessage(sock, to) {
-    try {
-        const text = '🛍️ *Welcome to Our Store!*\n\n' +
-                     '📱 *WhatsApp Business Store*\n\n' +
-                     '📌 *Type these commands:*\n\n' +
-                     '1️⃣ `products` - View Products\n' +
-                     '2️⃣ `cart` - View Cart\n' +
-                     '3️⃣ `orders` - My Orders\n' +
-                     '4️⃣ `categories` - Categories\n' +
-                     '5️⃣ `help` - Help & Info\n\n' +
-                     '👆 *Type a command to continue*';
-
-        await sock.sendMessage(to, { text: text });
-        console.log('✅ Fallback message sent!');
-        
-    } catch (error) {
-        console.error('Fallback error:', error);
-    }
-}
-
-// ============================================================
-// SEND PRODUCT LIST
-// ============================================================
-
-async function sendProductsInteractive(sock, to) {
-    try {
-        const interactiveMessage = {
-            text: '🛍️ *Products List*\n\n' +
-                  '💰 *Prices:*\n' +
-                  '📱 iPhone 15 Pro - Rs.350,000\n' +
-                  '📱 Samsung S24 - Rs.280,000\n' +
-                  '🖤 Car Perfume - Rs.5,000\n' +
-                  '🎧 AirPods Pro - Rs.45,000\n' +
-                  '⌚ Smart Watch - Rs.65,000\n\n' +
-                  '👇 *Select a product:*',
-            footer: '🛍️ Store Bot',
-            interactive: {
-                type: 'button',
-                header: {
-                    type: 'text',
-                    text: '🛍️ Products'
-                },
-                body: {
-                    text: 'Tap a product to view details:'
-                },
-                footer: {
-                    text: '🛍️ Store Bot'
-                },
-                action: {
-                    buttons: [
-                        {
-                            type: 'reply',
-                            reply: {
-                                id: 'view_p1',
-                                title: '📱 iPhone 15 Pro',
-                                displayText: '📱 iPhone 15 Pro'
-                            }
-                        },
-                        {
-                            type: 'reply',
-                            reply: {
-                                id: 'view_p2',
-                                title: '📱 Samsung S24',
-                                displayText: '📱 Samsung S24'
-                            }
-                        },
-                        {
-                            type: 'reply',
-                            reply: {
-                                id: 'view_p3',
-                                title: '🖤 Car Perfume',
-                                displayText: '🖤 Car Perfume'
-                            }
-                        },
-                        {
-                            type: 'reply',
-                            reply: {
-                                id: 'view_p4',
-                                title: '🎧 AirPods Pro',
-                                displayText: '🎧 AirPods Pro'
-                            }
-                        },
-                        {
-                            type: 'reply',
-                            reply: {
-                                id: 'view_p5',
-                                title: '⌚ Smart Watch',
-                                displayText: '⌚ Smart Watch'
-                            }
-                        },
-                        {
-                            type: 'reply',
-                            reply: {
-                                id: 'menu',
-                                title: '🏠 Main Menu',
-                                displayText: '🏠 Main Menu'
-                            }
-                        }
-                    ]
-                }
-            }
-        };
-
-        await sock.sendMessage(to, interactiveMessage);
-        
-    } catch (error) {
-        console.error('Products interactive error:', error);
-        await sock.sendMessage(to, { 
-            text: '🛍️ *Products*\n\n' +
-                  '1️⃣ iPhone 15 Pro - Rs.350,000\n' +
-                  '2️⃣ Samsung S24 - Rs.280,000\n' +
-                  '3️⃣ Car Perfume - Rs.5,000\n' +
-                  '4️⃣ AirPods Pro - Rs.45,000\n' +
-                  '5️⃣ Smart Watch - Rs.65,000\n\n' +
-                  'Type: view p1, view p2, view p3, view p4, view p5' 
-        });
-        await sendFallbackMessage(sock, to);
-    }
-}
-
-// ============================================================
-// SEND PRODUCT DETAIL
-// ============================================================
-
-async function sendProductDetail(sock, to, productId) {
-    const products = {
-        'p1': {
-            name: 'iPhone 15 Pro Max',
-            price: '350,000',
-            category: 'Electronics',
-            stock: 10,
-            description: '📱 256GB Storage, A17 Chip, 48MP Camera'
-        },
-        'p2': {
-            name: 'Samsung Galaxy S24 Ultra',
-            price: '280,000',
-            category: 'Electronics',
-            stock: 15,
-            description: '📱 512GB Storage, AI Features, S-Pen'
-        },
-        'p3': {
-            name: 'Black Car Perfume',
-            price: '5,000',
-            category: 'Accessories',
-            stock: 3,
-            description: '🖤 Premium Long Lasting, 100ml'
-        },
-        'p4': {
-            name: 'AirPods Pro',
-            price: '45,000',
-            category: 'Accessories',
-            stock: 8,
-            description: '🎧 Noise Cancellation, 24hr Battery'
-        },
-        'p5': {
-            name: 'Smart Watch Series 9',
-            price: '65,000',
-            category: 'Electronics',
-            stock: 5,
-            description: '⌚ Health Monitor, GPS, Heart Rate'
+        if (fs.existsSync(STORE_FILE)) {
+            const data = fs.readFileSync(STORE_FILE, 'utf8');
+            storeData = JSON.parse(data);
+            console.log('✅ Store data loaded');
+        } else {
+            saveStoreData();
         }
+    } catch (e) { console.error('Store load error', e); }
+}
+
+function saveStoreData() {
+    try {
+        fs.writeFileSync(STORE_FILE, JSON.stringify(storeData, null, 2));
+    } catch (e) { console.error('Store save error', e); }
+}
+
+function getAvailableProducts() {
+    return storeData.products.filter(p => p.stock > 0);
+}
+
+function getProductById(id) {
+    return storeData.products.find(p => p.id === id);
+}
+
+function getTempOrder(userJid) {
+    if (!storeData.tempOrders[userJid]) {
+        storeData.tempOrders[userJid] = {
+            products: [],
+            step: 'main', // main, products, productDetail, cart, checkout_name, checkout_phone, checkout_address, checkout_notes, confirm
+            name: '',
+            phone: '',
+            address: '',
+            notes: '',
+            selectedProductId: null
+        };
+        saveStoreData();
+    }
+    return storeData.tempOrders[userJid];
+}
+
+function addToTempOrder(userJid, productId, quantity = 1) {
+    const product = getProductById(productId);
+    if (!product || product.stock < quantity) return false;
+    const temp = getTempOrder(userJid);
+    const existing = temp.products.find(p => p.productId === productId);
+    if (existing) {
+        existing.quantity += quantity;
+    } else {
+        temp.products.push({ productId, quantity, price: product.price });
+    }
+    temp.total = temp.products.reduce((sum, p) => {
+        const prod = getProductById(p.productId);
+        return sum + (prod ? prod.price * p.quantity : 0);
+    }, 0);
+    saveStoreData();
+    return true;
+}
+
+function removeFromTempOrder(userJid, productId) {
+    const temp = getTempOrder(userJid);
+    temp.products = temp.products.filter(p => p.productId !== productId);
+    temp.total = temp.products.reduce((sum, p) => {
+        const prod = getProductById(p.productId);
+        return sum + (prod ? prod.price * p.quantity : 0);
+    }, 0);
+    saveStoreData();
+    return true;
+}
+
+function clearTempOrder(userJid) {
+    storeData.tempOrders[userJid] = null;
+    saveStoreData();
+}
+
+function placeOrder(userJid) {
+    const temp = getTempOrder(userJid);
+    if (temp.products.length === 0) return null;
+    if (!temp.name || !temp.phone || !temp.address) return null;
+
+    const order = {
+        id: `ORD${Date.now()}`,
+        userId: userJid,
+        name: temp.name,
+        phone: temp.phone,
+        address: temp.address,
+        notes: temp.notes || '',
+        items: temp.products.map(p => ({
+            productId: p.productId,
+            quantity: p.quantity,
+            price: p.price
+        })),
+        totalAmount: temp.total,
+        status: 'Pending',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
     };
 
-    const product = products[productId];
+    // Update stock
+    for (const item of temp.products) {
+        const product = getProductById(item.productId);
+        if (product) {
+            product.stock -= item.quantity;
+        }
+    }
+
+    storeData.orders.push(order);
+    clearTempOrder(userJid);
+    saveStoreData();
+    return order;
+}
+
+function getUserOrders(userJid) {
+    return storeData.orders.filter(o => o.userId === userJid);
+}
+
+// ============================================================
+// TEXT MENU GENERATORS
+// ============================================================
+
+function getMainMenu() {
+    return `🛍️ *Welcome to Our Store!*
+
+📱 *WhatsApp Business Store*
+
+Please select an option by typing the number:
+
+1️⃣ *Products* - View available products
+2️⃣ *Cart* - View your shopping cart
+3️⃣ *Orders* - View your order history
+4️⃣ *Help* - How to use the store
+
+Type the number (1-4) or the command name.`;
+}
+
+function getProductList() {
+    const products = getAvailableProducts();
+    if (products.length === 0) {
+        return `📭 *No products available*
+
+Please check back later.
+
+Type *menu* to go back.`;
+    }
+    let text = `🛍️ *Products List*\n\n`;
+    products.forEach((p, index) => {
+        text += `${index+1}. *${p.name}* - Rs. ${p.price.toLocaleString()}\n`;
+        text += `   📦 Stock: ${p.stock}\n`;
+    });
+    text += `\nTo view a product, type the number (e.g., *1*) or *view <product_id>* (e.g., *view p1*).\n\nType *menu* for main menu.`;
+    return text;
+}
+
+function getProductDetail(productId) {
+    const product = getProductById(productId);
     if (!product) {
-        await sock.sendMessage(to, { text: '❌ Product not found!' });
-        await sendInteractiveMessage(sock, to);
-        return;
+        return `❌ Product not found.\n\nType *products* to see the list.`;
     }
+    return `🛍️ *${product.name}*
 
-    try {
-        const interactiveMessage = {
-            text: `🛍️ *${product.name}*\n\n` +
-                  `📝 ${product.description}\n\n` +
-                  `💰 *Price:* Rs. ${product.price}\n` +
-                  `📂 *Category:* ${product.category}\n` +
-                  `📦 *Stock:* ${product.stock} units\n\n` +
-                  `👇 *What would you like to do?*`,
-            footer: '🛍️ Store Bot',
-            interactive: {
-                type: 'button',
-                header: {
-                    type: 'text',
-                    text: '📱 Product Detail'
-                },
-                body: {
-                    text: 'Choose an action:'
-                },
-                footer: {
-                    text: '🛍️ Store Bot'
-                },
-                action: {
-                    buttons: [
-                        {
-                            type: 'reply',
-                            reply: {
-                                id: `add_${productId}`,
-                                title: '🛒 Add to Cart',
-                                displayText: '🛒 Add to Cart'
-                            }
-                        },
-                        {
-                            type: 'reply',
-                            reply: {
-                                id: 'products',
-                                title: '⬅️ Back',
-                                displayText: '⬅️ Back'
-                            }
-                        },
-                        {
-                            type: 'reply',
-                            reply: {
-                                id: 'menu',
-                                title: '🏠 Menu',
-                                displayText: '🏠 Menu'
-                            }
-                        }
-                    ]
-                }
-            }
+📝 ${product.description}
+
+💰 *Price:* Rs. ${product.price.toLocaleString()}
+📂 *Category:* ${product.category}
+📦 *Stock:* ${product.stock} units
+
+To add to cart, type *add ${product.id}* (e.g., *add p1*)
+To go back to products, type *products*
+To main menu, type *menu*`;
+}
+
+function getCart(userJid) {
+    const temp = getTempOrder(userJid);
+    if (temp.products.length === 0) {
+        return `🛒 *Your Cart*
+
+Your cart is empty.
+
+Type *products* to start shopping.`;
+    }
+    let text = `🛒 *Your Cart*\n\n`;
+    let total = 0;
+    temp.products.forEach((item, index) => {
+        const product = getProductById(item.productId);
+        if (product) {
+            const itemTotal = product.price * item.quantity;
+            total += itemTotal;
+            text += `${index+1}. *${product.name}* - ${item.quantity}x Rs. ${product.price.toLocaleString()} = Rs. ${itemTotal.toLocaleString()}\n`;
+            text += `   To remove: *remove ${product.id}*\n`;
+        }
+    });
+    text += `\n💰 *Total: Rs. ${total.toLocaleString()}*\n\n`;
+    text += `To checkout, type *checkout*\n`;
+    text += `To clear cart, type *clearcart*\n`;
+    text += `To continue shopping, type *products*\n`;
+    text += `Type *menu* for main menu.`;
+    return text;
+}
+
+function getOrders(userJid) {
+    const orders = getUserOrders(userJid);
+    if (orders.length === 0) {
+        return `📦 *My Orders*
+
+You have no orders yet.
+
+Type *products* to start shopping.`;
+    }
+    let text = `📦 *My Orders*\n\n`;
+    orders.forEach((order, index) => {
+        const statusEmoji = {
+            'Pending': '⏳',
+            'Processing': '🔄',
+            'Shipped': '🚚',
+            'Delivered': '✅',
+            'Cancelled': '❌'
         };
+        text += `${index+1}. *${order.id}* ${statusEmoji[order.status] || '📦'}\n`;
+        text += `   📅 ${new Date(order.createdAt).toLocaleDateString()}\n`;
+        text += `   💰 Rs. ${order.totalAmount.toLocaleString()}\n`;
+        text += `   📊 ${order.status}\n\n`;
+    });
+    text += `Type *menu* for main menu.`;
+    return text;
+}
 
-        await sock.sendMessage(to, interactiveMessage);
-        
-    } catch (error) {
-        console.error('Product detail error:', error);
-        await sock.sendMessage(to, { 
-            text: `🛍️ *${product.name}*\n\n` +
-                  `💰 Price: Rs. ${product.price}\n` +
-                  `📦 Stock: ${product.stock}\n\n` +
-                  `To add to cart: add ${productId}` 
-        });
-        await sendInteractiveMessage(sock, to);
-    }
+function getHelp() {
+    return `🆘 *Help & Information*
+
+📖 *How to use the Store:*
+
+1. Type a number to select an option from menus.
+2. Use commands like *products*, *cart*, *orders*, *menu*.
+3. To view a product, type *view p1* or the product number.
+4. To add to cart, type *add p1*.
+5. To checkout, type *checkout* and follow the prompts.
+6. You will be asked for *Name*, *Phone*, *Address*.
+7. Confirm your order when asked.
+
+🛍️ *Happy Shopping!*
+
+Type *menu* to return.`;
 }
 
 // ============================================================
@@ -356,10 +294,9 @@ async function startSession(sessionId) {
     if (sessions.has(sessionId)) {
         const existing = sessions.get(sessionId);
         if (existing.isConnected && existing.sock) {
-            console.log(`Session ${sessionId} is already connected.`);
+            console.log(`Session ${sessionId} already connected.`);
             return;
         }
-
         if (existing.sock) {
             existing.sock.ev.removeAllListeners('connection.update');
             existing.sock.end(undefined);
@@ -393,15 +330,10 @@ async function startSession(sessionId) {
             sessionState.isConnected = false;
             const statusCode = (lastDisconnect?.error instanceof Boom) ?
                 lastDisconnect.error.output.statusCode : 500;
-
             const shouldReconnect = statusCode !== DisconnectReason.loggedOut && statusCode !== 440;
-
-            console.log(`Session ${sessionId}: Connection closed, reconnecting: ${shouldReconnect}`);
-
+            console.log(`Session ${sessionId} closed, reconnecting: ${shouldReconnect}`);
             if (shouldReconnect) {
-                setTimeout(() => {
-                    startSession(sessionId);
-                }, 3000);
+                setTimeout(() => startSession(sessionId), 3000);
             } else {
                 console.log(`Session ${sessionId} logged out. Removing.`);
                 sessions.delete(sessionId);
@@ -412,14 +344,13 @@ async function startSession(sessionId) {
             sessionState.qr = null;
             console.log(`✅ ${sessionId}: Connected to WhatsApp`);
             console.log('🎯 Bot is ready!');
-            console.log(`📱 Send "hi" on WhatsApp to start`);
         }
     });
 
     wasi_sock.ev.on('creds.update', saveCreds);
 
     // ============================================================
-    // MESSAGE HANDLER
+    // MESSAGE HANDLER - TEXT MENU SYSTEM
     // ============================================================
 
     wasi_sock.ev.on('messages.upsert', async wasi_m => {
@@ -428,183 +359,288 @@ async function startSession(sessionId) {
 
         const from = wasi_msg.key.remoteJid;
         const isFromMe = wasi_msg.key.fromMe;
-
         if (isFromMe) return;
 
-        let buttonId = null;
-        let text = null;
-
-        // Interactive message response
-        if (wasi_msg.message?.interactiveResponseMessage?.selectedReplyId) {
-            buttonId = wasi_msg.message.interactiveResponseMessage.selectedReplyId;
-        } else if (wasi_msg.message?.buttonsResponseMessage?.selectedButtonId) {
-            buttonId = wasi_msg.message.buttonsResponseMessage.selectedButtonId;
-        } else if (wasi_msg.message?.templateButtonReplyMessage?.selectedId) {
-            buttonId = wasi_msg.message.templateButtonReplyMessage.selectedId;
-        } else if (wasi_msg.message?.listResponseMessage?.singleSelectReply?.rowId) {
-            buttonId = wasi_msg.message.listResponseMessage.singleSelectReply.rowId;
-        } else if (wasi_msg.message?.conversation) {
-            text = wasi_msg.message.conversation.trim().toLowerCase();
+        let text = '';
+        if (wasi_msg.message?.conversation) {
+            text = wasi_msg.message.conversation.trim();
         } else if (wasi_msg.message?.extendedTextMessage?.text) {
-            text = wasi_msg.message.extendedTextMessage.text.trim().toLowerCase();
+            text = wasi_msg.message.extendedTextMessage.text.trim();
+        } else {
+            // ignore other types
+            return;
+        }
+
+        console.log(`💬 From ${from}: ${text}`);
+
+        // Get user's temp order state
+        const temp = getTempOrder(from);
+        let response = '';
+
+        // ============================================================
+        // 1. Check if user is in checkout flow
+        // ============================================================
+        if (temp.step === 'checkout_name') {
+            temp.name = text;
+            temp.step = 'checkout_phone';
+            saveStoreData();
+            response = `✅ Name saved: *${temp.name}*
+
+📱 Now please send your *Phone Number* (e.g., 03001234567):`;
+            await wasi_sock.sendMessage(from, { text: response });
+            return;
+        }
+
+        if (temp.step === 'checkout_phone') {
+            // Basic phone validation (simple)
+            const phoneRegex = /^[0-9+\-() ]+$/;
+            if (!phoneRegex.test(text) || text.length < 10) {
+                response = `❌ Please enter a valid phone number (e.g., 03001234567):`;
+                await wasi_sock.sendMessage(from, { text: response });
+                return;
+            }
+            temp.phone = text;
+            temp.step = 'checkout_address';
+            saveStoreData();
+            response = `✅ Phone saved: *${temp.phone}*
+
+📍 Now please send your *Delivery Address* (complete address):`;
+            await wasi_sock.sendMessage(from, { text: response });
+            return;
+        }
+
+        if (temp.step === 'checkout_address') {
+            temp.address = text;
+            temp.step = 'checkout_notes';
+            saveStoreData();
+            response = `✅ Address saved: *${temp.address}*
+
+📝 Optional: Send any *Notes* for your order (or type *skip*):`;
+            await wasi_sock.sendMessage(from, { text: response });
+            return;
+        }
+
+        if (temp.step === 'checkout_notes') {
+            if (text.toLowerCase() !== 'skip') {
+                temp.notes = text;
+            }
+            temp.step = 'confirm';
+            saveStoreData();
+
+            // Show order summary
+            let summary = `📝 *Order Summary*\n\n`;
+            let total = 0;
+            for (const item of temp.products) {
+                const product = getProductById(item.productId);
+                if (product) {
+                    const itemTotal = product.price * item.quantity;
+                    total += itemTotal;
+                    summary += `${product.name} x${item.quantity} = Rs. ${itemTotal.toLocaleString()}\n`;
+                }
+            }
+            summary += `\n💰 *Total: Rs. ${total.toLocaleString()}*\n\n`;
+            summary += `👤 Name: ${temp.name}\n`;
+            summary += `📱 Phone: ${temp.phone}\n`;
+            summary += `📍 Address: ${temp.address}\n`;
+            if (temp.notes) summary += `📝 Notes: ${temp.notes}\n`;
+            summary += `\n✅ To confirm your order, type *confirm*\n❌ To cancel, type *cancel*`;
+
+            await wasi_sock.sendMessage(from, { text: summary });
+            return;
+        }
+
+        if (temp.step === 'confirm') {
+            if (text.toLowerCase() === 'confirm') {
+                const order = placeOrder(from);
+                if (order) {
+                    let confirmMsg = `✅ *Order Placed Successfully!*\n\n`;
+                    confirmMsg += `🆔 Order ID: *${order.id}*\n`;
+                    confirmMsg += `👤 Name: ${order.name}\n`;
+                    confirmMsg += `📱 Phone: ${order.phone}\n`;
+                    confirmMsg += `📍 Address: ${order.address}\n`;
+                    confirmMsg += `💰 Total: Rs. ${order.totalAmount.toLocaleString()}\n`;
+                    confirmMsg += `📊 Status: ${order.status}\n\n`;
+                    confirmMsg += `📦 We'll contact you soon for delivery.\n\n`;
+                    confirmMsg += `Type *menu* to continue.`;
+                    await wasi_sock.sendMessage(from, { text: confirmMsg });
+                } else {
+                    await wasi_sock.sendMessage(from, { text: '❌ Failed to place order. Please try again.' });
+                }
+                // Reset temp order
+                clearTempOrder(from);
+                return;
+            } else if (text.toLowerCase() === 'cancel') {
+                clearTempOrder(from);
+                await wasi_sock.sendMessage(from, { text: '❌ Order cancelled.\n\nType *menu* to continue.' });
+                return;
+            } else {
+                await wasi_sock.sendMessage(from, { text: '❌ Please type *confirm* or *cancel*.' });
+                return;
+            }
         }
 
         // ============================================================
-        // HANDLE BUTTON/INTERACTIVE CLICKS
+        // 2. If not in checkout flow, process commands
         // ============================================================
-        
-        if (buttonId) {
-            console.log(`🔘 Clicked: ${buttonId} from ${from}`);
-            
-            switch(buttonId) {
-                case 'products':
-                    await sendProductsInteractive(wasi_sock, from);
-                    break;
-                    
-                case 'cart':
-                    await sock.sendMessage(from, { 
-                        text: '🛒 *Your Cart*\n\nYour cart is empty!\n\n🛍️ Browse products and add to cart.' 
-                    });
-                    await sendInteractiveMessage(wasi_sock, from);
-                    break;
-                    
-                case 'orders':
-                    await sock.sendMessage(from, { 
-                        text: '📦 *My Orders*\n\nNo orders yet!\n\n🛍️ Place your first order today.' 
-                    });
-                    await sendInteractiveMessage(wasi_sock, from);
-                    break;
-                    
-                case 'categories':
-                    await sock.sendMessage(from, { 
-                        text: '📂 *Categories*\n\n' +
-                              '🛍️ Available Categories:\n\n' +
-                              '• Electronics 📱\n' +
-                              '• Accessories 🎧\n' +
-                              '• Clothing 👕\n' +
-                              '• Books 📚\n' +
-                              '• Other 📦' 
-                    });
-                    await sendInteractiveMessage(wasi_sock, from);
-                    break;
-                    
-                case 'help':
-                    await sock.sendMessage(from, { 
-                        text: '🆘 *Help*\n\n' +
-                              '📖 *Commands:*\n' +
-                              '• products - View products\n' +
-                              '• cart - View cart\n' +
-                              '• orders - View orders\n' +
-                              '• categories - Categories\n' +
-                              '• help - This help\n\n' +
-                              '🛍️ *Happy Shopping!*' 
-                    });
-                    await sendInteractiveMessage(wasi_sock, from);
-                    break;
-                    
-                case 'menu':
-                    await sendInteractiveMessage(wasi_sock, from);
-                    break;
-                    
-                case 'view_p1':
-                case 'view_p2':
-                case 'view_p3':
-                case 'view_p4':
-                case 'view_p5':
-                    const pid = buttonId.replace('view_', '');
-                    await sendProductDetail(wasi_sock, from, pid);
-                    break;
-                    
-                case 'add_p1':
-                case 'add_p2':
-                case 'add_p3':
-                case 'add_p4':
-                case 'add_p5':
-                    const addPid = buttonId.replace('add_', '');
-                    await sock.sendMessage(from, { 
-                        text: `✅ Product added to cart!\n\n🛒 View cart by typing: cart` 
-                    });
-                    await sendInteractiveMessage(wasi_sock, from);
-                    break;
-                    
-                default:
-                    await sock.sendMessage(from, { 
-                        text: '❌ Unknown option. Please try again.' 
-                    });
-                    await sendInteractiveMessage(wasi_sock, from);
+
+        const lowerText = text.toLowerCase();
+
+        // Help
+        if (lowerText === 'help' || lowerText === '4') {
+            response = getHelp();
+            await wasi_sock.sendMessage(from, { text: response });
+            return;
+        }
+
+        // Menu
+        if (lowerText === 'menu' || lowerText === 'main' || lowerText === 'start' || lowerText === 'hi' || lowerText === 'hello') {
+            response = getMainMenu();
+            await wasi_sock.sendMessage(from, { text: response });
+            // Reset any partial checkout state? (optional)
+            if (temp.step !== 'main' && temp.step !== 'products' && temp.step !== 'productDetail' && temp.step !== 'cart') {
+                // If they were in checkout flow, reset it
+                if (temp.step.startsWith('checkout_') || temp.step === 'confirm') {
+                    clearTempOrder(from);
+                    // Recreate temp with main step
+                    getTempOrder(from);
+                }
             }
             return;
         }
 
-        // ============================================================
-        // HANDLE TEXT COMMANDS
-        // ============================================================
-        
-        if (text) {
-            console.log(`💬 Text: ${text} from ${from}`);
-            
-            // Greetings
-            if (['hi', 'hello', 'start', 'menu', 'hey', 'assalamualaikum'].includes(text)) {
-                await sendInteractiveMessage(wasi_sock, from);
+        // Products
+        if (lowerText === 'products' || lowerText === '1') {
+            temp.step = 'products';
+            saveStoreData();
+            response = getProductList();
+            await wasi_sock.sendMessage(from, { text: response });
+            return;
+        }
+
+        // Cart
+        if (lowerText === 'cart' || lowerText === '2') {
+            temp.step = 'cart';
+            saveStoreData();
+            response = getCart(from);
+            await wasi_sock.sendMessage(from, { text: response });
+            return;
+        }
+
+        // Orders
+        if (lowerText === 'orders' || lowerText === '3') {
+            response = getOrders(from);
+            await wasi_sock.sendMessage(from, { text: response });
+            return;
+        }
+
+        // Checkout
+        if (lowerText === 'checkout') {
+            const cartItems = temp.products;
+            if (cartItems.length === 0) {
+                response = `❌ Your cart is empty!\n\nAdd products first using *products* menu.`;
+                await wasi_sock.sendMessage(from, { text: response });
                 return;
             }
-            
-            // Products
-            if (text === 'products' || text === '1') {
-                await sendProductsInteractive(wasi_sock, from);
+            // Start checkout flow
+            temp.step = 'checkout_name';
+            saveStoreData();
+            response = `📝 *Checkout Started*\n\nPlease enter your *Full Name*:`;
+            await wasi_sock.sendMessage(from, { text: response });
+            return;
+        }
+
+        // Clear cart
+        if (lowerText === 'clearcart') {
+            clearTempOrder(from);
+            response = `🗑️ Cart cleared successfully.\n\nType *menu* to continue.`;
+            await wasi_sock.sendMessage(from, { text: response });
+            return;
+        }
+
+        // View product by number (1,2,3...)
+        const numMatch = lowerText.match(/^(\d+)$/);
+        if (numMatch) {
+            const num = parseInt(numMatch[1]);
+            const products = getAvailableProducts();
+            if (num >= 1 && num <= products.length) {
+                const product = products[num - 1];
+                temp.selectedProductId = product.id;
+                temp.step = 'productDetail';
+                saveStoreData();
+                response = getProductDetail(product.id);
+                await wasi_sock.sendMessage(from, { text: response });
                 return;
-            }
-            
-            // Cart
-            if (text === 'cart' || text === '2') {
-                await sock.sendMessage(from, { text: '🛒 Your cart is empty!' });
-                await sendInteractiveMessage(wasi_sock, from);
-                return;
-            }
-            
-            // Orders
-            if (text === 'orders' || text === '3') {
-                await sock.sendMessage(from, { text: '📦 No orders yet!' });
-                await sendInteractiveMessage(wasi_sock, from);
-                return;
-            }
-            
-            // Categories
-            if (text === 'categories' || text === '4') {
-                await sock.sendMessage(from, { text: '📂 Categories: Electronics, Accessories, Clothing, Books' });
-                await sendInteractiveMessage(wasi_sock, from);
-                return;
-            }
-            
-            // Help
-            if (text === 'help' || text === '5') {
-                await sock.sendMessage(from, { 
-                    text: '🆘 *Commands:*\nproducts, cart, orders, categories, help' 
-                });
-                await sendInteractiveMessage(wasi_sock, from);
-                return;
-            }
-            
-            // View product
-            if (text.startsWith('view ')) {
-                const pid = text.replace('view ', '');
-                await sendProductDetail(wasi_sock, from, pid);
-                return;
-            }
-            
-            // Add to cart
-            if (text.startsWith('add ')) {
-                const pid = text.replace('add ', '');
-                await sock.sendMessage(from, { 
-                    text: `✅ Product ${pid} added to cart!\n\nType: cart to view` 
-                });
-                await sendInteractiveMessage(wasi_sock, from);
+            } else {
+                response = `❌ Invalid number. Please type a number from 1 to ${products.length}.`;
+                await wasi_sock.sendMessage(from, { text: response });
                 return;
             }
         }
 
-        // Default - send interactive message
-        await sendInteractiveMessage(wasi_sock, from);
+        // View product by id (view p1)
+        if (lowerText.startsWith('view ')) {
+            const productId = lowerText.replace('view ', '').trim();
+            const product = getProductById(productId);
+            if (product) {
+                temp.selectedProductId = product.id;
+                temp.step = 'productDetail';
+                saveStoreData();
+                response = getProductDetail(product.id);
+                await wasi_sock.sendMessage(from, { text: response });
+            } else {
+                response = `❌ Product not found. Try *products* to see available items.`;
+                await wasi_sock.sendMessage(from, { text: response });
+            }
+            return;
+        }
+
+        // Add to cart (add p1)
+        if (lowerText.startsWith('add ')) {
+            const productId = lowerText.replace('add ', '').trim();
+            const product = getProductById(productId);
+            if (!product) {
+                response = `❌ Product not found. Try *products* to see available items.`;
+                await wasi_sock.sendMessage(from, { text: response });
+                return;
+            }
+            if (product.stock <= 0) {
+                response = `❌ ${product.name} is out of stock.`;
+                await wasi_sock.sendMessage(from, { text: response });
+                return;
+            }
+            // Add 1 quantity by default
+            const success = addToTempOrder(from, productId, 1);
+            if (success) {
+                response = `✅ Added *${product.name}* to your cart!\n\nType *cart* to view or *checkout* to place order.`;
+                await wasi_sock.sendMessage(from, { text: response });
+            } else {
+                response = `❌ Could not add to cart.`;
+                await wasi_sock.sendMessage(from, { text: response });
+            }
+            return;
+        }
+
+        // Remove from cart (remove p1)
+        if (lowerText.startsWith('remove ')) {
+            const productId = lowerText.replace('remove ', '').trim();
+            const product = getProductById(productId);
+            const success = removeFromTempOrder(from, productId);
+            if (success) {
+                response = `✅ Removed ${product ? product.name : 'item'} from cart.`;
+                await wasi_sock.sendMessage(from, { text: response });
+                // Show updated cart
+                const cartMsg = getCart(from);
+                await wasi_sock.sendMessage(from, { text: cartMsg });
+            } else {
+                response = `❌ Item not found in cart.`;
+                await wasi_sock.sendMessage(from, { text: response });
+            }
+            return;
+        }
+
+        // If none matched, show main menu
+        response = `❌ I didn't understand that.\n\n` + getMainMenu();
+        await wasi_sock.sendMessage(from, { text: response });
     });
 }
 
@@ -615,37 +651,17 @@ async function startSession(sessionId) {
 wasi_app.get('/api/status', async (req, res) => {
     const sessionId = req.query.sessionId || config.sessionId || 'test_session';
     const session = sessions.get(sessionId);
-
     let qrDataUrl = null;
     let connected = false;
-    let dbConnected = false;
-
-    if (config.mongoDbUrl) {
-        try {
-            dbConnected = true;
-        } catch (e) {
-            dbConnected = false;
-        }
-    }
-
     if (session) {
         connected = session.isConnected;
         if (session.qr) {
             try {
                 qrDataUrl = await QRCode.toDataURL(session.qr, { width: 256 });
-            } catch (e) { }
+            } catch (e) {}
         }
     }
-
-    res.json({
-        sessionId,
-        connected,
-        qr: qrDataUrl,
-        dbConnected,
-        dbConfigured: !!config.mongoDbUrl,
-        activeSessions: Array.from(sessions.keys()),
-        timestamp: new Date().toISOString()
-    });
+    res.json({ sessionId, connected, qr: qrDataUrl, activeSessions: Array.from(sessions.keys()) });
 });
 
 wasi_app.get('/ping', (req, res) => res.status(200).send('pong'));
@@ -654,136 +670,26 @@ wasi_app.get('/', (req, res) => {
     const sessionId = config.sessionId || 'test_session';
     const session = sessions.get(sessionId);
     const connected = session?.isConnected || false;
-    
     res.send(`
         <!DOCTYPE html>
         <html>
-        <head>
-            <title>🛍️ Store Bot</title>
-            <meta name="viewport" content="width=device-width, initial-scale=1">
-            <style>
-                * { margin: 0; padding: 0; box-sizing: border-box; }
-                body { font-family: 'Segoe UI', Arial, sans-serif; background: #f0f2f5; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
-                .container { background: white; padding: 40px; border-radius: 16px; max-width: 500px; width: 90%; box-shadow: 0 4px 20px rgba(0,0,0,0.08); text-align: center; }
-                h1 { color: #1a1a2e; margin-bottom: 10px; font-size: 28px; }
-                .subtitle { color: #636e72; margin-bottom: 25px; font-size: 14px; }
-                .status { display: inline-block; padding: 8px 24px; border-radius: 20px; font-weight: 600; margin: 10px 0 20px; }
-                .online { background: #d4edda; color: #155724; }
-                .offline { background: #f8d7da; color: #721c24; }
-                .qr-box { background: #f8f9fa; padding: 20px; border-radius: 12px; margin: 15px 0; }
-                .qr-box a { color: #25D366; text-decoration: none; font-weight: 600; }
-                .btn-group { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin: 15px 0; }
-                .btn { display: inline-block; padding: 10px 20px; background: #25D366; color: white; text-decoration: none; border-radius: 8px; font-weight: 600; transition: 0.3s; }
-                .btn:hover { background: #1da851; }
-                .btn-secondary { background: #6c5ce7; }
-                .btn-secondary:hover { background: #5f3dc4; }
-                .footer { margin-top: 25px; color: #b2bec3; font-size: 12px; }
-                .session-id { background: #f1f2f6; padding: 4px 12px; border-radius: 4px; font-size: 12px; color: #636e72; display: inline-block; margin-top: 10px; }
-                .commands { text-align: left; background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 15px 0; font-size: 13px; }
-                .commands code { background: #e9ecef; padding: 2px 8px; border-radius: 4px; font-size: 12px; }
-            </style>
+        <head><title>🛍️ Store Bot</title>
+        <style>
+            body { font-family: Arial; text-align: center; padding: 50px; background: #f5f5f5; }
+            .container { background: white; padding: 30px; border-radius: 10px; max-width: 500px; margin: 0 auto; }
+            .status { color: ${connected ? 'green' : 'red'}; font-weight: bold; }
+        </style>
         </head>
         <body>
             <div class="container">
                 <h1>🛍️ Store Bot</h1>
-                <p class="subtitle">WhatsApp Business Store</p>
-                <div class="status ${connected ? 'online' : 'offline'}">
-                    ${connected ? '✅ Connected' : '⏳ Waiting...'}
-                </div>
-                ${!connected ? `
-                <div class="qr-box">
-                    <p style="margin-bottom: 10px;">📱 Scan QR to connect:</p>
-                    <a href="/api/status" target="_blank">Click here to get QR Code</a>
-                </div>
-                ` : `
-                <div style="background: #d4edda; padding: 15px; border-radius: 8px; margin: 10px 0;">
-                    ✅ Bot is online! Send "hi" on WhatsApp to start.
-                </div>
-                `}
-                <div class="commands">
-                    <strong>📌 Commands:</strong><br>
-                    <code>hi</code> - Start<br>
-                    <code>products</code> - View products<br>
-                    <code>cart</code> - View cart<br>
-                    <code>orders</code> - View orders<br>
-                    <code>categories</code> - Categories<br>
-                    <code>help</code> - Help
-                </div>
-                <div class="btn-group">
-                    <a href="/api/status" class="btn">📱 QR Code</a>
-                    <a href="/ping" class="btn btn-secondary">🏓 Ping</a>
-                </div>
-                <div class="session-id">Session: ${sessionId}</div>
-                <div class="footer">Bot is running on port ${wasi_port}</div>
+                <p class="status">${connected ? '✅ Connected' : '❌ Disconnected'}</p>
+                <p>Scan QR to connect: <a href="/api/status">Get QR</a></p>
+                <p>Session: ${sessionId}</p>
             </div>
         </body>
         </html>
     `);
-});
-
-// ============================================================
-// API: RESTART
-// ============================================================
-
-wasi_app.post('/api/restart', async (req, res) => {
-    try {
-        console.log('🔄 Restarting bot...');
-        for (const [sessionId, session] of sessions) {
-            if (session.sock) {
-                try {
-                    session.sock.end(undefined);
-                } catch (e) {
-                    console.error(`Error ending session ${sessionId}:`, e);
-                }
-            }
-        }
-        sessions.clear();
-        setTimeout(() => {
-            main().catch(err => console.error('Restart error:', err));
-        }, 1000);
-        res.json({ success: true, message: 'Bot restarting...' });
-    } catch (error) {
-        console.error('Restart error:', error);
-        res.status(500).json({ success: false, error: error.message });
-    }
-});
-
-// ============================================================
-// API: LOGOUT
-// ============================================================
-
-wasi_app.post('/api/logout', async (req, res) => {
-    try {
-        const sessionId = req.query.sessionId || config.sessionId || 'test_session';
-        const session = sessions.get(sessionId);
-        if (session && session.sock) {
-            try {
-                await session.sock.logout();
-            } catch (e) {
-                console.error('Logout error:', e);
-            }
-            sessions.delete(sessionId);
-            await wasi_clearSession(sessionId);
-        }
-        res.json({ success: true, message: 'Logged out successfully' });
-    } catch (error) {
-        console.error('Logout error:', error);
-        res.status(500).json({ success: false, error: error.message });
-    }
-});
-
-// ============================================================
-// API: HEALTH
-// ============================================================
-
-wasi_app.get('/api/health', async (req, res) => {
-    res.json({
-        status: 'ok',
-        uptime: process.uptime(),
-        timestamp: new Date().toISOString(),
-        memory: process.memoryUsage(),
-        sessions: sessions.size
-    });
 });
 
 // ============================================================
@@ -795,11 +701,7 @@ function startServer() {
         console.log(`\n🌐 Server running on port ${wasi_port}`);
         console.log(`📌 Web: http://localhost:${wasi_port}`);
         console.log(`📌 Status: http://localhost:${wasi_port}/api/status`);
-        console.log(`📌 QR: http://localhost:${wasi_port}/api/status`);
-        console.log(`\n🔘 Bot Commands:`);
-        console.log(`   Type: hi, hello, start, menu`);
-        console.log(`   Or: products, cart, orders, categories, help`);
-        console.log(`\n✅ Bot is ready! Scan QR and send "hi" on WhatsApp.`);
+        console.log(`\n✅ Bot is ready! Send "hi" on WhatsApp.`);
     });
 }
 
@@ -808,22 +710,13 @@ function startServer() {
 // ============================================================
 
 async function main() {
-    console.log('🛍️ Starting Store Bot...');
-    console.log('===============================');
-    
-    // 1. Connect DB if configured
+    console.log('🛍️ Starting Store Bot (Text Menu)...');
+    loadStoreData();
     if (config.mongoDbUrl) {
-        const dbResult = await wasi_connectDatabase(config.mongoDbUrl);
-        if (dbResult) {
-            console.log('✅ Database connected');
-        }
+        await wasi_connectDatabase(config.mongoDbUrl);
     }
-
-    // 2. Start session
     const sessionId = config.sessionId || 'test_session';
     await startSession(sessionId);
-
-    // 3. Start server
     startServer();
 }
 
