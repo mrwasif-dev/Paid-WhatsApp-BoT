@@ -2,917 +2,518 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
-    <title>Muzamil-MD • Dashboard</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Store Admin Panel</title>
     <style>
-        /* ============================================
-           RESET & BASE
-           ============================================ */
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
-
         body {
-            font-family: 'Inter', -apple-system, sans-serif;
-            background: #0a0a0f;
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f5f5;
             padding: 20px;
-            color: #fff;
         }
-
-        /* ============================================
-           CARD - BIGGER SIZE
-           ============================================ */
-        .card {
-            background: rgba(255, 255, 255, 0.04);
-            backdrop-filter: blur(20px);
-            border-radius: 28px;
-            padding: 40px 36px 32px;
-            max-width: 520px;
-            width: 100%;
-            border: 1px solid rgba(255, 255, 255, 0.06);
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        .container {
+            max-width: 1200px;
             margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
-
-        /* ============================================
-           HEADER - BIGGER
-           ============================================ */
-        .header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 28px;
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 30px;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
         }
-
-        .header .brand {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-        }
-
-        .header .brand .icon {
-            width: 52px;
-            height: 52px;
-            background: linear-gradient(135deg, #7c3aed, #ec4899);
-            border-radius: 14px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 24px;
-            flex-shrink: 0;
-        }
-
-        .header .brand h1 {
-            font-size: 24px;
-            font-weight: 800;
-            letter-spacing: -0.5px;
-            color: #fff;
-        }
-
-        .header .brand h1 span {
-            color: #7c3aed;
-        }
-
-        .header .status-badge {
-            font-size: 13px;
-            font-weight: 600;
-            padding: 8px 18px;
-            border-radius: 20px;
-            background: rgba(34, 197, 94, 0.12);
-            color: #22c55e;
-            border: 1px solid rgba(34, 197, 94, 0.15);
-            white-space: nowrap;
-            flex-shrink: 0;
-        }
-
-        .status-badge.offline {
-            background: rgba(239, 68, 68, 0.12);
-            color: #ef4444;
-            border-color: rgba(239, 68, 68, 0.15);
-        }
-
-        .status-badge.scan {
-            background: rgba(251, 191, 36, 0.12);
-            color: #fbbf24;
-            border-color: rgba(251, 191, 36, 0.15);
-        }
-
-        /* ============================================
-           INFO GRID - BIGGER
-           ============================================ */
-        .info-grid {
+        .stats {
             display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12px;
-            margin-bottom: 24px;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
         }
-
-        .info-card {
-            background: rgba(255, 255, 255, 0.03);
-            border-radius: 16px;
-            padding: 16px 18px;
-            border: 1px solid rgba(255, 255, 255, 0.04);
-        }
-
-        .info-card .label {
-            font-size: 11px;
-            color: rgba(255, 255, 255, 0.35);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            font-weight: 600;
-        }
-
-        .info-card .value {
-            font-size: 18px;
-            font-weight: 700;
-            margin-top: 4px;
-            color: #fff;
-        }
-
-        .info-card .value.green { color: #22c55e; }
-        .info-card .value.pink { color: #ec4899; }
-        .info-card .value.blue { color: #06b6d4; }
-        .info-card .value.red { color: #ef4444; }
-        .info-card .value.gray { color: rgba(255,255,255,0.3); }
-
-        /* ============================================
-           QR SECTION - BIG QR CODE
-           ============================================ */
-        .qr-section {
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
             text-align: center;
-            background: rgba(255, 255, 255, 0.03);
-            border-radius: 18px;
-            padding: 28px;
-            margin-bottom: 24px;
-            border: 1px solid rgba(255, 255, 255, 0.04);
-            transition: all 0.4s ease;
-            overflow: hidden;
-            max-height: 600px;
-            opacity: 1;
         }
-
-        .qr-section.collapsed {
-            max-height: 0 !important;
-            padding: 0 !important;
-            margin-bottom: 0 !important;
-            opacity: 0 !important;
-            border: none !important;
-        }
-
-        .qr-section .qr-wrapper {
-            display: inline-block;
-            background: #ffffff;
-            border-radius: 16px;
-            padding: 12px;
-            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
-        }
-
-        .qr-section .qr-wrapper img {
-            width: 220px;
-            height: 220px;
-            display: block;
-            border-radius: 10px;
-        }
-
-        .qr-section .qr-wrapper .placeholder {
-            width: 220px;
-            height: 220px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            background: #f0f0f0;
-            border-radius: 10px;
-            color: #999;
-        }
-
-        .qr-section .qr-wrapper .placeholder i {
-            font-size: 56px;
-            margin-bottom: 10px;
-            opacity: 0.3;
-        }
-
-        .qr-section .qr-wrapper .placeholder span {
-            font-size: 15px;
-            font-weight: 500;
-        }
-
-        .qr-section .qr-status {
-            display: inline-block;
-            margin-top: 14px;
-            padding: 6px 20px;
-            border-radius: 14px;
+        .stat-card h3 {
             font-size: 14px;
+            opacity: 0.9;
+            margin-bottom: 5px;
+        }
+        .stat-card .number {
+            font-size: 32px;
+            font-weight: bold;
+        }
+        .section {
+            margin-top: 30px;
+            border-top: 2px solid #eee;
+            padding-top: 20px;
+        }
+        .section h2 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
             font-weight: 600;
-            background: rgba(251, 191, 36, 0.1);
-            color: #fbbf24;
-            border: 1px solid rgba(251, 191, 36, 0.1);
+            margin-bottom: 5px;
+            color: #555;
         }
-
-        .qr-section .qr-status.ready {
-            background: rgba(34, 197, 94, 0.1);
-            color: #22c55e;
-            border-color: rgba(34, 197, 94, 0.1);
+        .form-group input, .form-group textarea, .form-group select {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
         }
-
-        .qr-section .qr-status.waiting {
-            background: rgba(251, 191, 36, 0.1);
-            color: #fbbf24;
-            border-color: rgba(251, 191, 36, 0.1);
+        .form-group input:focus, .form-group textarea:focus {
+            border-color: #3498db;
+            outline: none;
         }
-
-        .qr-section .hint {
-            margin-top: 14px;
-            font-size: 13px;
-            color: rgba(255, 255, 255, 0.35);
-            font-weight: 500;
+        .btn {
+            background: #3498db;
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: background 0.3s;
         }
-
-        .qr-section .hint i {
-            color: #06b6d4;
-            margin-right: 6px;
+        .btn:hover {
+            background: #2980b9;
         }
-
-        .qr-section .hint .highlight {
-            color: rgba(255, 255, 255, 0.6);
+        .btn-danger {
+            background: #e74c3c;
+        }
+        .btn-danger:hover {
+            background: #c0392b;
+        }
+        .btn-success {
+            background: #2ecc71;
+        }
+        .btn-success:hover {
+            background: #27ae60;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        table th {
+            background: #2c3e50;
+            color: white;
+            padding: 12px;
+            text-align: left;
+        }
+        table td {
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+        }
+        table tr:hover {
+            background: #f8f9fa;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
             font-weight: 600;
         }
-
-        /* ============================================
-           SESSION INFO - BIGGER
-           ============================================ */
-        .session-info {
+        .status-pending { background: #f39c12; color: white; }
+        .status-processing { background: #3498db; color: white; }
+        .status-shipped { background: #9b59b6; color: white; }
+        .status-delivered { background: #2ecc71; color: white; }
+        .status-cancelled { background: #e74c3c; color: white; }
+        .tabs {
             display: flex;
-            justify-content: space-between;
-            padding: 14px 18px;
-            background: rgba(255, 255, 255, 0.03);
-            border-radius: 14px;
-            margin-bottom: 24px;
-            border: 1px solid rgba(255, 255, 255, 0.04);
-            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .tab {
+            padding: 10px 20px;
+            background: #ecf0f1;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+        .tab.active {
+            background: #3498db;
+            color: white;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .search-box {
+            padding: 8px 15px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            width: 300px;
+            margin-bottom: 15px;
+        }
+        .actions {
+            display: flex;
             gap: 8px;
         }
-
-        .session-info .item {
-            flex: 1;
-            min-width: 70px;
-        }
-
-        .session-info .item .label {
-            font-size: 10px;
-            color: rgba(255, 255, 255, 0.3);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            font-weight: 600;
-        }
-
-        .session-info .item .value {
-            font-size: 14px;
-            font-weight: 600;
-            color: rgba(255, 255, 255, 0.7);
-            margin-top: 2px;
-        }
-
-        .session-info .item .value.code {
-            font-family: 'Monaco', monospace;
-            font-size: 11px;
-            color: rgba(255, 255, 255, 0.3);
-        }
-
-        /* ============================================
-           BUTTONS - BIGGER
-           ============================================ */
-        .btn-group {
-            display: flex;
-            gap: 12px;
-        }
-
-        .btn {
-            padding: 16px 24px;
+        .actions button {
+            padding: 5px 12px;
             border: none;
-            border-radius: 16px;
-            font-weight: 700;
-            font-size: 15px;
+            border-radius: 4px;
             cursor: pointer;
-            transition: all 0.2s ease;
-            font-family: 'Inter', sans-serif;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-        }
-
-        .btn:active {
-            transform: scale(0.96);
-        }
-
-        .btn-primary {
-            flex: 1;
-            background: linear-gradient(135deg, #7c3aed, #ec4899);
-            color: #fff;
-            box-shadow: 0 4px 20px rgba(124, 58, 237, 0.25);
-        }
-
-        .btn-primary:hover {
-            box-shadow: 0 8px 32px rgba(124, 58, 237, 0.4);
-            transform: translateY(-2px);
-        }
-
-        .btn-primary:disabled {
-            opacity: 0.4;
-            cursor: not-allowed;
-            transform: none !important;
-            box-shadow: none !important;
-        }
-
-        .btn-secondary {
-            background: rgba(255, 255, 255, 0.06);
-            color: rgba(255, 255, 255, 0.6);
-            border: 1px solid rgba(255, 255, 255, 0.06);
-            padding: 16px 22px;
-            flex: 0.4;
-        }
-
-        .btn-secondary:hover {
-            background: rgba(255, 255, 255, 0.1);
-        }
-
-        .btn-danger {
-            width: 100%;
-            margin-top: 12px;
-            background: rgba(239, 68, 68, 0.08);
-            color: #ef4444;
-            border: 1px solid rgba(239, 68, 68, 0.1);
-            padding: 16px;
-        }
-
-        .btn-danger:hover {
-            background: rgba(239, 68, 68, 0.15);
-        }
-
-        .btn .spinner {
-            width: 18px;
-            height: 18px;
-            border: 2px solid rgba(255,255,255,0.2);
-            border-top: 2px solid #fff;
-            border-radius: 50%;
-            animation: spin 0.7s linear infinite;
-            display: inline-block;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        /* ============================================
-           TOAST
-           ============================================ */
-        .toast {
-            position: fixed;
-            bottom: 30px;
-            left: 50%;
-            transform: translateX(-50%) translateY(100px);
-            background: rgba(255, 255, 255, 0.06);
-            backdrop-filter: blur(20px);
-            padding: 14px 28px;
-            border-radius: 14px;
-            border: 1px solid rgba(255, 255, 255, 0.06);
-            font-size: 14px;
-            font-weight: 600;
-            color: #fff;
-            transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-            z-index: 999;
-            max-width: 90%;
-            opacity: 0;
-            pointer-events: none;
-            text-align: center;
-        }
-
-        .toast.show {
-            transform: translateX(-50%) translateY(0);
-            opacity: 1;
-            pointer-events: auto;
-        }
-
-        .toast.success { border-left: 3px solid #22c55e; }
-        .toast.error { border-left: 3px solid #ef4444; }
-        .toast.warning { border-left: 3px solid #fbbf24; }
-        .toast.info { border-left: 3px solid #06b6d4; }
-
-        /* ============================================
-           FOOTER
-           ============================================ */
-        .footer {
-            text-align: center;
-            padding: 18px 0 0;
-            color: rgba(255, 255, 255, 0.12);
             font-size: 12px;
-            font-weight: 500;
-            letter-spacing: 0.3px;
         }
-
-        .footer i {
-            color: #ec4899;
-        }
-
-        .footer a {
-            color: rgba(255, 255, 255, 0.2);
-            text-decoration: none;
-        }
-
-        /* ============================================
-           RESPONSIVE
-           ============================================ */
-        @media (max-width: 520px) {
-            .card {
-                max-width: 100%;
-                padding: 28px 20px 24px;
-                border-radius: 24px;
-            }
-
-            .header .brand h1 {
-                font-size: 20px;
-            }
-
-            .header .brand .icon {
-                width: 44px;
-                height: 44px;
-                font-size: 20px;
-            }
-
-            .header .status-badge {
-                font-size: 11px;
-                padding: 6px 14px;
-            }
-
-            .info-grid {
-                gap: 10px;
-            }
-
-            .info-card {
-                padding: 14px 16px;
-            }
-
-            .info-card .value {
-                font-size: 16px;
-            }
-
-            .qr-section .qr-wrapper img,
-            .qr-section .qr-wrapper .placeholder {
-                width: 190px;
-                height: 190px;
-            }
-
-            .qr-section {
-                padding: 20px;
-            }
-
-            .qr-section .qr-wrapper {
-                padding: 10px;
-            }
-
-            .qr-section .qr-wrapper .placeholder i {
-                font-size: 48px;
-            }
-
-            .qr-section .qr-status {
-                font-size: 13px;
-                padding: 5px 18px;
-            }
-
-            .qr-section .hint {
-                font-size: 12px;
-            }
-
-            .session-info {
-                padding: 12px 16px;
-            }
-
-            .session-info .item .value {
-                font-size: 13px;
-            }
-
-            .btn {
-                font-size: 14px;
-                padding: 14px 18px;
-            }
-
-            .btn-secondary {
-                padding: 14px 18px;
-            }
-        }
-
-        @media (max-width: 400px) {
-            .card {
-                padding: 20px 14px 18px;
-                border-radius: 20px;
-            }
-
-            .header .brand h1 {
-                font-size: 17px;
-            }
-
-            .header .brand .icon {
-                width: 38px;
-                height: 38px;
-                font-size: 17px;
-            }
-
-            .header .status-badge {
-                font-size: 10px;
-                padding: 4px 12px;
-            }
-
-            .info-grid {
-                gap: 8px;
-            }
-
-            .info-card {
-                padding: 10px 12px;
-                border-radius: 12px;
-            }
-
-            .info-card .value {
-                font-size: 14px;
-            }
-
-            .info-card .label {
-                font-size: 9px;
-            }
-
-            .qr-section .qr-wrapper img,
-            .qr-section .qr-wrapper .placeholder {
-                width: 160px;
-                height: 160px;
-            }
-
-            .qr-section {
-                padding: 16px;
-                border-radius: 14px;
-            }
-
-            .qr-section .qr-wrapper {
-                padding: 8px;
-            }
-
-            .qr-section .qr-wrapper .placeholder i {
-                font-size: 40px;
-            }
-
-            .qr-section .qr-wrapper .placeholder span {
-                font-size: 13px;
-            }
-
-            .qr-section .qr-status {
-                font-size: 12px;
-                padding: 4px 14px;
-            }
-
-            .qr-section .hint {
-                font-size: 11px;
-            }
-
-            .session-info {
-                padding: 10px 14px;
-            }
-
-            .session-info .item .value {
-                font-size: 12px;
-            }
-
-            .btn {
-                font-size: 13px;
-                padding: 13px 14px;
-                border-radius: 14px;
-            }
-
-            .btn-secondary {
-                padding: 13px 14px;
-            }
-
-            .btn-danger {
-                padding: 13px;
-            }
+        .edit-btn { background: #3498db; color: white; }
+        .delete-btn { background: #e74c3c; color: white; }
+        @media (max-width: 768px) {
+            .container { padding: 15px; }
+            table { font-size: 12px; }
+            .search-box { width: 100%; }
         }
     </style>
 </head>
 <body>
+    <div class="container">
+        <h1>🛍️ Store Admin Panel</h1>
+        
+        <!-- Stats -->
+        <div class="stats" id="stats">
+            <div class="stat-card">
+                <h3>Total Products</h3>
+                <div class="number" id="totalProducts">0</div>
+            </div>
+            <div class="stat-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                <h3>Total Orders</h3>
+                <div class="number" id="totalOrders">0</div>
+            </div>
+            <div class="stat-card" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                <h3>Pending Orders</h3>
+                <div class="number" id="pendingOrders">0</div>
+            </div>
+            <div class="stat-card" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);">
+                <h3>Revenue</h3>
+                <div class="number" id="totalRevenue">Rs. 0</div>
+            </div>
+        </div>
 
-    <!-- Toast -->
-    <div id="toast" class="toast"></div>
+        <!-- Tabs -->
+        <div class="tabs">
+            <button class="tab active" onclick="showTab('products')">📦 Products</button>
+            <button class="tab" onclick="showTab('orders')">📋 Orders</button>
+            <button class="tab" onclick="showTab('add-product')">➕ Add Product</button>
+        </div>
 
-    <div class="card">
-        <!-- ===== HEADER ===== -->
-        <div class="header">
-            <div class="brand">
-                <div class="icon">
-                    <i class="fas fa-bolt"></i>
+        <!-- Products Tab -->
+        <div id="tab-products" class="tab-content active">
+            <div class="section">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <h2>📦 All Products</h2>
+                    <input type="text" class="search-box" placeholder="Search products..." onkeyup="searchProducts(this.value)">
                 </div>
-                <h1>Muzamil <span>MD</span></h1>
-            </div>
-            <span class="status-badge" id="statusBadge">● Online</span>
-        </div>
-
-        <!-- ===== INFO GRID ===== -->
-        <div class="info-grid">
-            <div class="info-card">
-                <div class="label">Bot Status</div>
-                <div class="value green" id="botStatus">● Connected</div>
-            </div>
-            <div class="info-card">
-                <div class="label">Database</div>
-                <div class="value pink" id="dbStatus">● Active</div>
-            </div>
-            <div class="info-card">
-                <div class="label">Uptime</div>
-                <div class="value blue" id="uptimeDisplay">0s</div>
-            </div>
-            <div class="info-card">
-                <div class="label">Session</div>
-                <div class="value" id="sessionDisplay" style="font-size:14px; color:rgba(255,255,255,0.4);">-</div>
+                <div id="productList"></div>
             </div>
         </div>
 
-        <!-- ===== QR SECTION ===== -->
-        <div class="qr-section" id="qrSection">
-            <div class="qr-wrapper">
-                <img id="qrImage" src="" alt="QR" style="display:none;">
-                <div class="placeholder" id="qrPlaceholder">
-                    <i class="fas fa-qrcode"></i>
-                    <span>Scan to Connect</span>
-                </div>
-            </div>
-            <div class="qr-status waiting" id="qrStatus">● Waiting for QR</div>
-            <div class="hint" id="qrHint">
-                <i class="fas fa-phone"></i> WhatsApp → <span class="highlight">Linked Devices</span> → Link a Device
+        <!-- Orders Tab -->
+        <div id="tab-orders" class="tab-content">
+            <div class="section">
+                <h2>📋 All Orders</h2>
+                <div id="orderList"></div>
             </div>
         </div>
 
-        <!-- ===== SESSION INFO ===== -->
-        <div class="session-info">
-            <div class="item">
-                <div class="label">Device</div>
-                <div class="value" id="deviceDisplay">-</div>
+        <!-- Add Product Tab -->
+        <div id="tab-add-product" class="tab-content">
+            <div class="section">
+                <h2>➕ Add New Product</h2>
+                <form id="productForm" onsubmit="addProduct(event)">
+                    <div class="form-group">
+                        <label>Product Name</label>
+                        <input type="text" id="productName" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Price (Rs.)</label>
+                        <input type="number" id="productPrice" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Category</label>
+                        <select id="productCategory">
+                            <option value="Electronics">Electronics</option>
+                            <option value="Clothing">Clothing</option>
+                            <option value="Books">Books</option>
+                            <option value="Accessories">Accessories</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Description</label>
+                        <textarea id="productDescription" rows="3"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Stock Quantity</label>
+                        <input type="number" id="productStock" value="10" required>
+                    </div>
+                    <button type="submit" class="btn">➕ Add Product</button>
+                </form>
             </div>
-            <div class="item">
-                <div class="label">Last Active</div>
-                <div class="value" id="activeDisplay">-</div>
-            </div>
-        </div>
-
-        <!-- ===== BUTTONS ===== -->
-        <div class="btn-group">
-            <button class="btn btn-primary" id="restartBtn" onclick="restartBot()">
-                <i class="fas fa-sync-alt"></i> Restart
-            </button>
-            <button class="btn btn-secondary" onclick="refreshStatus()" title="Refresh">
-                <i class="fas fa-rotate"></i>
-            </button>
-        </div>
-        <button class="btn btn-danger" onclick="logoutBot()">
-            <i class="fas fa-sign-out-alt"></i> Logout
-        </button>
-
-        <!-- ===== FOOTER ===== -->
-        <div class="footer">
-            Made with <i class="fas fa-heart"></i> by Muzamil
         </div>
     </div>
 
     <script>
-        // ============================================
-        // STATE
-        // ============================================
-        let statusInterval = null;
-        let startTime = Date.now();
+        // API BASE URL
+        const API_URL = window.location.origin;
 
         // ============================================
-        // TOAST
+        // TABS
         // ============================================
-        function showToast(msg, type = 'success') {
-            const t = document.getElementById('toast');
-            t.textContent = msg;
-            t.className = `toast ${type}`;
-            setTimeout(() => t.classList.add('show'), 10);
-            clearTimeout(t._hide);
-            t._hide = setTimeout(() => t.classList.remove('show'), 3500);
+        function showTab(tab) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+            document.getElementById(`tab-${tab}`).classList.add('active');
+            document.querySelector(`.tab[onclick="showTab('${tab}')"]`).classList.add('active');
+            
+            if (tab === 'products') loadProducts();
+            if (tab === 'orders') loadOrders();
         }
 
         // ============================================
-        // FORMAT TIME
+        // LOAD PRODUCTS
         // ============================================
-        function formatTime(s) {
-            const h = Math.floor(s / 3600);
-            const m = Math.floor((s % 3600) / 60);
-            const sec = Math.floor(s % 60);
-            if (h > 0) return h + 'h ' + m + 'm';
-            if (m > 0) return m + 'm ' + sec + 's';
-            return sec + 's';
-        }
-
-        // ============================================
-        // FETCH STATUS
-        // ============================================
-        async function fetchStatus() {
+        async function loadProducts() {
             try {
-                const res = await fetch('/api/status');
-                const data = await res.json();
-
-                // --- BADGE ---
-                const badge = document.getElementById('statusBadge');
-                let badgeText, badgeClass;
-
-                if (data.connected) {
-                    badgeText = '● Online';
-                    badgeClass = '';
-                } else if (data.qr) {
-                    badgeText = '◉ Scan';
-                    badgeClass = 'scan';
-                } else {
-                    badgeText = '○ Offline';
-                    badgeClass = 'offline';
-                }
-
-                badge.textContent = badgeText;
-                badge.className = 'status-badge' + (badgeClass ? ' ' + badgeClass : '');
-
-                // --- BOT STATUS ---
-                const botStatus = document.getElementById('botStatus');
-                if (data.connected) {
-                    botStatus.textContent = '● Connected';
-                    botStatus.className = 'value green';
-                } else if (data.qr) {
-                    botStatus.textContent = '◉ Waiting for QR';
-                    botStatus.className = 'value blue';
-                } else {
-                    botStatus.textContent = '● Disconnected';
-                    botStatus.className = 'value red';
-                }
-
-                // --- DATABASE ---
-                const dbStatus = document.getElementById('dbStatus');
-                if (data.dbConnected) {
-                    dbStatus.textContent = '● Active';
-                    dbStatus.className = 'value green';
-                } else if (data.dbConfigured) {
-                    dbStatus.textContent = '◉ Connecting';
-                    dbStatus.className = 'value blue';
-                } else {
-                    dbStatus.textContent = '○ Disabled';
-                    dbStatus.className = 'value gray';
-                }
-
-                // --- UPTIME ---
-                document.getElementById('uptimeDisplay').textContent = formatTime(Math.floor((Date.now() - startTime) / 1000));
-
-                // --- SESSION ---
-                document.getElementById('sessionDisplay').textContent = data.sessionId || '-';
-
-                // ============================================
-                // QR SECTION - COLLAPSE / EXPAND
-                // ============================================
-                const qrSection = document.getElementById('qrSection');
-                const img = document.getElementById('qrImage');
-                const ph = document.getElementById('qrPlaceholder');
-                const qrStatus = document.getElementById('qrStatus');
-                const hint = document.getElementById('qrHint');
-
-                if (data.connected) {
-                    qrSection.classList.add('collapsed');
-                } else {
-                    qrSection.classList.remove('collapsed');
-
-                    if (data.qr) {
-                        img.src = data.qr;
-                        img.style.display = 'block';
-                        ph.style.display = 'none';
-                        qrStatus.textContent = '📱 Scan QR Code';
-                        qrStatus.className = 'qr-status ready';
-                        hint.innerHTML = '<i class="fas fa-phone"></i> WhatsApp → <span class="highlight">Linked Devices</span> → Link a Device';
-                    } else {
-                        img.style.display = 'none';
-                        ph.style.display = 'flex';
-                        qrStatus.textContent = '⏳ Generating QR...';
-                        qrStatus.className = 'qr-status waiting';
-                        hint.innerHTML = '<i class="fas fa-clock"></i> Please wait, <span class="highlight">QR code</span> is being generated';
-                    }
-                }
-
-                // --- DEVICE ---
-                document.getElementById('deviceDisplay').textContent = data.connected ? '✅ Connected' : '-';
-
-                // --- LAST ACTIVE ---
-                document.getElementById('activeDisplay').textContent = data.lastActive ? new Date(data.lastActive).toLocaleTimeString() : '-';
-
-                // --- ENABLE RESTART ---
-                document.getElementById('restartBtn').disabled = false;
-
-                return data;
-
-            } catch (e) {
-                console.error(e);
-                document.getElementById('statusBadge').textContent = '⚠ Error';
-                document.getElementById('statusBadge').className = 'status-badge offline';
-                document.getElementById('botStatus').textContent = '⚠ Error';
-                document.getElementById('botStatus').className = 'value red';
-                showToast('Failed to fetch status', 'error');
-                return null;
-            }
-        }
-
-        // ============================================
-        // REFRESH
-        // ============================================
-        function refreshStatus() {
-            const btn = document.querySelector('.btn-secondary');
-            const orig = btn.innerHTML;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-            btn.disabled = true;
-            fetchStatus().finally(() => {
-                btn.innerHTML = orig;
-                btn.disabled = false;
-                showToast('Status updated', 'info');
-            });
-        }
-
-        // ============================================
-        // RESTART
-        // ============================================
-        async function restartBot() {
-            const btn = document.getElementById('restartBtn');
-            const orig = btn.innerHTML;
-            btn.innerHTML = '<span class="spinner"></span> Restarting...';
-            btn.disabled = true;
-
-            try {
-                const res = await fetch('/api/restart', { method: 'POST' });
+                const res = await fetch(`${API_URL}/api/store/products`);
                 const data = await res.json();
                 if (data.success) {
-                    showToast('⚡ Bot restarting...', 'warning');
-                    setTimeout(() => {
-                        fetchStatus();
-                        showToast('✅ Bot restarted!', 'success');
-                    }, 5000);
-                } else {
-                    showToast('❌ Failed: ' + (data.error || 'Unknown'), 'error');
+                    renderProducts(data.products);
+                    updateStats(data);
                 }
-            } catch (e) {
-                showToast('❌ Request failed', 'error');
-            } finally {
-                btn.innerHTML = orig;
-                btn.disabled = false;
+            } catch (error) {
+                console.error('Error loading products:', error);
             }
         }
 
-        // ============================================
-        // LOGOUT
-        // ============================================
-        async function logoutBot() {
-            if (!confirm('⚠️ Logout will disconnect the bot. Continue?')) return;
-            const btn = document.querySelector('.btn-danger');
-            const orig = btn.innerHTML;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Logging out...';
-            btn.disabled = true;
+        function renderProducts(products) {
+            const container = document.getElementById('productList');
+            if (products.length === 0) {
+                container.innerHTML = '<p>No products available.</p>';
+                return;
+            }
 
+            let html = `<table>
+                <thead><tr>
+                    <th>Name</th>
+                    <th>Price</th>
+                    <th>Category</th>
+                    <th>Stock</th>
+                    <th>Actions</th>
+                </tr></thead><tbody>`;
+
+            for (const p of products) {
+                html += `<tr>
+                    <td><strong>${p.name}</strong></td>
+                    <td>Rs. ${p.price.toLocaleString()}</td>
+                    <td>${p.category}</td>
+                    <td>${p.stock}</td>
+                    <td>
+                        <div class="actions">
+                            <button class="delete-btn" onclick="deleteProduct('${p.id}')">🗑️</button>
+                        </div>
+                    </td>
+                </tr>`;
+            }
+
+            html += `</tbody></table>`;
+            container.innerHTML = html;
+        }
+
+        // ============================================
+        // LOAD ORDERS
+        // ============================================
+        async function loadOrders() {
             try {
-                const res = await fetch('/api/logout', { method: 'POST' });
+                const res = await fetch(`${API_URL}/api/store/orders`);
                 const data = await res.json();
                 if (data.success) {
-                    showToast('👋 Logged out', 'success');
-                    setTimeout(fetchStatus, 2000);
-                } else {
-                    showToast('❌ Logout failed', 'error');
+                    renderOrders(data.orders);
                 }
-            } catch (e) {
-                showToast('❌ Request failed', 'error');
-            } finally {
-                btn.innerHTML = orig;
-                btn.disabled = false;
+            } catch (error) {
+                console.error('Error loading orders:', error);
+            }
+        }
+
+        function renderOrders(orders) {
+            const container = document.getElementById('orderList');
+            if (orders.length === 0) {
+                container.innerHTML = '<p>No orders yet.</p>';
+                return;
+            }
+
+            let html = `<table>
+                <thead><tr>
+                    <th>Order ID</th>
+                    <th>Customer</th>
+                    <th>Phone</th>
+                    <th>Total</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr></thead><tbody>`;
+
+            for (const o of orders) {
+                const statusClass = `status-${o.status.toLowerCase()}`;
+                html += `<tr>
+                    <td><strong>${o.id}</strong></td>
+                    <td>${o.name}</td>
+                    <td>${o.phone}</td>
+                    <td>Rs. ${o.totalAmount.toLocaleString()}</td>
+                    <td><span class="status-badge ${statusClass}">${o.status}</span></td>
+                    <td>
+                        <select onchange="updateOrderStatus('${o.id}', this.value)" style="padding: 5px; border-radius: 4px; border: 1px solid #ddd;">
+                            <option value="Pending" ${o.status === 'Pending' ? 'selected' : ''}>Pending</option>
+                            <option value="Processing" ${o.status === 'Processing' ? 'selected' : ''}>Processing</option>
+                            <option value="Shipped" ${o.status === 'Shipped' ? 'selected' : ''}>Shipped</option>
+                            <option value="Delivered" ${o.status === 'Delivered' ? 'selected' : ''}>Delivered</option>
+                            <option value="Cancelled" ${o.status === 'Cancelled' ? 'selected' : ''}>Cancelled</option>
+                        </select>
+                    </td>
+                </tr>`;
+            }
+
+            html += `</tbody></table>`;
+            container.innerHTML = html;
+        }
+
+        // ============================================
+        // ADD PRODUCT
+        // ============================================
+        async function addProduct(event) {
+            event.preventDefault();
+            
+            const product = {
+                name: document.getElementById('productName').value,
+                price: parseInt(document.getElementById('productPrice').value),
+                category: document.getElementById('productCategory').value,
+                description: document.getElementById('productDescription').value,
+                stock: parseInt(document.getElementById('productStock').value)
+            };
+
+            try {
+                const res = await fetch(`${API_URL}/api/store/products`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(product)
+                });
+                const data = await res.json();
+                
+                if (data.success) {
+                    alert('✅ Product added successfully!');
+                    document.getElementById('productForm').reset();
+                    loadProducts();
+                    showTab('products');
+                } else {
+                    alert('❌ Failed to add product: ' + data.message);
+                }
+            } catch (error) {
+                console.error('Error adding product:', error);
+                alert('❌ Error adding product');
             }
         }
 
         // ============================================
-        // AUTO REFRESH
+        // DELETE PRODUCT
         // ============================================
-        function startAutoRefresh() {
-            if (statusInterval) clearInterval(statusInterval);
-            fetchStatus();
-            statusInterval = setInterval(fetchStatus, 10000);
+        async function deleteProduct(productId) {
+            if (!confirm('Are you sure you want to delete this product?')) return;
+            
+            try {
+                const res = await fetch(`${API_URL}/api/store/products/${productId}`, {
+                    method: 'DELETE'
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert('✅ Product deleted!');
+                    loadProducts();
+                } else {
+                    alert('❌ Failed to delete product');
+                }
+            } catch (error) {
+                console.error('Error deleting product:', error);
+            }
         }
 
-        document.addEventListener('DOMContentLoaded', startAutoRefresh);
-        document.addEventListener('visibilitychange', () => {
-            if (!document.hidden) fetchStatus();
-        });
+        // ============================================
+        // UPDATE ORDER STATUS
+        // ============================================
+        async function updateOrderStatus(orderId, status) {
+            try {
+                const res = await fetch(`${API_URL}/api/store/orders/${orderId}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    loadOrders();
+                    updateStats(data);
+                }
+            } catch (error) {
+                console.error('Error updating order:', error);
+            }
+        }
+
+        // ============================================
+        // UPDATE STATS
+        // ============================================
+        function updateStats(data) {
+            if (data.stats) {
+                document.getElementById('totalProducts').textContent = data.stats.totalProducts || 0;
+                document.getElementById('totalOrders').textContent = data.stats.totalOrders || 0;
+                document.getElementById('pendingOrders').textContent = data.stats.pendingOrders || 0;
+                document.getElementById('totalRevenue').textContent = `Rs. ${(data.stats.totalRevenue || 0).toLocaleString()}`;
+            }
+        }
+
+        // ============================================
+        // SEARCH PRODUCTS
+        // ============================================
+        function searchProducts(query) {
+            const rows = document.querySelectorAll('#productList table tbody tr');
+            query = query.toLowerCase();
+            for (const row of rows) {
+                const text = row.textContent.toLowerCase();
+                row.style.display = text.includes(query) ? '' : 'none';
+            }
+        }
+
+        // ============================================
+        // INIT
+        // ============================================
+        loadProducts();
+        loadOrders();
+
+        // Auto refresh every 30 seconds
+        setInterval(() => {
+            if (document.getElementById('tab-products').classList.contains('active')) {
+                loadProducts();
+            }
+            if (document.getElementById('tab-orders').classList.contains('active')) {
+                loadOrders();
+            }
+        }, 30000);
     </script>
-
 </body>
 </html>
