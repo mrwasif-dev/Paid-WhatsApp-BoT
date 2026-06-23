@@ -24,12 +24,12 @@ wasi_app.use(express.json());
 wasi_app.use(express.static(path.join(__dirname, 'public')));
 
 // ============================================================
-// SEND BUTTON MESSAGE - CORRECT WAY
+// SEND BUTTON MESSAGE - WhatsApp APK کے لیے
 // ============================================================
 
 async function sendButtonMessage(sock, to) {
     try {
-        // یہ Baileys کا صحیح طریقہ ہے بٹن بھیجنے کا
+        // WhatsApp APK پر بٹن اس طرح کام کرتے ہیں
         const buttons = [
             {
                 buttonId: 'products',
@@ -50,12 +50,19 @@ async function sendButtonMessage(sock, to) {
                 buttonId: 'categories',
                 buttonText: { displayText: '📂 Categories' },
                 type: 1
+            },
+            {
+                buttonId: 'help',
+                buttonText: { displayText: '🆘 Help' },
+                type: 1
             }
         ];
 
         const buttonMessage = {
-            text: '🛍️ *Welcome to Our Store!*\n\n👇 *Tap a button below:*',
-            footer: 'Store Bot',
+            text: '🛍️ *Welcome to Our Store!*\n\n' +
+                  '📱 *WhatsApp Business Store*\n\n' +
+                  '👇 *Tap a button below:*',
+            footer: '🛍️ Store Bot',
             buttons: buttons,
             headerType: 1
         };
@@ -66,16 +73,221 @@ async function sendButtonMessage(sock, to) {
     } catch (error) {
         console.error('Button error:', error);
         
-        // Fallback - simple message
-        await sock.sendMessage(to, { 
+        // اگر بٹن نہ چلے تو List Message بھیجیں
+        await sendListMessage(sock, to);
+    }
+}
+
+// ============================================================
+// SEND LIST MESSAGE - Backup
+// ============================================================
+
+async function sendListMessage(sock, to) {
+    try {
+        const sections = [
+            {
+                title: '🛍️ Main Menu',
+                rows: [
+                    {
+                        title: '🛍️ Products',
+                        description: 'View all products',
+                        rowId: 'products'
+                    },
+                    {
+                        title: '🛒 My Cart',
+                        description: 'View cart',
+                        rowId: 'cart'
+                    },
+                    {
+                        title: '📦 My Orders',
+                        description: 'Order history',
+                        rowId: 'orders'
+                    },
+                    {
+                        title: '📂 Categories',
+                        description: 'Browse by category',
+                        rowId: 'categories'
+                    },
+                    {
+                        title: '🆘 Help',
+                        description: 'How to use',
+                        rowId: 'help'
+                    }
+                ]
+            }
+        ];
+
+        const listMessage = {
             text: '🛍️ *Welcome to Our Store!*\n\n' +
-                  'Type these commands:\n' +
-                  '1️⃣ products - View Products\n' +
-                  '2️⃣ cart - View Cart\n' +
-                  '3️⃣ orders - My Orders\n' +
-                  '4️⃣ categories - Categories' 
+                  '📱 *WhatsApp Business Store*\n\n' +
+                  '👇 *Tap the button below:*',
+            footer: '🛍️ Store Bot',
+            buttonText: '📋 Open Menu',
+            sections: sections
+        };
+
+        await sock.sendMessage(to, listMessage);
+        console.log('✅ List message sent!');
+        
+    } catch (error) {
+        console.error('List error:', error);
+        await sock.sendMessage(to, { 
+            text: '🛍️ *Welcome!*\n\nType: products, cart, orders, categories, help' 
         });
     }
+}
+
+// ============================================================
+// SEND PRODUCT LIST
+// ============================================================
+
+async function sendProductList(sock, to) {
+    try {
+        const buttons = [
+            {
+                buttonId: 'view_p1',
+                buttonText: { displayText: '📱 iPhone 15 Pro Max' },
+                type: 1
+            },
+            {
+                buttonId: 'view_p2',
+                buttonText: { displayText: '📱 Samsung S24 Ultra' },
+                type: 1
+            },
+            {
+                buttonId: 'view_p3',
+                buttonText: { displayText: '🖤 Car Perfume' },
+                type: 1
+            },
+            {
+                buttonId: 'view_p4',
+                buttonText: { displayText: '🎧 AirPods Pro' },
+                type: 1
+            },
+            {
+                buttonId: 'view_p5',
+                buttonText: { displayText: '⌚ Smart Watch' },
+                type: 1
+            },
+            {
+                buttonId: 'menu',
+                buttonText: { displayText: '🏠 Main Menu' },
+                type: 1
+            }
+        ];
+
+        const buttonMessage = {
+            text: '🛍️ *Products List*\n\n' +
+                  '📱 *Select a product:*\n\n' +
+                  '💰 Prices:\n' +
+                  '📱 iPhone - Rs.350,000\n' +
+                  '📱 Samsung - Rs.280,000\n' +
+                  '🖤 Perfume - Rs.5,000\n' +
+                  '🎧 AirPods - Rs.45,000\n' +
+                  '⌚ Watch - Rs.65,000\n\n' +
+                  '👇 *Tap a product:*',
+            footer: '🛍️ Store Bot',
+            buttons: buttons,
+            headerType: 1
+        };
+
+        await sock.sendMessage(to, buttonMessage);
+        
+    } catch (error) {
+        console.error('Product list error:', error);
+        await sock.sendMessage(to, { 
+            text: '🛍️ *Products*\n\n' +
+                  '1️⃣ iPhone 15 Pro - Rs.350,000\n' +
+                  '2️⃣ Samsung S24 - Rs.280,000\n' +
+                  '3️⃣ Car Perfume - Rs.5,000\n' +
+                  '4️⃣ AirPods Pro - Rs.45,000\n' +
+                  '5️⃣ Smart Watch - Rs.65,000\n\n' +
+                  'Type: view p1, view p2, view p3, view p4, view p5' 
+        });
+    }
+}
+
+// ============================================================
+// SEND PRODUCT DETAIL
+// ============================================================
+
+async function sendProductDetail(sock, to, productId) {
+    const products = {
+        'p1': {
+            name: 'iPhone 15 Pro Max',
+            price: '350,000',
+            category: 'Electronics',
+            stock: 10,
+            description: '📱 256GB Storage, A17 Chip, 48MP Camera, USB-C'
+        },
+        'p2': {
+            name: 'Samsung Galaxy S24 Ultra',
+            price: '280,000',
+            category: 'Electronics',
+            stock: 15,
+            description: '📱 512GB Storage, AI Features, S-Pen, 200MP Camera'
+        },
+        'p3': {
+            name: 'Black Car Perfume',
+            price: '5,000',
+            category: 'Accessories',
+            stock: 3,
+            description: '🖤 Premium Long Lasting, 100ml, 6 Months'
+        },
+        'p4': {
+            name: 'AirPods Pro',
+            price: '45,000',
+            category: 'Accessories',
+            stock: 8,
+            description: '🎧 Noise Cancellation, 24hr Battery, Spatial Audio'
+        },
+        'p5': {
+            name: 'Smart Watch Series 9',
+            price: '65,000',
+            category: 'Electronics',
+            stock: 5,
+            description: '⌚ Health Monitor, GPS, Heart Rate, Sleep Tracking'
+        }
+    };
+
+    const product = products[productId];
+    if (!product) {
+        await sock.sendMessage(to, { text: '❌ Product not found!' });
+        await sendButtonMessage(sock, to);
+        return;
+    }
+
+    const buttons = [
+        {
+            buttonId: `add_${productId}`,
+            buttonText: { displayText: '🛒 Add to Cart' },
+            type: 1
+        },
+        {
+            buttonId: 'products',
+            buttonText: { displayText: '⬅️ Back to Products' },
+            type: 1
+        },
+        {
+            buttonId: 'menu',
+            buttonText: { displayText: '🏠 Main Menu' },
+            type: 1
+        }
+    ];
+
+    const message = {
+        text: `🛍️ *${product.name}*\n\n` +
+              `📝 ${product.description}\n\n` +
+              `💰 *Price:* Rs. ${product.price}\n` +
+              `📂 *Category:* ${product.category}\n` +
+              `📦 *Stock:* ${product.stock} units\n\n` +
+              `👇 *Tap a button:*`,
+        footer: '🛍️ Store Bot',
+        buttons: buttons,
+        headerType: 1
+    };
+
+    await sock.sendMessage(to, message);
 }
 
 // ============================================================
@@ -142,6 +354,7 @@ async function startSession(sessionId) {
             sessionState.qr = null;
             console.log(`✅ ${sessionId}: Connected to WhatsApp`);
             console.log('🎯 Bot is ready!');
+            console.log(`📱 Send "hi" on WhatsApp to start`);
         }
     });
 
@@ -161,13 +374,16 @@ async function startSession(sessionId) {
         if (isFromMe) return;
 
         let buttonId = null;
+        let listId = null;
         let text = null;
 
-        // Check button response - CORRECT WAY
+        // Check button response
         if (wasi_msg.message?.buttonsResponseMessage?.selectedButtonId) {
             buttonId = wasi_msg.message.buttonsResponseMessage.selectedButtonId;
         } else if (wasi_msg.message?.templateButtonReplyMessage?.selectedId) {
             buttonId = wasi_msg.message.templateButtonReplyMessage.selectedId;
+        } else if (wasi_msg.message?.listResponseMessage?.singleSelectReply?.rowId) {
+            listId = wasi_msg.message.listResponseMessage.singleSelectReply.rowId;
         } else if (wasi_msg.message?.conversation) {
             text = wasi_msg.message.conversation.trim().toLowerCase();
         } else if (wasi_msg.message?.extendedTextMessage?.text) {
@@ -179,63 +395,118 @@ async function startSession(sessionId) {
         // ============================================================
         
         if (buttonId) {
-            console.log(`🔘 Button clicked: ${buttonId} from ${from}`);
-            
-            let response = '';
-            let showButtons = true;
+            console.log(`🔘 Button: ${buttonId} from ${from}`);
             
             switch(buttonId) {
                 case 'products':
-                    response = '🛍️ *Products List*\n\n' +
-                              '📱 *iPhone 15 Pro*\n' +
-                              '💰 Rs. 350,000\n' +
-                              '📦 Stock: 10\n\n' +
-                              '📱 *Samsung Galaxy S24*\n' +
-                              '💰 Rs. 280,000\n' +
-                              '📦 Stock: 15\n\n' +
-                              '🎧 *AirPods Pro*\n' +
-                              '💰 Rs. 45,000\n' +
-                              '📦 Stock: 8\n\n' +
-                              '⌚ *Smart Watch Series 9*\n' +
-                              '💰 Rs. 65,000\n' +
-                              '📦 Stock: 5\n\n' +
-                              '👇 *Tap a button to continue:*';
+                    await sendProductList(wasi_sock, from);
                     break;
                     
                 case 'cart':
-                    response = '🛒 *Your Cart*\n\n' +
-                              'Your cart is empty!\n\n' +
-                              '🛍️ Browse products and add to cart.\n\n' +
-                              '👇 *Tap a button to continue:*';
+                    await sock.sendMessage(from, { 
+                        text: '🛒 *Your Cart*\n\nYour cart is empty!\n\n🛍️ Browse products and add to cart.' 
+                    });
+                    await sendButtonMessage(wasi_sock, from);
                     break;
                     
                 case 'orders':
-                    response = '📦 *My Orders*\n\n' +
-                              'No orders yet!\n\n' +
-                              '🛍️ Place your first order today.\n\n' +
-                              '👇 *Tap a button to continue:*';
+                    await sock.sendMessage(from, { 
+                        text: '📦 *My Orders*\n\nNo orders yet!\n\n🛍️ Place your first order today.' 
+                    });
+                    await sendButtonMessage(wasi_sock, from);
                     break;
                     
                 case 'categories':
-                    response = '📂 *Categories*\n\n' +
+                    await sock.sendMessage(from, { 
+                        text: '📂 *Categories*\n\n' +
                               '🛍️ Available Categories:\n\n' +
                               '• Electronics 📱\n' +
                               '• Accessories 🎧\n' +
                               '• Clothing 👕\n' +
                               '• Books 📚\n' +
-                              '• Other 📦\n\n' +
-                              '👇 *Tap a button to continue:*';
+                              '• Other 📦' 
+                    });
+                    await sendButtonMessage(wasi_sock, from);
+                    break;
+                    
+                case 'help':
+                    await sock.sendMessage(from, { 
+                        text: '🆘 *Help*\n\n' +
+                              '📖 *Commands:*\n' +
+                              '• products - View products\n' +
+                              '• cart - View cart\n' +
+                              '• orders - View orders\n' +
+                              '• categories - Categories\n' +
+                              '• help - This help\n\n' +
+                              '🛍️ *Happy Shopping!*' 
+                    });
+                    await sendButtonMessage(wasi_sock, from);
+                    break;
+                    
+                case 'menu':
+                    await sendButtonMessage(wasi_sock, from);
+                    break;
+                    
+                case 'view_p1':
+                case 'view_p2':
+                case 'view_p3':
+                case 'view_p4':
+                case 'view_p5':
+                    const pid = buttonId.replace('view_', '');
+                    await sendProductDetail(wasi_sock, from, pid);
+                    break;
+                    
+                case 'add_p1':
+                case 'add_p2':
+                case 'add_p3':
+                case 'add_p4':
+                case 'add_p5':
+                    const addPid = buttonId.replace('add_', '');
+                    await sock.sendMessage(from, { 
+                        text: `✅ Product added to cart!\n\n🛒 View cart by typing: cart` 
+                    });
+                    await sendButtonMessage(wasi_sock, from);
                     break;
                     
                 default:
-                    response = '❌ Unknown option.\n\n👇 *Tap a button below:*';
+                    await sock.sendMessage(from, { 
+                        text: '❌ Unknown option. Please try again.' 
+                    });
+                    await sendButtonMessage(wasi_sock, from);
             }
+            return;
+        }
+
+        // ============================================================
+        // HANDLE LIST SELECTIONS
+        // ============================================================
+        
+        if (listId) {
+            console.log(`📋 List: ${listId} from ${from}`);
             
-            // Send response with buttons
-            await wasi_sock.sendMessage(from, { text: response });
-            
-            // Show main menu buttons again
-            await sendButtonMessage(wasi_sock, from);
+            switch(listId) {
+                case 'products':
+                    await sendProductList(wasi_sock, from);
+                    break;
+                case 'cart':
+                    await sock.sendMessage(from, { text: '🛒 Your cart is empty!' });
+                    await sendListMessage(wasi_sock, from);
+                    break;
+                case 'orders':
+                    await sock.sendMessage(from, { text: '📦 No orders yet!' });
+                    await sendListMessage(wasi_sock, from);
+                    break;
+                case 'categories':
+                    await sock.sendMessage(from, { text: '📂 Categories: Electronics, Accessories' });
+                    await sendListMessage(wasi_sock, from);
+                    break;
+                case 'help':
+                    await sock.sendMessage(from, { text: '🆘 Type: products, cart, orders, categories' });
+                    await sendListMessage(wasi_sock, from);
+                    break;
+                default:
+                    await sendListMessage(wasi_sock, from);
+            }
             return;
         }
 
@@ -247,46 +518,59 @@ async function startSession(sessionId) {
             console.log(`💬 Text: ${text} from ${from}`);
             
             // Greetings
-            if (['hi', 'hello', 'start', 'menu', 'hey'].includes(text)) {
+            if (['hi', 'hello', 'start', 'menu', 'hey', 'assalamualaikum'].includes(text)) {
                 await sendButtonMessage(wasi_sock, from);
                 return;
             }
             
-            // Product commands
+            // Products
             if (text === 'products' || text === '1') {
-                await wasi_sock.sendMessage(from, { 
-                    text: '🛍️ *Products List*\n\n' +
-                          '📱 iPhone 15 Pro - Rs.350,000\n' +
-                          '📱 Samsung S24 - Rs.280,000\n' +
-                          '🎧 AirPods Pro - Rs.45,000\n' +
-                          '⌚ Smart Watch - Rs.65,000' 
-                });
-                await sendButtonMessage(wasi_sock, from);
+                await sendProductList(wasi_sock, from);
                 return;
             }
             
-            // Cart command
+            // Cart
             if (text === 'cart' || text === '2') {
-                await wasi_sock.sendMessage(from, { 
-                    text: '🛒 *Your Cart*\n\nYour cart is empty!' 
-                });
+                await sock.sendMessage(from, { text: '🛒 Your cart is empty!' });
                 await sendButtonMessage(wasi_sock, from);
                 return;
             }
             
-            // Orders command
+            // Orders
             if (text === 'orders' || text === '3') {
-                await wasi_sock.sendMessage(from, { 
-                    text: '📦 *My Orders*\n\nNo orders yet!' 
+                await sock.sendMessage(from, { text: '📦 No orders yet!' });
+                await sendButtonMessage(wasi_sock, from);
+                return;
+            }
+            
+            // Categories
+            if (text === 'categories' || text === '4') {
+                await sock.sendMessage(from, { text: '📂 Categories: Electronics, Accessories, Clothing, Books' });
+                await sendButtonMessage(wasi_sock, from);
+                return;
+            }
+            
+            // Help
+            if (text === 'help' || text === '5') {
+                await sock.sendMessage(from, { 
+                    text: '🆘 *Commands:*\nproducts, cart, orders, categories, help' 
                 });
                 await sendButtonMessage(wasi_sock, from);
                 return;
             }
             
-            // Categories command
-            if (text === 'categories' || text === '4') {
-                await wasi_sock.sendMessage(from, { 
-                    text: '📂 *Categories*\n\n• Electronics 📱\n• Accessories 🎧\n• Clothing 👕\n• Books 📚' 
+            // View product
+            if (text.startsWith('view ')) {
+                const pid = text.replace('view ', '');
+                await sendProductDetail(wasi_sock, from, pid);
+                return;
+            }
+            
+            // Add to cart
+            if (text.startsWith('add ')) {
+                const pid = text.replace('add ', '');
+                await sock.sendMessage(from, { 
+                    text: `✅ Product ${pid} added to cart!\n\nType: cart to view` 
                 });
                 await sendButtonMessage(wasi_sock, from);
                 return;
@@ -349,7 +633,7 @@ wasi_app.get('/', (req, res) => {
         <!DOCTYPE html>
         <html>
         <head>
-            <title>🛍️ Test Bot</title>
+            <title>🛍️ Store Bot</title>
             <meta name="viewport" content="width=device-width, initial-scale=1">
             <style>
                 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -369,6 +653,8 @@ wasi_app.get('/', (req, res) => {
                 .btn-secondary:hover { background: #5f3dc4; }
                 .footer { margin-top: 25px; color: #b2bec3; font-size: 12px; }
                 .session-id { background: #f1f2f6; padding: 4px 12px; border-radius: 4px; font-size: 12px; color: #636e72; display: inline-block; margin-top: 10px; }
+                .commands { text-align: left; background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 15px 0; font-size: 13px; }
+                .commands code { background: #e9ecef; padding: 2px 8px; border-radius: 4px; font-size: 12px; }
             </style>
         </head>
         <body>
@@ -376,7 +662,7 @@ wasi_app.get('/', (req, res) => {
                 <h1>🛍️ Store Bot</h1>
                 <p class="subtitle">WhatsApp Business Store</p>
                 <div class="status ${connected ? 'online' : 'offline'}">
-                    ${connected ? '✅ Connected' : '⏳ Waiting for connection...'}
+                    ${connected ? '✅ Connected' : '⏳ Waiting...'}
                 </div>
                 ${!connected ? `
                 <div class="qr-box">
@@ -388,6 +674,15 @@ wasi_app.get('/', (req, res) => {
                     ✅ Bot is online! Send "hi" on WhatsApp to start.
                 </div>
                 `}
+                <div class="commands">
+                    <strong>📌 Commands:</strong><br>
+                    <code>hi</code> - Start<br>
+                    <code>products</code> - View products<br>
+                    <code>cart</code> - View cart<br>
+                    <code>orders</code> - View orders<br>
+                    <code>categories</code> - Categories<br>
+                    <code>help</code> - Help
+                </div>
                 <div class="btn-group">
                     <a href="/api/status" class="btn">📱 QR Code</a>
                     <a href="/ping" class="btn btn-secondary">🏓 Ping</a>
@@ -477,7 +772,7 @@ function startServer() {
         console.log(`📌 QR: http://localhost:${wasi_port}/api/status`);
         console.log(`\n🔘 Bot Commands:`);
         console.log(`   Type: hi, hello, start, menu`);
-        console.log(`   Or: products, cart, orders, categories`);
+        console.log(`   Or: products, cart, orders, categories, help`);
         console.log(`\n✅ Bot is ready! Scan QR and send "hi" on WhatsApp.`);
     });
 }
