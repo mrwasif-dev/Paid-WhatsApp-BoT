@@ -2,422 +2,237 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
-    <title>Muzamil-MD</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Muzamil-MD • Dashboard</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
-        /* ============================================
-           ROOT
-           ============================================ */
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
 
-        :root {
-            --bg: #0c0c1a;
-            --card: rgba(255, 255, 255, 0.05);
-            --border: rgba(255, 255, 255, 0.06);
-            --text: #ffffff;
-            --text2: rgba(255, 255, 255, 0.6);
-            --text3: rgba(255, 255, 255, 0.3);
-            --primary: #7c3aed;
-            --secondary: #ec4899;
-            --success: #22c55e;
-            --danger: #ef4444;
-            --warning: #fbbf24;
-            --accent: #06b6d4;
-            --radius: 20px;
-            --shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-        }
-
         body {
-            font-family: 'Inter', sans-serif;
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: #0a0a0f;
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 16px;
-            background: var(--bg);
-            background-image: 
-                radial-gradient(ellipse at 20% 50%, rgba(124, 58, 237, 0.08) 0%, transparent 60%),
-                radial-gradient(ellipse at 80% 50%, rgba(236, 72, 153, 0.06) 0%, transparent 60%);
+            padding: 20px;
+            color: #fff;
         }
 
-        /* ============================================
-           CONTAINER
-           ============================================ */
-        .container {
-            max-width: 460px;
-            width: 100%;
-        }
-
-        /* ============================================
-           CARD
-           ============================================ */
+        /* Card */
         .card {
-            background: var(--card);
-            backdrop-filter: blur(30px);
-            -webkit-backdrop-filter: blur(30px);
-            border-radius: var(--radius);
-            border: 1px solid var(--border);
-            box-shadow: var(--shadow);
-            overflow: hidden;
-            padding: 0;
+            background: rgba(255, 255, 255, 0.04);
+            backdrop-filter: blur(20px);
+            border-radius: 24px;
+            padding: 32px 28px;
+            max-width: 440px;
+            width: 100%;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
         }
 
-        /* Top Gradient Bar */
-        .card-bar {
-            height: 3px;
-            background: linear-gradient(90deg, var(--primary), var(--secondary), var(--accent), var(--primary));
-            background-size: 300% 100%;
-            animation: barMove 4s linear infinite;
-        }
-
-        @keyframes barMove {
-            0% { background-position: 0% 0%; }
-            100% { background-position: 300% 0%; }
-        }
-
-        /* ============================================
-           BODY
-           ============================================ */
-        .card-body {
-            padding: 24px 22px 20px;
-        }
-
-        /* ============================================
-           HEADER
-           ============================================ */
+        /* Header */
         .header {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            margin-bottom: 22px;
+            margin-bottom: 28px;
         }
 
-        .header-left {
+        .header .brand {
             display: flex;
             align-items: center;
             gap: 12px;
         }
 
-        .header-left .logo {
-            width: 48px;
-            height: 48px;
-            border-radius: 14px;
-            background: linear-gradient(135deg, var(--primary), var(--secondary));
+        .header .brand .icon {
+            width: 44px;
+            height: 44px;
+            background: linear-gradient(135deg, #7c3aed, #ec4899);
+            border-radius: 12px;
             display: flex;
             align-items: center;
             justify-content: center;
             font-size: 20px;
-            color: #fff;
-            box-shadow: 0 8px 24px rgba(124, 58, 237, 0.25);
-            flex-shrink: 0;
         }
 
-        .header-left .logo .dot {
-            position: absolute;
-            bottom: -2px;
-            right: -2px;
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            border: 2px solid #0c0c1a;
-            background: var(--success);
-            animation: pulse 2s ease-in-out infinite;
-        }
-
-        @keyframes pulse {
-            0%, 100% { transform: scale(1); opacity: 1; }
-            50% { transform: scale(0.8); opacity: 0.5; }
-        }
-
-        .header-left .info h2 {
-            font-size: 18px;
+        .header .brand h1 {
+            font-size: 20px;
             font-weight: 800;
-            color: var(--text);
-            letter-spacing: -0.3px;
+            letter-spacing: -0.5px;
         }
 
-        .header-left .info p {
-            font-size: 11px;
-            color: var(--text2);
-            font-weight: 500;
+        .header .brand h1 span {
+            color: #7c3aed;
         }
 
-        .header-right .badge {
-            padding: 5px 14px;
+        .header .status-badge {
+            font-size: 12px;
+            font-weight: 600;
+            padding: 6px 14px;
             border-radius: 20px;
-            font-size: 10px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
             background: rgba(34, 197, 94, 0.12);
-            color: var(--success);
+            color: #22c55e;
             border: 1px solid rgba(34, 197, 94, 0.15);
-            transition: all 0.3s ease;
         }
 
-        .header-right .badge.offline {
+        .header .status-badge.offline {
             background: rgba(239, 68, 68, 0.12);
-            color: var(--danger);
+            color: #ef4444;
             border-color: rgba(239, 68, 68, 0.15);
         }
 
-        .header-right .badge.scan {
+        .header .status-badge.scan {
             background: rgba(251, 191, 36, 0.12);
-            color: var(--warning);
+            color: #fbbf24;
             border-color: rgba(251, 191, 36, 0.15);
         }
 
-        /* ============================================
-           QUICK STATS - 3 CARDS
-           ============================================ */
-        .quick-stats {
+        /* Info Cards */
+        .info-grid {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 8px;
-            margin-bottom: 20px;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 24px;
         }
 
-        .qs-item {
+        .info-card {
             background: rgba(255, 255, 255, 0.03);
             border-radius: 14px;
-            padding: 12px 8px;
-            text-align: center;
+            padding: 14px 16px;
             border: 1px solid rgba(255, 255, 255, 0.04);
-            transition: all 0.3s ease;
         }
 
-        .qs-item:hover {
-            background: rgba(255, 255, 255, 0.06);
-            transform: translateY(-2px);
-        }
-
-        .qs-item .num {
-            font-size: 18px;
-            font-weight: 800;
-            color: var(--text);
-            line-height: 1.2;
-        }
-
-        .qs-item .num.green { color: var(--success); }
-        .qs-item .num.pink { color: var(--secondary); }
-        .qs-item .num.blue { color: var(--accent); }
-
-        .qs-item .lbl {
-            font-size: 9px;
-            color: var(--text3);
+        .info-card .label {
+            font-size: 10px;
+            color: rgba(255, 255, 255, 0.3);
             text-transform: uppercase;
-            letter-spacing: 0.6px;
+            letter-spacing: 0.5px;
             font-weight: 600;
-            display: block;
-            margin-top: 3px;
         }
 
-        /* ============================================
-           QR CODE
-           ============================================ */
-        .qr-box {
+        .info-card .value {
+            font-size: 15px;
+            font-weight: 700;
+            margin-top: 4px;
+            color: #fff;
+        }
+
+        .info-card .value.green { color: #22c55e; }
+        .info-card .value.pink { color: #ec4899; }
+        .info-card .value.blue { color: #06b6d4; }
+
+        /* QR */
+        .qr-section {
+            text-align: center;
             background: rgba(255, 255, 255, 0.03);
             border-radius: 16px;
-            padding: 18px;
-            text-align: center;
-            margin-bottom: 18px;
+            padding: 20px;
+            margin-bottom: 24px;
             border: 1px solid rgba(255, 255, 255, 0.04);
         }
 
-        .qr-box img {
-            width: 150px;
-            height: 150px;
-            border-radius: 14px;
+        .qr-section img {
+            width: 160px;
+            height: 160px;
+            border-radius: 12px;
             background: #fff;
-            padding: 6px;
-            display: inline-block;
+            padding: 8px;
         }
 
-        .qr-box .placeholder {
-            width: 150px;
-            height: 150px;
+        .qr-section .placeholder {
+            width: 160px;
+            height: 160px;
             margin: 0 auto;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             background: rgba(255, 255, 255, 0.03);
-            border-radius: 14px;
+            border-radius: 12px;
             border: 2px dashed rgba(255, 255, 255, 0.06);
-            color: var(--text3);
+            color: rgba(255, 255, 255, 0.2);
         }
 
-        .qr-box .placeholder i {
+        .qr-section .placeholder i {
             font-size: 40px;
-            margin-bottom: 6px;
+            margin-bottom: 8px;
         }
 
-        .qr-box .placeholder span {
+        .qr-section .placeholder span {
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .qr-section .hint {
+            margin-top: 12px;
             font-size: 12px;
-            font-weight: 500;
+            color: rgba(255, 255, 255, 0.3);
         }
 
-        .qr-hint {
-            margin-top: 10px;
-            font-size: 11px;
-            color: var(--text3);
-            font-weight: 500;
-        }
-
-        .qr-hint i {
-            color: var(--accent);
+        .qr-section .hint i {
+            color: #06b6d4;
             margin-right: 6px;
         }
 
-        /* ============================================
-           INFO ROW - 3 COLUMNS
-           ============================================ */
-        .info-row {
-            display: grid;
-            grid-template-columns: 1fr 1fr 1fr;
-            gap: 8px;
-            margin-bottom: 18px;
-        }
-
-        .info-item {
-            background: rgba(255, 255, 255, 0.02);
+        /* Session Info */
+        .session-info {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 16px;
+            background: rgba(255, 255, 255, 0.03);
             border-radius: 12px;
-            padding: 10px 8px;
-            text-align: center;
-            border: 1px solid rgba(255, 255, 255, 0.03);
-        }
-
-        .info-item .lbl {
-            font-size: 8px;
-            color: var(--text3);
-            text-transform: uppercase;
-            letter-spacing: 0.6px;
-            font-weight: 600;
-            display: block;
-        }
-
-        .info-item .val {
-            font-size: 11px;
-            font-weight: 600;
-            color: var(--text2);
-            margin-top: 3px;
-            word-break: break-all;
-        }
-
-        .info-item .val.code {
-            font-family: 'Monaco', monospace;
-            font-size: 9px;
-            color: var(--text3);
-        }
-
-        /* ============================================
-           RECENT ACTIVITY - SMALL LOG
-           ============================================ */
-        .activity {
-            background: rgba(255, 255, 255, 0.02);
-            border-radius: 14px;
-            padding: 12px 14px;
-            margin-bottom: 18px;
+            margin-bottom: 20px;
             border: 1px solid rgba(255, 255, 255, 0.04);
-            max-height: 80px;
-            overflow-y: auto;
-        }
-
-        .activity::-webkit-scrollbar {
-            width: 3px;
-        }
-
-        .activity::-webkit-scrollbar-track {
-            background: transparent;
-        }
-
-        .activity::-webkit-scrollbar-thumb {
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 10px;
-        }
-
-        .activity .title {
-            font-size: 9px;
-            color: var(--text3);
-            text-transform: uppercase;
-            letter-spacing: 0.8px;
-            font-weight: 700;
-            margin-bottom: 8px;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .activity .title i {
-            color: var(--accent);
-            font-size: 10px;
-        }
-
-        .activity .log-item {
-            font-size: 11px;
-            color: var(--text2);
-            padding: 4px 0;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
-            display: flex;
-            align-items: center;
+            flex-wrap: wrap;
             gap: 8px;
         }
 
-        .activity .log-item:last-child {
-            border-bottom: none;
-        }
-
-        .activity .log-item .time {
+        .session-info .item .label {
             font-size: 9px;
-            color: var(--text3);
-            font-weight: 500;
-            flex-shrink: 0;
+            color: rgba(255, 255, 255, 0.3);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 600;
         }
 
-        .activity .log-item .msg {
-            font-weight: 500;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .activity .log-item .icon {
+        .session-info .item .value {
             font-size: 12px;
-            flex-shrink: 0;
+            font-weight: 600;
+            color: rgba(255, 255, 255, 0.7);
+            margin-top: 2px;
         }
 
-        .activity .log-item .icon.success { color: var(--success); }
-        .activity .log-item .icon.error { color: var(--danger); }
-        .activity .log-item .icon.info { color: var(--accent); }
+        .session-info .item .value.code {
+            font-family: 'Monaco', monospace;
+            font-size: 10px;
+            color: rgba(255, 255, 255, 0.3);
+        }
 
-        /* ============================================
-           BUTTONS
-           ============================================ */
-        .btn-row {
+        /* Buttons */
+        .btn-group {
             display: flex;
             gap: 10px;
         }
 
         .btn {
-            flex: 1;
-            padding: 13px 16px;
+            padding: 13px 20px;
             border: none;
             border-radius: 14px;
             font-weight: 700;
             font-size: 13px;
             cursor: pointer;
-            transition: all 0.25s ease;
+            transition: all 0.2s ease;
+            font-family: 'Inter', sans-serif;
             display: flex;
             align-items: center;
             justify-content: center;
             gap: 8px;
-            font-family: 'Inter', sans-serif;
         }
 
         .btn:active {
@@ -425,13 +240,14 @@
         }
 
         .btn-primary {
-            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            flex: 1;
+            background: linear-gradient(135deg, #7c3aed, #ec4899);
             color: #fff;
-            box-shadow: 0 4px 20px rgba(124, 58, 237, 0.2);
+            box-shadow: 0 4px 16px rgba(124, 58, 237, 0.2);
         }
 
         .btn-primary:hover {
-            box-shadow: 0 8px 30px rgba(124, 58, 237, 0.35);
+            box-shadow: 0 8px 28px rgba(124, 58, 237, 0.3);
             transform: translateY(-2px);
         }
 
@@ -444,28 +260,25 @@
 
         .btn-secondary {
             background: rgba(255, 255, 255, 0.06);
-            color: var(--text2);
+            color: rgba(255, 255, 255, 0.6);
             border: 1px solid rgba(255, 255, 255, 0.06);
-            flex: 0.4;
+            padding: 13px 18px;
         }
 
         .btn-secondary:hover {
             background: rgba(255, 255, 255, 0.1);
-            transform: translateY(-2px);
         }
 
         .btn-danger {
-            background: rgba(239, 68, 68, 0.08);
-            color: var(--danger);
-            border: 1px solid rgba(239, 68, 68, 0.1);
             width: 100%;
             margin-top: 10px;
-            flex: none;
+            background: rgba(239, 68, 68, 0.08);
+            color: #ef4444;
+            border: 1px solid rgba(239, 68, 68, 0.1);
         }
 
         .btn-danger:hover {
             background: rgba(239, 68, 68, 0.15);
-            transform: translateY(-2px);
         }
 
         .btn .spinner {
@@ -482,9 +295,7 @@
             to { transform: rotate(360deg); }
         }
 
-        /* ============================================
-           TOAST
-           ============================================ */
+        /* Toast */
         .toast {
             position: fixed;
             bottom: 30px;
@@ -493,16 +304,14 @@
             background: rgba(255, 255, 255, 0.06);
             backdrop-filter: blur(20px);
             padding: 12px 24px;
-            border-radius: 14px;
+            border-radius: 12px;
             border: 1px solid rgba(255, 255, 255, 0.06);
-            box-shadow: 0 20px 60px rgba(0,0,0,0.4);
             font-size: 13px;
             font-weight: 600;
-            color: var(--text);
-            transition: all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+            color: #fff;
+            transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
             z-index: 999;
             max-width: 90%;
-            text-align: center;
             opacity: 0;
             pointer-events: none;
         }
@@ -513,66 +322,105 @@
             pointer-events: auto;
         }
 
-        .toast.success { border-left: 3px solid var(--success); }
-        .toast.error { border-left: 3px solid var(--danger); }
-        .toast.warning { border-left: 3px solid var(--warning); }
-        .toast.info { border-left: 3px solid var(--accent); }
+        .toast.success { border-left: 3px solid #22c55e; }
+        .toast.error { border-left: 3px solid #ef4444; }
+        .toast.warning { border-left: 3px solid #fbbf24; }
+        .toast.info { border-left: 3px solid #06b6d4; }
 
-        /* ============================================
-           FOOTER
-           ============================================ */
+        /* Footer */
         .footer {
             text-align: center;
-            padding: 14px 0 0;
-            color: var(--text3);
+            padding: 16px 0 0;
+            color: rgba(255, 255, 255, 0.15);
             font-size: 11px;
             font-weight: 500;
-            letter-spacing: 0.3px;
         }
 
         .footer i {
-            color: var(--secondary);
+            color: #ec4899;
         }
 
         .footer a {
-            color: var(--text2);
+            color: rgba(255, 255, 255, 0.3);
             text-decoration: none;
         }
 
-        .footer a:hover {
-            color: var(--accent);
-        }
-
-        /* ============================================
-           RESPONSIVE
-           ============================================ */
+        /* Responsive */
         @media (max-width: 480px) {
-            .card-body { padding: 18px 14px 16px; }
-            .header-left .logo { width: 42px; height: 42px; font-size: 17px; }
-            .header-left .info h2 { font-size: 16px; }
-            .quick-stats { gap: 6px; }
-            .qs-item { padding: 10px 6px; }
-            .qs-item .num { font-size: 16px; }
-            .qr-box img,
-            .qr-box .placeholder { width: 130px; height: 130px; }
-            .info-row { gap: 6px; }
-            .info-item { padding: 8px 6px; }
-            .info-item .val { font-size: 10px; }
-            .btn-row { flex-direction: column; }
-            .btn-secondary { flex: 1; }
-            .activity { max-height: 60px; padding: 10px 12px; }
-            .activity .log-item { font-size: 10px; }
-            .header-right .badge { font-size: 9px; padding: 4px 10px; }
+            .card {
+                padding: 24px 16px;
+            }
+
+            .header .brand h1 {
+                font-size: 17px;
+            }
+
+            .info-grid {
+                grid-template-columns: 1fr 1fr;
+                gap: 8px;
+            }
+
+            .info-card {
+                padding: 12px 14px;
+            }
+
+            .info-card .value {
+                font-size: 14px;
+            }
+
+            .qr-section img,
+            .qr-section .placeholder {
+                width: 140px;
+                height: 140px;
+            }
+
+            .session-info {
+                padding: 10px 14px;
+                gap: 6px;
+            }
+
+            .session-info .item .value {
+                font-size: 11px;
+            }
+
+            .btn-group {
+                flex-direction: column;
+            }
+
+            .btn-secondary {
+                padding: 13px;
+            }
+
+            .header .status-badge {
+                font-size: 10px;
+                padding: 4px 12px;
+            }
         }
 
         @media (max-width: 380px) {
-            .quick-stats { grid-template-columns: repeat(3, 1fr); gap: 4px; }
-            .qs-item { padding: 8px 4px; border-radius: 10px; }
-            .qs-item .num { font-size: 14px; }
-            .qr-box img,
-            .qr-box .placeholder { width: 110px; height: 110px; }
-            .info-row { grid-template-columns: 1fr 1fr 1fr; gap: 4px; }
-            .info-item .val { font-size: 9px; }
+            .info-grid {
+                grid-template-columns: 1fr 1fr;
+                gap: 6px;
+            }
+
+            .info-card {
+                padding: 10px 12px;
+                border-radius: 10px;
+            }
+
+            .info-card .value {
+                font-size: 13px;
+            }
+
+            .qr-section img,
+            .qr-section .placeholder {
+                width: 120px;
+                height: 120px;
+            }
+
+            .session-info .item .value {
+                font-size: 10px;
+            }
         }
     </style>
 </head>
@@ -581,109 +429,79 @@
     <!-- Toast -->
     <div id="toast" class="toast"></div>
 
-    <div class="container">
-
-        <div class="card">
-            <div class="card-bar"></div>
-
-            <div class="card-body">
-
-                <!-- ===== HEADER ===== -->
-                <div class="header">
-                    <div class="header-left">
-                        <div class="logo" style="position:relative;">
-                            <i class="fas fa-bolt"></i>
-                            <span class="dot" id="statusDot"></span>
-                        </div>
-                        <div class="info">
-                            <h2>Muzamil MD</h2>
-                            <p>WhatsApp Bot</p>
-                        </div>
-                    </div>
-                    <div class="header-right">
-                        <span class="badge" id="statusBadge">● Online</span>
-                    </div>
+    <div class="card">
+        <!-- Header -->
+        <div class="header">
+            <div class="brand">
+                <div class="icon">
+                    <i class="fas fa-bolt"></i>
                 </div>
+                <h1>Muzamil <span>MD</span></h1>
+            </div>
+            <span class="status-badge" id="statusBadge">● Online</span>
+        </div>
 
-                <!-- ===== QUICK STATS ===== -->
-                <div class="quick-stats">
-                    <div class="qs-item">
-                        <div class="num green" id="statStatus">●</div>
-                        <span class="lbl">Status</span>
-                    </div>
-                    <div class="qs-item">
-                        <div class="num pink" id="statDb">⬡</div>
-                        <span class="lbl">Database</span>
-                    </div>
-                    <div class="qs-item">
-                        <div class="num blue" id="statUptime">0s</div>
-                        <span class="lbl">Uptime</span>
-                    </div>
-                </div>
-
-                <!-- ===== QR ===== -->
-                <div class="qr-box">
-                    <img id="qrImage" src="" alt="QR" style="display:none;">
-                    <div class="placeholder" id="qrPlaceholder">
-                        <i class="fas fa-qrcode"></i>
-                        <span>Scan to Connect</span>
-                    </div>
-                    <div class="qr-hint" id="qrHint">
-                        <i class="fas fa-phone"></i> WhatsApp → Linked Devices → Link a Device
-                    </div>
-                </div>
-
-                <!-- ===== INFO ROW ===== -->
-                <div class="info-row">
-                    <div class="info-item">
-                        <span class="lbl">Session</span>
-                        <span class="val code" id="sessionDisplay">-</span>
-                    </div>
-                    <div class="info-item">
-                        <span class="lbl">Device</span>
-                        <span class="val" id="deviceDisplay">-</span>
-                    </div>
-                    <div class="info-item">
-                        <span class="lbl">Active</span>
-                        <span class="val" id="activeDisplay">-</span>
-                    </div>
-                </div>
-
-                <!-- ===== RECENT ACTIVITY ===== -->
-                <div class="activity" id="activityLog">
-                    <div class="title">
-                        <i class="fas fa-bolt"></i> Recent Activity
-                    </div>
-                    <div id="logContainer">
-                        <div class="log-item">
-                            <span class="time">--:--</span>
-                            <span class="icon info"><i class="fas fa-circle"></i></span>
-                            <span class="msg">Waiting for activity...</span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- ===== BUTTONS ===== -->
-                <div class="btn-row">
-                    <button class="btn btn-primary" id="restartBtn" onclick="restartBot()">
-                        <i class="fas fa-sync-alt"></i> Restart
-                    </button>
-                    <button class="btn btn-secondary" onclick="refreshStatus()" title="Refresh">
-                        <i class="fas fa-rotate"></i>
-                    </button>
-                </div>
-                <button class="btn btn-danger" onclick="logoutBot()">
-                    <i class="fas fa-sign-out-alt"></i> Logout
-                </button>
-
-                <!-- ===== FOOTER ===== -->
-                <div class="footer">
-                    Made with <i class="fas fa-heart"></i> by <a href="#">Muzamil</a>
-                </div>
-
+        <!-- Info Grid -->
+        <div class="info-grid">
+            <div class="info-card">
+                <div class="label">Bot Status</div>
+                <div class="value green" id="botStatus">● Connected</div>
+            </div>
+            <div class="info-card">
+                <div class="label">Database</div>
+                <div class="value pink" id="dbStatus">● Active</div>
+            </div>
+            <div class="info-card">
+                <div class="label">Uptime</div>
+                <div class="value blue" id="uptimeDisplay">0s</div>
+            </div>
+            <div class="info-card">
+                <div class="label">Session</div>
+                <div class="value" id="sessionDisplay" style="font-size:13px;">-</div>
             </div>
         </div>
 
+        <!-- QR -->
+        <div class="qr-section">
+            <img id="qrImage" src="" alt="QR" style="display:none;">
+            <div class="placeholder" id="qrPlaceholder">
+                <i class="fas fa-qrcode"></i>
+                <span>Scan to Connect</span>
+            </div>
+            <div class="hint" id="qrHint">
+                <i class="fas fa-phone"></i> WhatsApp → Linked Devices → Link a Device
+            </div>
+        </div>
+
+        <!-- Session Info -->
+        <div class="session-info">
+            <div class="item">
+                <div class="label">Device</div>
+                <div class="value" id="deviceDisplay">-</div>
+            </div>
+            <div class="item">
+                <div class="label">Last Active</div>
+                <div class="value" id="activeDisplay">-</div>
+            </div>
+        </div>
+
+        <!-- Buttons -->
+        <div class="btn-group">
+            <button class="btn btn-primary" id="restartBtn" onclick="restartBot()">
+                <i class="fas fa-sync-alt"></i> Restart
+            </button>
+            <button class="btn btn-secondary" onclick="refreshStatus()">
+                <i class="fas fa-rotate"></i>
+            </button>
+        </div>
+        <button class="btn btn-danger" onclick="logoutBot()">
+            <i class="fas fa-sign-out-alt"></i> Logout
+        </button>
+
+        <!-- Footer -->
+        <div class="footer">
+            Made with <i class="fas fa-heart"></i> by Muzamil
+        </div>
     </div>
 
     <script>
@@ -692,7 +510,6 @@
         // ============================================
         let statusInterval = null;
         let startTime = Date.now();
-        let logCount = 0;
 
         // ============================================
         // TOAST
@@ -718,30 +535,6 @@
             return sec + 's';
         }
 
-        function getTime() {
-            return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        }
-
-        // ============================================
-        // ADD LOG
-        // ============================================
-        function addLog(icon, msg, type = 'info') {
-            const container = document.getElementById('logContainer');
-            const item = document.createElement('div');
-            item.className = 'log-item';
-            item.innerHTML = `
-                <span class="time">${getTime()}</span>
-                <span class="icon ${type}"><i class="fas ${icon}"></i></span>
-                <span class="msg">${msg}</span>
-            `;
-            container.prepend(item);
-
-            // Keep only last 5 logs
-            while (container.children.length > 5) {
-                container.removeChild(container.lastChild);
-            }
-        }
-
         // ============================================
         // FETCH STATUS
         // ============================================
@@ -752,31 +545,55 @@
 
                 // --- Badge ---
                 const badge = document.getElementById('statusBadge');
-                const dot = document.getElementById('statusDot');
-                let text, cls, dotColor;
+                let badgeText, badgeClass;
 
                 if (data.connected) {
-                    text = '● Online';
-                    cls = '';
-                    dotColor = '#22c55e';
+                    badgeText = '● Online';
+                    badgeClass = '';
                 } else if (data.qr) {
-                    text = '◉ Scan';
-                    cls = 'scan';
-                    dotColor = '#fbbf24';
+                    badgeText = '◉ Scan';
+                    badgeClass = 'scan';
                 } else {
-                    text = '○ Offline';
-                    cls = 'offline';
-                    dotColor = '#ef4444';
+                    badgeText = '○ Offline';
+                    badgeClass = 'offline';
                 }
 
-                badge.textContent = text;
-                badge.className = 'badge' + (cls ? ' ' + cls : '');
-                dot.style.background = dotColor;
+                badge.textContent = badgeText;
+                badge.className = 'status-badge' + (badgeClass ? ' ' + badgeClass : '');
 
-                // --- Stats ---
-                document.getElementById('statStatus').textContent = data.connected ? '🟢' : '🔴';
-                document.getElementById('statDb').textContent = data.dbConnected ? '✅' : '❌';
-                document.getElementById('statUptime').textContent = formatTime(Math.floor((Date.now() - startTime) / 1000));
+                // --- Bot Status ---
+                const botStatus = document.getElementById('botStatus');
+                if (data.connected) {
+                    botStatus.textContent = '● Connected';
+                    botStatus.className = 'value green';
+                } else if (data.qr) {
+                    botStatus.textContent = '◉ Waiting for QR';
+                    botStatus.className = 'value blue';
+                } else {
+                    botStatus.textContent = '● Disconnected';
+                    botStatus.className = 'value';
+                    botStatus.style.color = '#ef4444';
+                }
+
+                // --- Database ---
+                const dbStatus = document.getElementById('dbStatus');
+                if (data.dbConnected) {
+                    dbStatus.textContent = '● Active';
+                    dbStatus.className = 'value green';
+                } else if (data.dbConfigured) {
+                    dbStatus.textContent = '◉ Connecting';
+                    dbStatus.className = 'value blue';
+                } else {
+                    dbStatus.textContent = '○ Disabled';
+                    dbStatus.className = 'value';
+                    dbStatus.style.color = 'rgba(255,255,255,0.3)';
+                }
+
+                // --- Uptime ---
+                document.getElementById('uptimeDisplay').textContent = formatTime(Math.floor((Date.now() - startTime) / 1000));
+
+                // --- Session ---
+                document.getElementById('sessionDisplay').textContent = data.sessionId || '-';
 
                 // --- QR ---
                 const img = document.getElementById('qrImage');
@@ -788,11 +605,6 @@
                     img.style.display = 'inline-block';
                     ph.style.display = 'none';
                     hint.innerHTML = '<i class="fas fa-check-circle" style="color:#22c55e;"></i> QR ready! Scan with WhatsApp';
-                    // Log QR generated (only once)
-                    if (!data._qrLogged) {
-                        data._qrLogged = true;
-                        addLog('fa-qrcode', 'QR code generated', 'info');
-                    }
                 } else {
                     img.style.display = 'none';
                     ph.style.display = 'flex';
@@ -803,32 +615,23 @@
                     }
                 }
 
-                // --- Session ---
-                document.getElementById('sessionDisplay').textContent = data.sessionId || '-';
-                document.getElementById('deviceDisplay').textContent = data.connected ? '✅ Online' : '-';
+                // --- Device ---
+                document.getElementById('deviceDisplay').textContent = data.connected ? 'Connected ✅' : '-';
+
+                // --- Last Active ---
                 document.getElementById('activeDisplay').textContent = data.lastActive ? new Date(data.lastActive).toLocaleTimeString() : '-';
 
                 // --- Enable restart ---
                 document.getElementById('restartBtn').disabled = false;
-
-                // --- Log connection change ---
-                if (data.connected && !data._connected) {
-                    data._connected = true;
-                    addLog('fa-plug', 'Bot connected', 'success');
-                } else if (!data.connected && data._connected !== false) {
-                    data._connected = false;
-                    if (!data.qr) {
-                        addLog('fa-plug', 'Bot disconnected', 'error');
-                    }
-                }
 
                 return data;
 
             } catch (e) {
                 console.error(e);
                 document.getElementById('statusBadge').textContent = '⚠ Error';
-                document.getElementById('statusBadge').className = 'badge offline';
-                document.getElementById('statStatus').textContent = '⚠';
+                document.getElementById('statusBadge').className = 'status-badge offline';
+                document.getElementById('botStatus').textContent = '⚠ Error';
+                document.getElementById('botStatus').style.color = '#ef4444';
                 showToast('Failed to fetch status', 'error');
                 return null;
             }
@@ -862,11 +665,9 @@
                 const res = await fetch('/api/restart', { method: 'POST' });
                 const data = await res.json();
                 if (data.success) {
-                    addLog('fa-sync-alt', 'Bot restarting...', 'warning');
                     showToast('⚡ Bot restarting...', 'warning');
                     setTimeout(() => {
                         fetchStatus();
-                        addLog('fa-check-circle', 'Bot restarted successfully', 'success');
                         showToast('✅ Bot restarted!', 'success');
                     }, 5000);
                 } else {
@@ -894,7 +695,6 @@
                 const res = await fetch('/api/logout', { method: 'POST' });
                 const data = await res.json();
                 if (data.success) {
-                    addLog('fa-sign-out-alt', 'Logged out', 'error');
                     showToast('👋 Logged out', 'success');
                     setTimeout(fetchStatus, 2000);
                 } else {
