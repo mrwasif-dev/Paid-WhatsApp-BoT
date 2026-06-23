@@ -2,7 +2,9 @@ require('dotenv').config();
 const {
     DisconnectReason,
     jidNormalizedUser,
-    proto
+    proto,
+    makeWASocket,
+    useMultiFileAuthState
 } = require('@whiskeysockets/baileys');
 const { Boom } = require('@hapi/boom');
 const express = require('express');
@@ -30,16 +32,64 @@ const wasi_port = process.env.PORT || 3000;
 const QRCode = require('qrcode');
 
 // ============================================================
-// STORE SYSTEM - مکمل اسٹور سسٹم (FIXED)
+// STORE SYSTEM
 // ============================================================
 
 const STORE_FILE = path.join(__dirname, 'storeData.json');
+
+const DEFAULT_PRODUCTS = [
+    {
+        id: 'p1',
+        name: 'iPhone 15 Pro Max',
+        price: 350000,
+        category: 'Electronics',
+        description: '📱 256GB Storage, A17 Chip, 48MP Camera',
+        stock: 10,
+        createdAt: new Date().toISOString()
+    },
+    {
+        id: 'p2',
+        name: 'Samsung Galaxy S24 Ultra',
+        price: 280000,
+        category: 'Electronics',
+        description: '📱 512GB Storage, AI Features, S-Pen',
+        stock: 15,
+        createdAt: new Date().toISOString()
+    },
+    {
+        id: 'p3',
+        name: 'Black Car Perfume',
+        price: 5000,
+        category: 'Accessories',
+        description: '🖤 Premium car air freshener, long lasting',
+        stock: 3,
+        createdAt: new Date().toISOString()
+    },
+    {
+        id: 'p4',
+        name: 'Wireless AirPods Pro',
+        price: 45000,
+        category: 'Accessories',
+        description: '🎧 Noise Cancellation, 24hr Battery Life',
+        stock: 8,
+        createdAt: new Date().toISOString()
+    },
+    {
+        id: 'p5',
+        name: 'Smart Watch Series 9',
+        price: 65000,
+        category: 'Electronics',
+        description: '⌚ Health Monitor, GPS, Heart Rate Sensor',
+        stock: 5,
+        createdAt: new Date().toISOString()
+    }
+];
 
 let storeData = {
     products: [],
     orders: [],
     tempOrders: {},
-    categories: ['Electronics', 'Clothing', 'Books', 'Accessories', 'Other']
+    categories: ['Electronics', 'Accessories', 'Clothing', 'Books', 'Other']
 };
 
 function loadStoreData() {
@@ -47,43 +97,31 @@ function loadStoreData() {
         if (fs.existsSync(STORE_FILE)) {
             const data = fs.readFileSync(STORE_FILE, 'utf8');
             storeData = JSON.parse(data);
-            console.log('✅ Store data loaded');
+            console.log('✅ Store data loaded from file');
+            if (!storeData.products || storeData.products.length === 0) {
+                storeData.products = JSON.parse(JSON.stringify(DEFAULT_PRODUCTS));
+                saveStoreData();
+                console.log('✅ Default products added');
+            }
         } else {
-            storeData.products = [
-                {
-                    id: 'p1',
-                    name: 'iPhone 15 Pro',
-                    price: 350000,
-                    category: 'Electronics',
-                    description: 'Latest iPhone with A17 chip, 256GB storage',
-                    stock: 10,
-                    createdAt: new Date().toISOString()
-                },
-                {
-                    id: 'p2',
-                    name: 'Samsung Galaxy S24',
-                    price: 280000,
-                    category: 'Electronics',
-                    description: 'Premium Android phone with AI features',
-                    stock: 15,
-                    createdAt: new Date().toISOString()
-                },
-                {
-                    id: 'p3',
-                    name: 'Black Car Perfume',
-                    price: 5000,
-                    category: 'Accessories',
-                    description: 'Premium car air freshener',
-                    stock: 3,
-                    createdAt: new Date().toISOString()
-                }
-            ];
-            storeData.orders = [];
-            storeData.tempOrders = {};
+            storeData = {
+                products: JSON.parse(JSON.stringify(DEFAULT_PRODUCTS)),
+                orders: [],
+                tempOrders: {},
+                categories: ['Electronics', 'Accessories', 'Clothing', 'Books', 'Other']
+            };
             saveStoreData();
+            console.log('✅ New store created with default products');
         }
     } catch (error) {
         console.error('Error loading store:', error);
+        storeData = {
+            products: JSON.parse(JSON.stringify(DEFAULT_PRODUCTS)),
+            orders: [],
+            tempOrders: {},
+            categories: ['Electronics', 'Accessories', 'Clothing', 'Books', 'Other']
+        };
+        saveStoreData();
     }
 }
 
@@ -101,8 +139,20 @@ function getAvailableProducts() {
     return storeData.products.filter(p => p.stock > 0);
 }
 
+function getAllProducts() {
+    return storeData.products;
+}
+
 function getProductById(id) {
     return storeData.products.find(p => p.id === id);
+}
+
+function getProductsByCategory(category) {
+    return storeData.products.filter(p => p.category === category && p.stock > 0);
+}
+
+function getCategories() {
+    return storeData.categories;
 }
 
 function addProduct(product) {
@@ -244,163 +294,174 @@ function getStats() {
 }
 
 // ============================================================
-// BUTTONS GENERATOR - FIXED for WhatsApp
+// BUTTONS - FIXED WAY
 // ============================================================
 
-function createProductButtons(products) {
-    const buttons = [];
-    for (const p of products) {
-        buttons.push({
-            buttonId: `view_${p.id}`,
-            buttonText: { displayText: `📱 ${p.name}` },
-            type: 1
-        });
+// یہ بٹن بنانے کا صحیح طریقہ ہے جو Baileys میں کام کرتا ہے
+function createButtons(buttons) {
+    // Baileys میں بٹن اس فارمیٹ میں ہونے چاہئیں
+    return buttons.map(b => ({
+        buttonId: b.buttonId,
+        buttonText: { displayText: b.buttonText.displayText },
+        type: 1
+    }));
+}
+
+// ============================================================
+// SEND BUTTON MESSAGE - FIXED
+// ============================================================
+
+async function sendButtonMessage(sock, to, text, buttons) {
+    try {
+        if (!buttons || buttons.length === 0) {
+            await sock.sendMessage(to, { text: text });
+            return;
+        }
+
+        // Method 1: Standard button message
+        const buttonMessage = {
+            text: text,
+            buttons: buttons,
+            headerType: 1
+        };
+        
+        await sock.sendMessage(to, buttonMessage);
+        console.log(`✅ Sent ${buttons.length} buttons to ${to}`);
+        
+    } catch (error) {
+        console.error('Error sending button message:', error);
+        
+        // Method 2: Fallback - send as template message
+        try {
+            const templateMessage = {
+                text: text,
+                templateButtons: buttons.map(b => ({
+                    index: 0,
+                    urlButton: undefined,
+                    callButton: undefined,
+                    quickReplyButton: {
+                        displayText: b.buttonText.displayText,
+                        id: b.buttonId
+                    }
+                }))
+            };
+            await sock.sendMessage(to, templateMessage);
+            console.log(`✅ Sent template buttons to ${to}`);
+        } catch (err2) {
+            console.error('Template buttons also failed:', err2);
+            // Method 3: Final fallback - send plain text with instructions
+            let fallbackText = text + '\n\n';
+            fallbackText += '📌 *Reply with:*\n';
+            for (const b of buttons) {
+                fallbackText += `• ${b.buttonText.displayText} → type: ${b.buttonId}\n`;
+            }
+            await sock.sendMessage(to, { text: fallbackText });
+        }
     }
-    buttons.push({
-        buttonId: 'view_cart',
-        buttonText: { displayText: '🛒 My Cart' },
-        type: 1
-    });
-    buttons.push({
-        buttonId: 'my_orders',
-        buttonText: { displayText: '📦 My Orders' },
-        type: 1
-    });
-    return buttons;
-}
-
-function createProductDetailButtons(productId) {
-    return [
-        {
-            buttonId: `add_${productId}`,
-            buttonText: { displayText: '🛒 Add to Cart' },
-            type: 1
-        },
-        {
-            buttonId: `view_${productId}_qty2`,
-            buttonText: { displayText: '➕ Add 2x' },
-            type: 1
-        },
-        {
-            buttonId: 'back_to_products',
-            buttonText: { displayText: '⬅️ Back' },
-            type: 1
-        },
-        {
-            buttonId: 'view_cart',
-            buttonText: { displayText: '🛒 Cart' },
-            type: 1
-        }
-    ];
-}
-
-function createCartButtons() {
-    return [
-        {
-            buttonId: 'checkout',
-            buttonText: { displayText: '✅ Checkout' },
-            type: 1
-        },
-        {
-            buttonId: 'clear_cart',
-            buttonText: { displayText: '🗑️ Clear Cart' },
-            type: 1
-        },
-        {
-            buttonId: 'back_to_products',
-            buttonText: { displayText: '⬅️ Continue Shopping' },
-            type: 1
-        }
-    ];
-}
-
-function createCheckoutButtons() {
-    return [
-        {
-            buttonId: 'confirm_order',
-            buttonText: { displayText: '✅ Confirm Order' },
-            type: 1
-        },
-        {
-            buttonId: 'back_to_cart',
-            buttonText: { displayText: '⬅️ Back to Cart' },
-            type: 1
-        }
-    ];
-}
-
-function createOrderButtons() {
-    return [
-        {
-            buttonId: 'back_to_products',
-            buttonText: { displayText: '🛍️ Continue Shopping' },
-            type: 1
-        },
-        {
-            buttonId: 'view_cart',
-            buttonText: { displayText: '🛒 View Cart' },
-            type: 1
-        }
-    ];
-}
-
-function createMainMenuButtons() {
-    return [
-        {
-            buttonId: 'back_to_products',
-            buttonText: { displayText: '🛍️ Shop Now' },
-            type: 1
-        },
-        {
-            buttonId: 'view_cart',
-            buttonText: { displayText: '🛒 My Cart' },
-            type: 1
-        },
-        {
-            buttonId: 'my_orders',
-            buttonText: { displayText: '📦 My Orders' },
-            type: 1
-        }
-    ];
 }
 
 // ============================================================
 // MESSAGE GENERATORS
 // ============================================================
 
-function generateProductListMessage(products) {
+function generateMainMenuMessage() {
+    const text = `🛍️ *WELCOME TO OUR STORE!*
+
+📱 *WhatsApp Business Catalog*
+
+🛒 Browse our collection of premium products
+📦 Easy ordering with just a few taps
+🚚 Fast delivery across Pakistan
+
+👇 *Choose an option below:*`;
+
+    const buttons = [
+        { buttonId: 'shop_now', buttonText: { displayText: '🛍️ Shop Now' }, type: 1 },
+        { buttonId: 'view_cart', buttonText: { displayText: '🛒 My Cart' }, type: 1 },
+        { buttonId: 'my_orders', buttonText: { displayText: '📦 My Orders' }, type: 1 },
+        { buttonId: 'categories', buttonText: { displayText: '📂 Categories' }, type: 1 }
+    ];
+
+    return { text, buttons };
+}
+
+function generateProductListMessage(products, page = 1, category = null) {
     if (products.length === 0) {
         return {
-            text: '🛍️ *No products available right now!*\n\nPlease check back later.',
-            buttons: []
+            text: '📭 *No products available!*\n\nPlease check other categories.',
+            buttons: [
+                { buttonId: 'categories', buttonText: { displayText: '📂 Categories' }, type: 1 },
+                { buttonId: 'main_menu', buttonText: { displayText: '🏠 Menu' }, type: 1 }
+            ]
         };
     }
 
-    let text = '🛍️ *Welcome to Our Store!*\n\n';
-    text += '🛒 *Browse our collection:*\n\n';
-    
-    for (const p of products) {
+    const perPage = 4;
+    const totalPages = Math.ceil(products.length / perPage);
+    const start = (page - 1) * perPage;
+    const end = Math.min(start + perPage, products.length);
+    const pageProducts = products.slice(start, end);
+
+    let text = `🛍️ *Products${category ? ` - ${category}` : ''}*\n\n`;
+    text += `📊 Showing ${start + 1}-${end} of ${products.length}\n`;
+    text += `📄 Page ${page} of ${totalPages}\n\n`;
+
+    for (const p of pageProducts) {
         text += `📱 *${p.name}*\n`;
         text += `💰 Rs. ${p.price.toLocaleString()}\n`;
-        text += `📂 ${p.category}\n`;
         text += `📦 Stock: ${p.stock}\n`;
         text += `─────────────\n\n`;
     }
-    
-    text += '👇 *Tap a button below to view product details.*';
 
-    return { text, buttons: createProductButtons(products) };
+    text += `👇 *Tap a product below:*`;
+
+    const buttons = [];
+    for (const p of pageProducts) {
+        buttons.push({
+            buttonId: `view_${p.id}`,
+            buttonText: { displayText: `📱 ${p.name}` },
+            type: 1
+        });
+    }
+
+    if (page > 1) {
+        buttons.push({
+            buttonId: `page_${page - 1}`,
+            buttonText: { displayText: '⬅️ Previous' },
+            type: 1
+        });
+    }
+    if (end < products.length) {
+        buttons.push({
+            buttonId: `page_${page + 1}`,
+            buttonText: { displayText: 'Next ➡️' },
+            type: 1
+        });
+    }
+
+    buttons.push({ buttonId: 'view_cart', buttonText: { displayText: '🛒 Cart' }, type: 1 });
+    buttons.push({ buttonId: 'main_menu', buttonText: { displayText: '🏠 Menu' }, type: 1 });
+
+    return { text, buttons };
 }
 
 function generateProductDetailMessage(product) {
-    let text = `🛍️ *${product.name}*\n\n`;
+    let text = `📱 *${product.name}*\n\n`;
     text += `📝 ${product.description || 'No description'}\n\n`;
-    text += `💰 Price: Rs. ${product.price.toLocaleString()}\n`;
-    text += `📂 Category: ${product.category}\n`;
-    text += `📦 Stock: ${product.stock}\n\n`;
-    text += '👇 *Tap a button below:*';
+    text += `💰 *Price:* Rs. ${product.price.toLocaleString()}\n`;
+    text += `📂 *Category:* ${product.category}\n`;
+    text += `📦 *Stock:* ${product.stock} units\n\n`;
+    text += `👇 *Add to cart:*`;
 
-    return { text, buttons: createProductDetailButtons(product.id) };
+    const buttons = [
+        { buttonId: `add_${product.id}_1`, buttonText: { displayText: '🛒 Add 1x' }, type: 1 },
+        { buttonId: `add_${product.id}_2`, buttonText: { displayText: '🛒 Add 2x' }, type: 1 },
+        { buttonId: `add_${product.id}_3`, buttonText: { displayText: '🛒 Add 3x' }, type: 1 },
+        { buttonId: 'back_to_products', buttonText: { displayText: '⬅️ Back' }, type: 1 },
+        { buttonId: 'view_cart', buttonText: { displayText: '🛒 Cart' }, type: 1 }
+    ];
+
+    return { text, buttons };
 }
 
 function generateCartMessage(userJid) {
@@ -408,13 +469,10 @@ function generateCartMessage(userJid) {
     
     if (temp.products.length === 0) {
         return {
-            text: '🛒 *Your cart is empty!*\n\nBrowse products and add items to your cart.',
+            text: '🛒 *Your cart is empty!*\n\nBrowse products and add items.',
             buttons: [
-                {
-                    buttonId: 'back_to_products',
-                    buttonText: { displayText: '🛍️ Browse Products' },
-                    type: 1
-                }
+                { buttonId: 'back_to_products', buttonText: { displayText: '🛍️ Browse' }, type: 1 },
+                { buttonId: 'main_menu', buttonText: { displayText: '🏠 Menu' }, type: 1 }
             ]
         };
     }
@@ -430,15 +488,22 @@ function generateCartMessage(userJid) {
             total += itemTotal;
             text += `${index}. *${product.name}*\n`;
             text += `   ${item.quantity}x Rs. ${product.price.toLocaleString()} = Rs. ${itemTotal.toLocaleString()}\n`;
-            text += `   ➖ Remove: type \`remove_${product.id}\`\n\n`;
+            text += `   🗑️ Remove: \`remove_${product.id}\`\n\n`;
             index++;
         }
     }
     
     text += `💰 *Total: Rs. ${total.toLocaleString()}*\n\n`;
-    text += '👇 *Tap a button below:*';
+    text += '👇 *Proceed to checkout:*';
 
-    return { text, buttons: createCartButtons() };
+    const buttons = [
+        { buttonId: 'checkout', buttonText: { displayText: '✅ Checkout' }, type: 1 },
+        { buttonId: 'clear_cart', buttonText: { displayText: '🗑️ Clear Cart' }, type: 1 },
+        { buttonId: 'back_to_products', buttonText: { displayText: '⬅️ Shop' }, type: 1 },
+        { buttonId: 'main_menu', buttonText: { displayText: '🏠 Menu' }, type: 1 }
+    ];
+
+    return { text, buttons };
 }
 
 function generateCheckoutMessage(userJid) {
@@ -468,22 +533,25 @@ function generateCheckoutMessage(userJid) {
     if (temp.notes) text += `📝 Notes: ${temp.notes}\n`;
     
     if (!temp.name || !temp.phone || !temp.address) {
-        text += '\n⚠️ *Please provide the following information:*\n';
-        if (!temp.name) text += '• Your full name\n';
-        if (!temp.phone) text += '• Phone number\n';
-        if (!temp.address) text += '• Delivery address\n';
-        text += '\n_Type your information one by one:_\n';
-        text += '1️⃣ Name\n2️⃣ Phone\n3️⃣ Address\n4️⃣ Notes (optional)';
-        text += '\n\n👇 *Tap Confirm when ready:*';
+        text += '\n⚠️ *Please provide:*\n';
+        if (!temp.name) text += '1️⃣ Your full name\n';
+        if (!temp.phone) text += '2️⃣ Phone number\n';
+        if (!temp.address) text += '3️⃣ Delivery address\n';
+        text += '\n_Type your information one by one:_';
     } else {
-        text += '\n✅ All information provided!\n👇 *Tap Confirm Order to place your order.*';
+        text += '\n✅ All information provided!\n👇 *Confirm your order:*';
     }
 
-    return { text, buttons: createCheckoutButtons() };
+    const buttons = [
+        { buttonId: 'confirm_order', buttonText: { displayText: '✅ Confirm Order' }, type: 1 },
+        { buttonId: 'back_to_cart', buttonText: { displayText: '⬅️ Back' }, type: 1 }
+    ];
+
+    return { text, buttons };
 }
 
 function generateOrderConfirmationMessage(order) {
-    let text = '✅ *Order Placed Successfully!*\n\n';
+    let text = '✅ *ORDER PLACED SUCCESSFULLY!*\n\n';
     text += `🆔 Order ID: *${order.id}*\n`;
     text += `👤 Name: ${order.name}\n`;
     text += `📱 Phone: ${order.phone}\n`;
@@ -499,9 +567,15 @@ function generateOrderConfirmationMessage(order) {
         }
     }
     
-    text += '\n📦 We\'ll contact you soon for delivery confirmation!\n\n👇 *Tap a button below:*';
-    
-    return { text, buttons: createOrderButtons() };
+    text += '\n📦 *We\'ll contact you soon!*\n\n👇 *Continue:*';
+
+    const buttons = [
+        { buttonId: 'back_to_products', buttonText: { displayText: '🛍️ Shop' }, type: 1 },
+        { buttonId: 'view_cart', buttonText: { displayText: '🛒 Cart' }, type: 1 },
+        { buttonId: 'main_menu', buttonText: { displayText: '🏠 Menu' }, type: 1 }
+    ];
+
+    return { text, buttons };
 }
 
 function generateOrderListMessage(userJid) {
@@ -511,11 +585,8 @@ function generateOrderListMessage(userJid) {
         return {
             text: '📭 *No orders found*\n\nYou haven\'t placed any orders yet.',
             buttons: [
-                {
-                    buttonId: 'back_to_products',
-                    buttonText: { displayText: '🛍️ Start Shopping' },
-                    type: 1
-                }
+                { buttonId: 'back_to_products', buttonText: { displayText: '🛍️ Shop' }, type: 1 },
+                { buttonId: 'main_menu', buttonText: { displayText: '🏠 Menu' }, type: 1 }
             ]
         };
     }
@@ -536,28 +607,53 @@ function generateOrderListMessage(userJid) {
         text += `─────────────\n\n`;
     }
     
-    text += '👇 *Tap a button below:*';
+    text += '👇 *Continue shopping:*';
     
     return {
         text,
         buttons: [
-            {
-                buttonId: 'back_to_products',
-                buttonText: { displayText: '🛍️ Continue Shopping' },
-                type: 1
-            },
-            {
-                buttonId: 'view_cart',
-                buttonText: { displayText: '🛒 View Cart' },
-                type: 1
-            }
+            { buttonId: 'back_to_products', buttonText: { displayText: '🛍️ Shop' }, type: 1 },
+            { buttonId: 'main_menu', buttonText: { displayText: '🏠 Menu' }, type: 1 }
         ]
     };
 }
 
+function generateCategoryMessage() {
+    let text = '📂 *Categories*\n\n';
+    let hasProducts = false;
+    for (const cat of storeData.categories) {
+        const count = getProductsByCategory(cat).length;
+        if (count > 0) {
+            text += `📂 ${cat} (${count} items)\n`;
+            hasProducts = true;
+        }
+    }
+    if (!hasProducts) {
+        text += 'No products available in any category.';
+    }
+    text += '\n👇 *Select a category:*';
+
+    const buttons = [];
+    for (const cat of storeData.categories) {
+        const count = getProductsByCategory(cat).length;
+        if (count > 0) {
+            buttons.push({
+                buttonId: `cat_${cat}`,
+                buttonText: { displayText: `📂 ${cat}` },
+                type: 1
+            });
+        }
+    }
+    buttons.push({ buttonId: 'main_menu', buttonText: { displayText: '🏠 Menu' }, type: 1 });
+
+    return { text, buttons };
+}
+
 // ============================================================
-// STORE INTERACTION HANDLER - FIXED
+// STORE INTERACTION HANDLER
 // ============================================================
+
+let currentPage = {};
 
 async function handleStoreInteraction(sock, from, message) {
     let buttonId = null;
@@ -586,73 +682,103 @@ async function handleStoreInteraction(sock, from, message) {
 }
 
 async function handleButtonClick(sock, from, buttonId) {
-    console.log(`Button clicked: ${buttonId} from ${from}`);
+    console.log(`📌 Button: ${buttonId} from ${from}`);
 
-    // My Orders
-    if (buttonId === 'my_orders') {
-        const { text, buttons } = generateOrderListMessage(from);
+    // MAIN MENU
+    if (buttonId === 'main_menu') {
+        const { text, buttons } = generateMainMenuMessage();
         await sendButtonMessage(sock, from, text, buttons);
         return true;
     }
 
-    // View Product
-    if (buttonId.startsWith('view_')) {
-        const productId = buttonId.replace('view_', '');
-        // Check if it's a quantity variant
-        if (productId.endsWith('_qty2')) {
-            const actualId = productId.replace('_qty2', '');
-            const product = getProductById(actualId);
-            if (product && product.stock >= 2) {
-                addToTempOrder(from, actualId, 2);
-                await sock.sendMessage(from, { text: `✅ Added 2x ${product.name} to cart!` });
-                const { text: detailText, buttons } = generateProductDetailMessage(product);
-                await sendButtonMessage(sock, from, detailText, buttons);
-            } else {
-                await sock.sendMessage(from, { text: '❌ Not enough stock!' });
-            }
+    // SHOP NOW
+    if (buttonId === 'shop_now') {
+        const products = getAvailableProducts();
+        if (products.length === 0) {
+            await sock.sendMessage(from, { text: '📭 No products available!' });
             return true;
         }
-        
+        currentPage[from] = 1;
+        const { text, buttons } = generateProductListMessage(products, 1);
+        await sendButtonMessage(sock, from, text, buttons);
+        return true;
+    }
+
+    // CATEGORIES
+    if (buttonId === 'categories') {
+        const { text, buttons } = generateCategoryMessage();
+        await sendButtonMessage(sock, from, text, buttons);
+        return true;
+    }
+
+    // CATEGORY SELECT
+    if (buttonId.startsWith('cat_')) {
+        const category = buttonId.replace('cat_', '');
+        const products = getProductsByCategory(category);
+        if (products.length === 0) {
+            await sock.sendMessage(from, { text: `📭 No products in "${category}"` });
+            return true;
+        }
+        currentPage[from] = 1;
+        const { text, buttons } = generateProductListMessage(products, 1, category);
+        await sendButtonMessage(sock, from, text, buttons);
+        return true;
+    }
+
+    // PAGE NAVIGATION
+    if (buttonId.startsWith('page_')) {
+        const page = parseInt(buttonId.replace('page_', ''));
+        const products = getAvailableProducts();
+        currentPage[from] = page;
+        const { text, buttons } = generateProductListMessage(products, page);
+        await sendButtonMessage(sock, from, text, buttons);
+        return true;
+    }
+
+    // VIEW PRODUCT
+    if (buttonId.startsWith('view_')) {
+        const productId = buttonId.replace('view_', '');
         const product = getProductById(productId);
         if (!product || product.stock <= 0) {
             await sock.sendMessage(from, { text: '❌ This product is out of stock!' });
             return true;
         }
-
         const { text, buttons } = generateProductDetailMessage(product);
         await sendButtonMessage(sock, from, text, buttons);
         return true;
     }
 
-    // Add to Cart (1x)
+    // ADD TO CART
     if (buttonId.startsWith('add_')) {
-        const productId = buttonId.replace('add_', '');
+        const parts = buttonId.split('_');
+        const productId = parts[1];
+        const quantity = parseInt(parts[2]) || 1;
         const product = getProductById(productId);
         
-        if (!product || product.stock <= 0) {
-            await sock.sendMessage(from, { text: '❌ Product out of stock!' });
+        if (!product || product.stock < quantity) {
+            await sock.sendMessage(from, { text: `❌ Only ${product?.stock || 0} units available!` });
             return true;
         }
 
-        const success = addToTempOrder(from, productId, 1);
+        const success = addToTempOrder(from, productId, quantity);
         if (success) {
-            await sock.sendMessage(from, { text: `✅ Added 1x ${product.name} to cart!` });
+            await sock.sendMessage(from, { text: `✅ Added ${quantity}x ${product.name} to cart!` });
             const { text: detailText, buttons } = generateProductDetailMessage(product);
             await sendButtonMessage(sock, from, detailText, buttons);
         } else {
-            await sock.sendMessage(from, { text: '❌ Could not add product to cart.' });
+            await sock.sendMessage(from, { text: '❌ Could not add to cart.' });
         }
         return true;
     }
 
-    // View Cart
+    // VIEW CART
     if (buttonId === 'view_cart') {
         const { text, buttons } = generateCartMessage(from);
         await sendButtonMessage(sock, from, text, buttons);
         return true;
     }
 
-    // Checkout
+    // CHECKOUT
     if (buttonId === 'checkout') {
         const temp = getTempOrder(from);
         if (temp.products.length === 0) {
@@ -664,36 +790,44 @@ async function handleButtonClick(sock, from, buttonId) {
         return true;
     }
 
-    // Back to Products
+    // BACK TO PRODUCTS
     if (buttonId === 'back_to_products') {
         const products = getAvailableProducts();
-        const { text, buttons } = generateProductListMessage(products);
+        const page = currentPage[from] || 1;
+        const { text, buttons } = generateProductListMessage(products, page);
         await sendButtonMessage(sock, from, text, buttons);
         return true;
     }
 
-    // Clear Cart
-    if (buttonId === 'clear_cart') {
-        clearTempOrder(from);
-        await sock.sendMessage(from, { text: '🗑️ Cart cleared successfully!' });
-        const products = getAvailableProducts();
-        const { text, buttons } = generateProductListMessage(products);
-        await sendButtonMessage(sock, from, text, buttons);
-        return true;
-    }
-
-    // Back to Cart
+    // BACK TO CART
     if (buttonId === 'back_to_cart') {
         const { text, buttons } = generateCartMessage(from);
         await sendButtonMessage(sock, from, text, buttons);
         return true;
     }
 
-    // Confirm Order
+    // CLEAR CART
+    if (buttonId === 'clear_cart') {
+        clearTempOrder(from);
+        await sock.sendMessage(from, { text: '🗑️ Cart cleared!' });
+        const products = getAvailableProducts();
+        const { text, buttons } = generateProductListMessage(products, 1);
+        await sendButtonMessage(sock, from, text, buttons);
+        return true;
+    }
+
+    // MY ORDERS
+    if (buttonId === 'my_orders') {
+        const { text, buttons } = generateOrderListMessage(from);
+        await sendButtonMessage(sock, from, text, buttons);
+        return true;
+    }
+
+    // CONFIRM ORDER
     if (buttonId === 'confirm_order') {
         const temp = getTempOrder(from);
         if (!temp.name || !temp.phone || !temp.address) {
-            await sock.sendMessage(from, { text: '❌ Please provide all required information: Name, Phone, Address' });
+            await sock.sendMessage(from, { text: '❌ Please provide: Name, Phone, Address' });
             const { text: checkoutText, buttons } = generateCheckoutMessage(from);
             await sendButtonMessage(sock, from, checkoutText, buttons);
             return true;
@@ -704,7 +838,7 @@ async function handleButtonClick(sock, from, buttonId) {
             const { text, buttons } = generateOrderConfirmationMessage(order);
             await sendButtonMessage(sock, from, text, buttons);
         } else {
-            await sock.sendMessage(from, { text: '❌ Failed to place order. Please try again.' });
+            await sock.sendMessage(from, { text: '❌ Failed to place order.' });
         }
         return true;
     }
@@ -717,7 +851,7 @@ async function handleTextInput(sock, from, text) {
     
     if (temp.products.length === 0) return false;
     
-    // Check if it's a remove command
+    // Remove from cart
     if (text.startsWith('remove_')) {
         const productId = text.replace('remove_', '');
         const product = getProductById(productId);
@@ -730,30 +864,26 @@ async function handleTextInput(sock, from, text) {
         return true;
     }
     
-    // Order information collection
+    // Order information
     if (!temp.name && !temp.phone && !temp.address) {
         temp.name = text;
-        temp.step = 'phone';
         saveStoreData();
-        await sock.sendMessage(from, { text: `✅ Name saved: ${temp.name}\n\n📱 Now please send your *Phone Number*:` });
+        await sock.sendMessage(from, { text: `✅ Name: ${temp.name}\n\n📱 Now send *Phone Number*:` });
         return true;
     } else if (temp.name && !temp.phone) {
         temp.phone = text;
-        temp.step = 'address';
         saveStoreData();
-        await sock.sendMessage(from, { text: `✅ Phone saved: ${temp.phone}\n\n📍 Now please send your *Delivery Address*:` });
+        await sock.sendMessage(from, { text: `✅ Phone: ${temp.phone}\n\n📍 Now send *Delivery Address*:` });
         return true;
     } else if (temp.name && temp.phone && !temp.address) {
         temp.address = text;
-        temp.step = 'notes';
         saveStoreData();
-        await sock.sendMessage(from, { text: `✅ Address saved: ${temp.address}\n\n📝 Optional: Send any *Notes* for your order (or type "skip")` });
+        await sock.sendMessage(from, { text: `✅ Address saved\n\n📝 Optional: Send *Notes* (or "skip")` });
         return true;
     } else if (temp.name && temp.phone && temp.address && !temp.notes) {
         if (text.toLowerCase() !== 'skip') {
             temp.notes = text;
         }
-        temp.step = 'confirm';
         saveStoreData();
         const { text: checkoutText, buttons } = generateCheckoutMessage(from);
         await sendButtonMessage(sock, from, checkoutText, buttons);
@@ -764,40 +894,11 @@ async function handleTextInput(sock, from, text) {
 }
 
 // ============================================================
-// SEND BUTTON MESSAGE - FIXED for WhatsApp
-// ============================================================
-
-async function sendButtonMessage(sock, to, text, buttons) {
-    try {
-        if (!buttons || buttons.length === 0) {
-            await sock.sendMessage(to, { text: text });
-            return;
-        }
-
-        // Create button message
-        const buttonMessage = {
-            text: text,
-            buttons: buttons,
-            headerType: 1
-        };
-        
-        await sock.sendMessage(to, buttonMessage);
-        console.log(`✅ Button message sent to ${to} with ${buttons.length} buttons`);
-        
-    } catch (error) {
-        console.error('Error sending button message:', error);
-        // Fallback - send plain text
-        await sock.sendMessage(to, { text: text + '\n\n⚠️ Buttons not supported, please type commands.' });
-    }
-}
-
-// ============================================================
 // SESSION STATE
 // ============================================================
 
 const sessions = new Map();
 
-// Middleware
 wasi_app.use(express.json());
 wasi_app.use(express.static(path.join(__dirname, 'public')));
 
@@ -805,7 +906,6 @@ wasi_app.use(express.static(path.join(__dirname, 'public')));
 // STORE API ROUTES
 // ============================================================
 
-// GET - تمام پروڈکٹس
 wasi_app.get('/api/store/products', (req, res) => {
     try {
         const products = getAvailableProducts();
@@ -816,7 +916,6 @@ wasi_app.get('/api/store/products', (req, res) => {
     }
 });
 
-// POST - نیا پروڈکٹ
 wasi_app.post('/api/store/products', (req, res) => {
     try {
         const { name, price, category, description, stock } = req.body;
@@ -836,7 +935,6 @@ wasi_app.post('/api/store/products', (req, res) => {
     }
 });
 
-// DELETE - پروڈکٹ ڈیلیٹ
 wasi_app.delete('/api/store/products/:id', (req, res) => {
     try {
         const deleted = deleteProduct(req.params.id);
@@ -850,7 +948,6 @@ wasi_app.delete('/api/store/products/:id', (req, res) => {
     }
 });
 
-// GET - تمام آرڈرز
 wasi_app.get('/api/store/orders', (req, res) => {
     try {
         const orders = getAllOrders().sort((a, b) => 
@@ -862,7 +959,6 @@ wasi_app.get('/api/store/orders', (req, res) => {
     }
 });
 
-// PATCH - آرڈر اسٹیٹس اپڈیٹ
 wasi_app.patch('/api/store/orders/:id', (req, res) => {
     try {
         const { status } = req.body;
@@ -883,11 +979,10 @@ wasi_app.get('/admin', (req, res) => {
     res.sendFile(path.join(__dirname, 'admin.html'));
 });
 
-// Keep-Alive Route
 wasi_app.get('/ping', (req, res) => res.status(200).send('pong'));
 
 // ============================================================
-// API: GET STATUS
+// API: STATUS
 // ============================================================
 
 wasi_app.get('/api/status', async (req, res) => {
@@ -918,10 +1013,6 @@ wasi_app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// ============================================================
-// API: RESTART BOT
-// ============================================================
-
 wasi_app.post('/api/restart', async (req, res) => {
     try {
         console.log('🔄 Restarting bot...');
@@ -945,10 +1036,6 @@ wasi_app.post('/api/restart', async (req, res) => {
     }
 });
 
-// ============================================================
-// API: LOGOUT
-// ============================================================
-
 wasi_app.post('/api/logout', async (req, res) => {
     try {
         const sessionId = req.query.sessionId || config.sessionId || 'wasi_session';
@@ -968,10 +1055,6 @@ wasi_app.post('/api/logout', async (req, res) => {
         res.status(500).json({ success: false, error: error.message });
     }
 });
-
-// ============================================================
-// API: HEALTH CHECK
-// ============================================================
 
 wasi_app.get('/api/health', async (req, res) => {
     res.json({
@@ -1052,7 +1135,7 @@ async function startSession(sessionId) {
     wasi_sock.ev.on('creds.update', saveCreds);
 
     // ============================================================
-    // MESSAGE HANDLER - مکمل اسٹور کے ساتھ (FIXED)
+    // MESSAGE HANDLER
     // ============================================================
 
     wasi_sock.ev.on('messages.upsert', async wasi_m => {
@@ -1064,25 +1147,15 @@ async function startSession(sessionId) {
 
         if (isFromMe) return;
 
-        // Check if user is in temp order flow (collecting info)
         const temp = getTempOrder(from);
-        const isInOrderFlow = temp && (temp.name || temp.phone || temp.address || temp.step !== 'browsing');
+        const isInOrderFlow = temp && (temp.name || temp.phone || temp.address);
 
-        // STORE INTERACTION - بٹن اور ٹیکسٹ ان پٹ
         const storeHandled = await handleStoreInteraction(wasi_sock, from, wasi_msg.message);
         if (storeHandled) return;
 
-        // اگر کوئی اسٹور انٹریکشن نہیں تھی اور یوزر آرڈر فل میں نہیں ہے تو مین مینو بھیجیں
         if (!isInOrderFlow) {
-            const products = getAvailableProducts();
-            if (products.length > 0) {
-                const { text, buttons } = generateProductListMessage(products);
-                await sendButtonMessage(wasi_sock, from, text, buttons);
-            } else {
-                await wasi_sock.sendMessage(from, { 
-                    text: '🛍️ Welcome to our store!\n\nNo products available right now. Please check back later.' 
-                });
-            }
+            const { text, buttons } = generateMainMenuMessage();
+            await sendButtonMessage(wasi_sock, from, text, buttons);
         }
     });
 }
@@ -1104,9 +1177,6 @@ function wasi_startServer() {
         console.log(`   DELETE /api/store/products/:id - Delete product`);
         console.log(`   GET  /api/store/orders    - Get orders`);
         console.log(`   PATCH /api/store/orders/:id - Update order`);
-        console.log(`   GET  /api/status          - Bot status`);
-        console.log(`   POST /api/restart         - Restart bot`);
-        console.log(`   POST /api/logout          - Logout bot`);
     });
 }
 
@@ -1115,11 +1185,10 @@ function wasi_startServer() {
 // ============================================================
 
 async function main() {
-    // 1. STORE DATA LOAD
     loadStoreData();
     console.log('✅ Store system initialized');
+    console.log(`📦 ${getAvailableProducts().length} products available`);
 
-    // 2. Connect DB if configured
     if (config.mongoDbUrl) {
         const dbResult = await wasi_connectDatabase(config.mongoDbUrl);
         if (dbResult) {
@@ -1127,11 +1196,8 @@ async function main() {
         }
     }
 
-    // 3. Start default session
     const sessionId = config.sessionId || 'wasi_session';
     await startSession(sessionId);
-
-    // 4. Start server
     wasi_startServer();
 }
 
