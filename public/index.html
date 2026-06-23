@@ -3,187 +3,216 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Store Admin Panel</title>
+    <title>🛍️ Store Admin Panel</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: #f5f5f5;
+            background: #f0f2f5;
             padding: 20px;
         }
         .container {
             max-width: 1200px;
             margin: 0 auto;
             background: white;
-            border-radius: 12px;
+            border-radius: 16px;
             padding: 30px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
         }
         h1 {
-            color: #2c3e50;
-            margin-bottom: 30px;
-            border-bottom: 3px solid #3498db;
-            padding-bottom: 10px;
+            color: #1a1a2e;
+            margin-bottom: 25px;
+            border-bottom: 4px solid #6c5ce7;
+            padding-bottom: 12px;
+            font-size: 28px;
         }
         .stats {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
             margin-bottom: 30px;
         }
         .stat-card {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
             padding: 20px;
-            border-radius: 10px;
+            border-radius: 12px;
+            color: white;
             text-align: center;
         }
-        .stat-card h3 {
-            font-size: 14px;
-            opacity: 0.9;
-            margin-bottom: 5px;
-        }
-        .stat-card .number {
-            font-size: 32px;
-            font-weight: bold;
-        }
-        .section {
-            margin-top: 30px;
-            border-top: 2px solid #eee;
-            padding-top: 20px;
-        }
-        .section h2 {
-            color: #2c3e50;
-            margin-bottom: 20px;
-        }
-        .form-group {
-            margin-bottom: 15px;
-        }
-        .form-group label {
-            display: block;
-            font-weight: 600;
-            margin-bottom: 5px;
-            color: #555;
-        }
-        .form-group input, .form-group textarea, .form-group select {
-            width: 100%;
-            padding: 10px;
-            border: 2px solid #ddd;
-            border-radius: 8px;
-            font-size: 14px;
-        }
-        .form-group input:focus, .form-group textarea:focus {
-            border-color: #3498db;
-            outline: none;
-        }
-        .btn {
-            background: #3498db;
-            color: white;
-            padding: 12px 30px;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 16px;
-            font-weight: 600;
-            transition: background 0.3s;
-        }
-        .btn:hover {
-            background: #2980b9;
-        }
-        .btn-danger {
-            background: #e74c3c;
-        }
-        .btn-danger:hover {
-            background: #c0392b;
-        }
-        .btn-success {
-            background: #2ecc71;
-        }
-        .btn-success:hover {
-            background: #27ae60;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-        }
-        table th {
-            background: #2c3e50;
-            color: white;
-            padding: 12px;
-            text-align: left;
-        }
-        table td {
-            padding: 12px;
-            border-bottom: 1px solid #eee;
-        }
-        table tr:hover {
-            background: #f8f9fa;
-        }
-        .status-badge {
-            display: inline-block;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: 600;
-        }
-        .status-pending { background: #f39c12; color: white; }
-        .status-processing { background: #3498db; color: white; }
-        .status-shipped { background: #9b59b6; color: white; }
-        .status-delivered { background: #2ecc71; color: white; }
-        .status-cancelled { background: #e74c3c; color: white; }
+        .stat-card:nth-child(1) { background: linear-gradient(135deg, #6c5ce7, #a29bfe); }
+        .stat-card:nth-child(2) { background: linear-gradient(135deg, #fd79a8, #e17055); }
+        .stat-card:nth-child(3) { background: linear-gradient(135deg, #fdcb6e, #f39c12); }
+        .stat-card:nth-child(4) { background: linear-gradient(135deg, #00b894, #00cec9); }
+        .stat-card h3 { font-size: 13px; opacity: 0.9; margin-bottom: 5px; }
+        .stat-card .number { font-size: 28px; font-weight: bold; }
         .tabs {
             display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
+            gap: 8px;
+            margin-bottom: 25px;
+            flex-wrap: wrap;
         }
         .tab {
-            padding: 10px 20px;
+            padding: 10px 24px;
             background: #ecf0f1;
             border: none;
             border-radius: 8px;
             cursor: pointer;
             font-weight: 600;
             transition: all 0.3s;
+            font-size: 14px;
         }
-        .tab.active {
-            background: #3498db;
+        .tab:hover { background: #dfe6e9; }
+        .tab.active { background: #6c5ce7; color: white; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .section {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 12px;
+            margin-top: 10px;
+        }
+        .section h2 {
+            color: #2d3436;
+            margin-bottom: 18px;
+            font-size: 20px;
+        }
+        .form-group {
+            margin-bottom: 14px;
+        }
+        .form-group label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 4px;
+            color: #2d3436;
+            font-size: 14px;
+        }
+        .form-group input, .form-group textarea, .form-group select {
+            width: 100%;
+            padding: 10px 14px;
+            border: 2px solid #dfe6e9;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border 0.3s;
+        }
+        .form-group input:focus, .form-group textarea:focus {
+            border-color: #6c5ce7;
+            outline: none;
+        }
+        .btn {
+            padding: 10px 30px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 15px;
+            transition: all 0.3s;
             color: white;
         }
-        .tab-content {
-            display: none;
+        .btn-primary { background: #6c5ce7; }
+        .btn-primary:hover { background: #5f3dc4; transform: translateY(-1px); }
+        .btn-danger { background: #e17055; }
+        .btn-danger:hover { background: #d63031; }
+        .btn-success { background: #00b894; }
+        .btn-success:hover { background: #00a381; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
         }
-        .tab-content.active {
-            display: block;
+        table th {
+            background: #2d3436;
+            color: white;
+            padding: 10px 14px;
+            text-align: left;
+            font-weight: 600;
         }
-        .search-box {
-            padding: 8px 15px;
-            border: 2px solid #ddd;
-            border-radius: 8px;
-            width: 300px;
-            margin-bottom: 15px;
+        table td {
+            padding: 10px 14px;
+            border-bottom: 1px solid #dfe6e9;
         }
-        .actions {
-            display: flex;
-            gap: 8px;
+        table tr:hover { background: #f1f2f6; }
+        .status-badge {
+            display: inline-block;
+            padding: 3px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 700;
         }
+        .status-Pending { background: #fdcb6e; color: #2d3436; }
+        .status-Processing { background: #74b9ff; color: #2d3436; }
+        .status-Shipped { background: #a29bfe; color: white; }
+        .status-Delivered { background: #00b894; color: white; }
+        .status-Cancelled { background: #e17055; color: white; }
+        .actions { display: flex; gap: 6px; flex-wrap: wrap; }
         .actions button {
-            padding: 5px 12px;
+            padding: 4px 12px;
             border: none;
             border-radius: 4px;
             cursor: pointer;
             font-size: 12px;
+            font-weight: 600;
         }
-        .edit-btn { background: #3498db; color: white; }
-        .delete-btn { background: #e74c3c; color: white; }
+        .search-box {
+            padding: 8px 14px;
+            border: 2px solid #dfe6e9;
+            border-radius: 8px;
+            width: 280px;
+            font-size: 14px;
+        }
+        .search-box:focus {
+            border-color: #6c5ce7;
+            outline: none;
+        }
+        .flex-between {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-bottom: 15px;
+        }
         @media (max-width: 768px) {
             .container { padding: 15px; }
             table { font-size: 12px; }
             .search-box { width: 100%; }
+            .stats { grid-template-columns: 1fr 1fr; }
+            .stat-card .number { font-size: 22px; }
+            .tabs .tab { padding: 8px 16px; font-size: 12px; }
+        }
+        .status-select {
+            padding: 5px 10px;
+            border-radius: 4px;
+            border: 1px solid #dfe6e9;
+            font-size: 12px;
+            background: white;
+        }
+        .empty-msg {
+            text-align: center;
+            padding: 30px;
+            color: #636e72;
+            font-size: 16px;
+        }
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 14px 24px;
+            border-radius: 8px;
+            color: white;
+            font-weight: 600;
+            z-index: 1000;
+            animation: slideIn 0.3s ease;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+        .toast-success { background: #00b894; }
+        .toast-error { background: #e17055; }
+        @keyframes slideIn {
+            from { transform: translateX(100px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #636e72;
         }
     </style>
 </head>
@@ -191,27 +220,13 @@
     <div class="container">
         <h1>🛍️ Store Admin Panel</h1>
         
-        <!-- Stats -->
         <div class="stats" id="stats">
-            <div class="stat-card">
-                <h3>Total Products</h3>
-                <div class="number" id="totalProducts">0</div>
-            </div>
-            <div class="stat-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
-                <h3>Total Orders</h3>
-                <div class="number" id="totalOrders">0</div>
-            </div>
-            <div class="stat-card" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
-                <h3>Pending Orders</h3>
-                <div class="number" id="pendingOrders">0</div>
-            </div>
-            <div class="stat-card" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);">
-                <h3>Revenue</h3>
-                <div class="number" id="totalRevenue">Rs. 0</div>
-            </div>
+            <div class="stat-card"><h3>📦 Products</h3><div class="number" id="totalProducts">0</div></div>
+            <div class="stat-card"><h3>📋 Orders</h3><div class="number" id="totalOrders">0</div></div>
+            <div class="stat-card"><h3>⏳ Pending</h3><div class="number" id="pendingOrders">0</div></div>
+            <div class="stat-card"><h3>💰 Revenue</h3><div class="number" id="totalRevenue">Rs. 0</div></div>
         </div>
 
-        <!-- Tabs -->
         <div class="tabs">
             <button class="tab active" onclick="showTab('products')">📦 Products</button>
             <button class="tab" onclick="showTab('orders')">📋 Orders</button>
@@ -221,11 +236,11 @@
         <!-- Products Tab -->
         <div id="tab-products" class="tab-content active">
             <div class="section">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <div class="flex-between">
                     <h2>📦 All Products</h2>
                     <input type="text" class="search-box" placeholder="Search products..." onkeyup="searchProducts(this.value)">
                 </div>
-                <div id="productList"></div>
+                <div id="productList"><div class="loading">Loading products...</div></div>
             </div>
         </div>
 
@@ -233,7 +248,7 @@
         <div id="tab-orders" class="tab-content">
             <div class="section">
                 <h2>📋 All Orders</h2>
-                <div id="orderList"></div>
+                <div id="orderList"><div class="loading">Loading orders...</div></div>
             </div>
         </div>
 
@@ -243,12 +258,12 @@
                 <h2>➕ Add New Product</h2>
                 <form id="productForm" onsubmit="addProduct(event)">
                     <div class="form-group">
-                        <label>Product Name</label>
-                        <input type="text" id="productName" required>
+                        <label>Product Name *</label>
+                        <input type="text" id="productName" required placeholder="Enter product name">
                     </div>
                     <div class="form-group">
-                        <label>Price (Rs.)</label>
-                        <input type="number" id="productPrice" required>
+                        <label>Price (Rs.) *</label>
+                        <input type="number" id="productPrice" required placeholder="Enter price">
                     </div>
                     <div class="form-group">
                         <label>Category</label>
@@ -262,55 +277,61 @@
                     </div>
                     <div class="form-group">
                         <label>Description</label>
-                        <textarea id="productDescription" rows="3"></textarea>
+                        <textarea id="productDescription" rows="3" placeholder="Product description"></textarea>
                     </div>
                     <div class="form-group">
-                        <label>Stock Quantity</label>
+                        <label>Stock Quantity *</label>
                         <input type="number" id="productStock" value="10" required>
                     </div>
-                    <button type="submit" class="btn">➕ Add Product</button>
+                    <button type="submit" class="btn btn-primary">➕ Add Product</button>
                 </form>
             </div>
         </div>
     </div>
 
     <script>
-        // API BASE URL
         const API_URL = window.location.origin;
+        let productSearchTimeout;
 
-        // ============================================
-        // TABS
-        // ============================================
         function showTab(tab) {
             document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
             document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
             document.getElementById(`tab-${tab}`).classList.add('active');
             document.querySelector(`.tab[onclick="showTab('${tab}')"]`).classList.add('active');
-            
             if (tab === 'products') loadProducts();
             if (tab === 'orders') loadOrders();
         }
 
-        // ============================================
-        // LOAD PRODUCTS
-        // ============================================
+        function showToast(message, type = 'success') {
+            const existing = document.querySelector('.toast');
+            if (existing) existing.remove();
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 3500);
+        }
+
         async function loadProducts() {
             try {
                 const res = await fetch(`${API_URL}/api/store/products`);
                 const data = await res.json();
                 if (data.success) {
                     renderProducts(data.products);
-                    updateStats(data);
+                    updateStats(data.stats);
+                } else {
+                    document.getElementById('productList').innerHTML = '<div class="empty-msg">❌ Failed to load products</div>';
                 }
             } catch (error) {
                 console.error('Error loading products:', error);
+                document.getElementById('productList').innerHTML = '<div class="empty-msg">❌ Error loading products</div>';
             }
         }
 
         function renderProducts(products) {
             const container = document.getElementById('productList');
-            if (products.length === 0) {
-                container.innerHTML = '<p>No products available.</p>';
+            if (!products || products.length === 0) {
+                container.innerHTML = '<div class="empty-msg">📭 No products available</div>';
                 return;
             }
 
@@ -320,46 +341,43 @@
                     <th>Price</th>
                     <th>Category</th>
                     <th>Stock</th>
-                    <th>Actions</th>
+                    <th>Action</th>
                 </tr></thead><tbody>`;
 
             for (const p of products) {
-                html += `<tr>
+                html += `<tr data-name="${p.name.toLowerCase()}">
                     <td><strong>${p.name}</strong></td>
                     <td>Rs. ${p.price.toLocaleString()}</td>
                     <td>${p.category}</td>
                     <td>${p.stock}</td>
                     <td>
-                        <div class="actions">
-                            <button class="delete-btn" onclick="deleteProduct('${p.id}')">🗑️</button>
-                        </div>
+                        <button class="btn btn-danger" style="padding:4px 12px;font-size:12px;" onclick="deleteProduct('${p.id}')">🗑️ Delete</button>
                     </td>
                 </tr>`;
             }
-
             html += `</tbody></table>`;
             container.innerHTML = html;
         }
 
-        // ============================================
-        // LOAD ORDERS
-        // ============================================
         async function loadOrders() {
             try {
                 const res = await fetch(`${API_URL}/api/store/orders`);
                 const data = await res.json();
                 if (data.success) {
                     renderOrders(data.orders);
+                } else {
+                    document.getElementById('orderList').innerHTML = '<div class="empty-msg">❌ Failed to load orders</div>';
                 }
             } catch (error) {
                 console.error('Error loading orders:', error);
+                document.getElementById('orderList').innerHTML = '<div class="empty-msg">❌ Error loading orders</div>';
             }
         }
 
         function renderOrders(orders) {
             const container = document.getElementById('orderList');
-            if (orders.length === 0) {
-                container.innerHTML = '<p>No orders yet.</p>';
+            if (!orders || orders.length === 0) {
+                container.innerHTML = '<div class="empty-msg">📭 No orders yet</div>';
                 return;
             }
 
@@ -368,21 +386,23 @@
                     <th>Order ID</th>
                     <th>Customer</th>
                     <th>Phone</th>
+                    <th>Items</th>
                     <th>Total</th>
                     <th>Status</th>
-                    <th>Actions</th>
+                    <th>Action</th>
                 </tr></thead><tbody>`;
 
             for (const o of orders) {
-                const statusClass = `status-${o.status.toLowerCase()}`;
+                const itemsCount = o.items ? o.items.length : 0;
                 html += `<tr>
                     <td><strong>${o.id}</strong></td>
-                    <td>${o.name}</td>
-                    <td>${o.phone}</td>
-                    <td>Rs. ${o.totalAmount.toLocaleString()}</td>
-                    <td><span class="status-badge ${statusClass}">${o.status}</span></td>
+                    <td>${o.name || 'N/A'}</td>
+                    <td>${o.phone || 'N/A'}</td>
+                    <td>${itemsCount}</td>
+                    <td>Rs. ${(o.totalAmount || 0).toLocaleString()}</td>
+                    <td><span class="status-badge status-${o.status}">${o.status}</span></td>
                     <td>
-                        <select onchange="updateOrderStatus('${o.id}', this.value)" style="padding: 5px; border-radius: 4px; border: 1px solid #ddd;">
+                        <select class="status-select" onchange="updateOrderStatus('${o.id}', this.value)">
                             <option value="Pending" ${o.status === 'Pending' ? 'selected' : ''}>Pending</option>
                             <option value="Processing" ${o.status === 'Processing' ? 'selected' : ''}>Processing</option>
                             <option value="Shipped" ${o.status === 'Shipped' ? 'selected' : ''}>Shipped</option>
@@ -392,24 +412,30 @@
                     </td>
                 </tr>`;
             }
-
             html += `</tbody></table>`;
             container.innerHTML = html;
         }
 
-        // ============================================
-        // ADD PRODUCT
-        // ============================================
         async function addProduct(event) {
             event.preventDefault();
-            
+            const btn = event.target.querySelector('button[type="submit"]');
+            btn.textContent = '⏳ Adding...';
+            btn.disabled = true;
+
             const product = {
-                name: document.getElementById('productName').value,
+                name: document.getElementById('productName').value.trim(),
                 price: parseInt(document.getElementById('productPrice').value),
                 category: document.getElementById('productCategory').value,
-                description: document.getElementById('productDescription').value,
+                description: document.getElementById('productDescription').value.trim(),
                 stock: parseInt(document.getElementById('productStock').value)
             };
+
+            if (!product.name || !product.price) {
+                showToast('❌ Name and price are required!', 'error');
+                btn.textContent = '➕ Add Product';
+                btn.disabled = false;
+                return;
+            }
 
             try {
                 const res = await fetch(`${API_URL}/api/store/products`, {
@@ -418,46 +444,42 @@
                     body: JSON.stringify(product)
                 });
                 const data = await res.json();
-                
                 if (data.success) {
-                    alert('✅ Product added successfully!');
+                    showToast('✅ Product added successfully!');
                     document.getElementById('productForm').reset();
+                    document.getElementById('productStock').value = 10;
                     loadProducts();
                     showTab('products');
                 } else {
-                    alert('❌ Failed to add product: ' + data.message);
+                    showToast('❌ ' + (data.message || 'Failed to add product'), 'error');
                 }
             } catch (error) {
                 console.error('Error adding product:', error);
-                alert('❌ Error adding product');
+                showToast('❌ Error adding product', 'error');
             }
+            btn.textContent = '➕ Add Product';
+            btn.disabled = false;
         }
 
-        // ============================================
-        // DELETE PRODUCT
-        // ============================================
         async function deleteProduct(productId) {
             if (!confirm('Are you sure you want to delete this product?')) return;
-            
             try {
                 const res = await fetch(`${API_URL}/api/store/products/${productId}`, {
                     method: 'DELETE'
                 });
                 const data = await res.json();
                 if (data.success) {
-                    alert('✅ Product deleted!');
+                    showToast('✅ Product deleted!');
                     loadProducts();
                 } else {
-                    alert('❌ Failed to delete product');
+                    showToast('❌ Failed to delete product', 'error');
                 }
             } catch (error) {
                 console.error('Error deleting product:', error);
+                showToast('❌ Error deleting product', 'error');
             }
         }
 
-        // ============================================
-        // UPDATE ORDER STATUS
-        // ============================================
         async function updateOrderStatus(orderId, status) {
             try {
                 const res = await fetch(`${API_URL}/api/store/orders/${orderId}`, {
@@ -467,52 +489,62 @@
                 });
                 const data = await res.json();
                 if (data.success) {
+                    showToast(`✅ Order ${orderId} updated to ${status}`);
                     loadOrders();
-                    updateStats(data);
+                    if (data.stats) updateStats(data.stats);
+                } else {
+                    showToast('❌ Failed to update order', 'error');
                 }
             } catch (error) {
                 console.error('Error updating order:', error);
+                showToast('❌ Error updating order', 'error');
             }
         }
 
-        // ============================================
-        // UPDATE STATS
-        // ============================================
-        function updateStats(data) {
-            if (data.stats) {
-                document.getElementById('totalProducts').textContent = data.stats.totalProducts || 0;
-                document.getElementById('totalOrders').textContent = data.stats.totalOrders || 0;
-                document.getElementById('pendingOrders').textContent = data.stats.pendingOrders || 0;
-                document.getElementById('totalRevenue').textContent = `Rs. ${(data.stats.totalRevenue || 0).toLocaleString()}`;
+        function updateStats(stats) {
+            if (stats) {
+                document.getElementById('totalProducts').textContent = stats.totalProducts || 0;
+                document.getElementById('totalOrders').textContent = stats.totalOrders || 0;
+                document.getElementById('pendingOrders').textContent = stats.pendingOrders || 0;
+                document.getElementById('totalRevenue').textContent = `Rs. ${(stats.totalRevenue || 0).toLocaleString()}`;
             }
         }
 
-        // ============================================
-        // SEARCH PRODUCTS
-        // ============================================
         function searchProducts(query) {
-            const rows = document.querySelectorAll('#productList table tbody tr');
-            query = query.toLowerCase();
-            for (const row of rows) {
-                const text = row.textContent.toLowerCase();
-                row.style.display = text.includes(query) ? '' : 'none';
-            }
+            clearTimeout(productSearchTimeout);
+            productSearchTimeout = setTimeout(() => {
+                const rows = document.querySelectorAll('#productList table tbody tr');
+                const q = query.toLowerCase().trim();
+                let visible = 0;
+                for (const row of rows) {
+                    const name = row.getAttribute('data-name') || '';
+                    if (!q || name.includes(q)) {
+                        row.style.display = '';
+                        visible++;
+                    } else {
+                        row.style.display = 'none';
+                    }
+                }
+                const container = document.getElementById('productList');
+                const table = container.querySelector('table');
+                if (visible === 0 && q) {
+                    const msg = document.createElement('div');
+                    msg.className = 'empty-msg';
+                    msg.textContent = '🔍 No products found matching "' + q + '"';
+                    container.appendChild(msg);
+                } else {
+                    const existing = container.querySelector('.empty-msg');
+                    if (existing && !existing.closest('table')) existing.remove();
+                }
+            }, 300);
         }
 
-        // ============================================
-        // INIT
-        // ============================================
+        // Auto refresh
         loadProducts();
         loadOrders();
-
-        // Auto refresh every 30 seconds
         setInterval(() => {
-            if (document.getElementById('tab-products').classList.contains('active')) {
-                loadProducts();
-            }
-            if (document.getElementById('tab-orders').classList.contains('active')) {
-                loadOrders();
-            }
+            if (document.getElementById('tab-products').classList.contains('active')) loadProducts();
+            if (document.getElementById('tab-orders').classList.contains('active')) loadOrders();
         }, 30000);
     </script>
 </body>
