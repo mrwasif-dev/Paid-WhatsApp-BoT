@@ -30,7 +30,7 @@ const wasi_port = process.env.PORT || 3000;
 const QRCode = require('qrcode');
 
 // ============================================================
-// STORE SYSTEM - مکمل اسٹور سسٹم
+// STORE SYSTEM - مکمل اسٹور سسٹم (FIXED)
 // ============================================================
 
 const STORE_FILE = path.join(__dirname, 'storeData.json');
@@ -55,9 +55,8 @@ function loadStoreData() {
                     name: 'iPhone 15 Pro',
                     price: 350000,
                     category: 'Electronics',
-                    description: 'Latest iPhone with A17 chip',
+                    description: 'Latest iPhone with A17 chip, 256GB storage',
                     stock: 10,
-                    image: '',
                     createdAt: new Date().toISOString()
                 },
                 {
@@ -65,9 +64,17 @@ function loadStoreData() {
                     name: 'Samsung Galaxy S24',
                     price: 280000,
                     category: 'Electronics',
-                    description: 'Premium Android phone',
+                    description: 'Premium Android phone with AI features',
                     stock: 15,
-                    image: '',
+                    createdAt: new Date().toISOString()
+                },
+                {
+                    id: 'p3',
+                    name: 'Black Car Perfume',
+                    price: 5000,
+                    category: 'Accessories',
+                    description: 'Premium car air freshener',
+                    stock: 3,
                     createdAt: new Date().toISOString()
                 }
             ];
@@ -237,7 +244,7 @@ function getStats() {
 }
 
 // ============================================================
-// BUTTONS GENERATOR
+// BUTTONS GENERATOR - FIXED for WhatsApp
 // ============================================================
 
 function createProductButtons(products) {
@@ -245,13 +252,13 @@ function createProductButtons(products) {
     for (const p of products) {
         buttons.push({
             buttonId: `view_${p.id}`,
-            buttonText: { displayText: `📱 ${p.name} - Rs.${p.price.toLocaleString()}` },
+            buttonText: { displayText: `📱 ${p.name}` },
             type: 1
         });
     }
     buttons.push({
         buttonId: 'view_cart',
-        buttonText: { displayText: '🛒 View Cart' },
+        buttonText: { displayText: '🛒 My Cart' },
         type: 1
     });
     buttons.push({
@@ -270,13 +277,18 @@ function createProductDetailButtons(productId) {
             type: 1
         },
         {
+            buttonId: `view_${productId}_qty2`,
+            buttonText: { displayText: '➕ Add 2x' },
+            type: 1
+        },
+        {
             buttonId: 'back_to_products',
-            buttonText: { displayText: '⬅️ Back to Products' },
+            buttonText: { displayText: '⬅️ Back' },
             type: 1
         },
         {
             buttonId: 'view_cart',
-            buttonText: { displayText: '🛒 View Cart' },
+            buttonText: { displayText: '🛒 Cart' },
             type: 1
         }
     ];
@@ -332,6 +344,26 @@ function createOrderButtons() {
     ];
 }
 
+function createMainMenuButtons() {
+    return [
+        {
+            buttonId: 'back_to_products',
+            buttonText: { displayText: '🛍️ Shop Now' },
+            type: 1
+        },
+        {
+            buttonId: 'view_cart',
+            buttonText: { displayText: '🛒 My Cart' },
+            type: 1
+        },
+        {
+            buttonId: 'my_orders',
+            buttonText: { displayText: '📦 My Orders' },
+            type: 1
+        }
+    ];
+}
+
 // ============================================================
 // MESSAGE GENERATORS
 // ============================================================
@@ -345,7 +377,7 @@ function generateProductListMessage(products) {
     }
 
     let text = '🛍️ *Welcome to Our Store!*\n\n';
-    text += 'Here are our available products:\n\n';
+    text += '🛒 *Browse our collection:*\n\n';
     
     for (const p of products) {
         text += `📱 *${p.name}*\n`;
@@ -355,7 +387,7 @@ function generateProductListMessage(products) {
         text += `─────────────\n\n`;
     }
     
-    text += 'Tap a button below to view product details.';
+    text += '👇 *Tap a button below to view product details.*';
 
     return { text, buttons: createProductButtons(products) };
 }
@@ -366,7 +398,7 @@ function generateProductDetailMessage(product) {
     text += `💰 Price: Rs. ${product.price.toLocaleString()}\n`;
     text += `📂 Category: ${product.category}\n`;
     text += `📦 Stock: ${product.stock}\n\n`;
-    text += 'Tap the buttons below to add to cart or go back.';
+    text += '👇 *Tap a button below:*';
 
     return { text, buttons: createProductDetailButtons(product.id) };
 }
@@ -398,13 +430,13 @@ function generateCartMessage(userJid) {
             total += itemTotal;
             text += `${index}. *${product.name}*\n`;
             text += `   ${item.quantity}x Rs. ${product.price.toLocaleString()} = Rs. ${itemTotal.toLocaleString()}\n`;
-            text += `   ➖ Remove: \`remove_${product.id}\`\n\n`;
+            text += `   ➖ Remove: type \`remove_${product.id}\`\n\n`;
             index++;
         }
     }
     
     text += `💰 *Total: Rs. ${total.toLocaleString()}*\n\n`;
-    text += 'Tap Checkout to proceed or Continue Shopping to add more items.';
+    text += '👇 *Tap a button below:*';
 
     return { text, buttons: createCartButtons() };
 }
@@ -442,8 +474,9 @@ function generateCheckoutMessage(userJid) {
         if (!temp.address) text += '• Delivery address\n';
         text += '\n_Type your information one by one:_\n';
         text += '1️⃣ Name\n2️⃣ Phone\n3️⃣ Address\n4️⃣ Notes (optional)';
+        text += '\n\n👇 *Tap Confirm when ready:*';
     } else {
-        text += '\n✅ All information provided!\nTap Confirm Order to place your order.';
+        text += '\n✅ All information provided!\n👇 *Tap Confirm Order to place your order.*';
     }
 
     return { text, buttons: createCheckoutButtons() };
@@ -466,7 +499,7 @@ function generateOrderConfirmationMessage(order) {
         }
     }
     
-    text += '\n📦 We\'ll contact you soon for delivery confirmation!';
+    text += '\n📦 We\'ll contact you soon for delivery confirmation!\n\n👇 *Tap a button below:*';
     
     return { text, buttons: createOrderButtons() };
 }
@@ -503,6 +536,8 @@ function generateOrderListMessage(userJid) {
         text += `─────────────\n\n`;
     }
     
+    text += '👇 *Tap a button below:*';
+    
     return {
         text,
         buttons: [
@@ -510,19 +545,25 @@ function generateOrderListMessage(userJid) {
                 buttonId: 'back_to_products',
                 buttonText: { displayText: '🛍️ Continue Shopping' },
                 type: 1
+            },
+            {
+                buttonId: 'view_cart',
+                buttonText: { displayText: '🛒 View Cart' },
+                type: 1
             }
         ]
     };
 }
 
 // ============================================================
-// STORE INTERACTION HANDLER
+// STORE INTERACTION HANDLER - FIXED
 // ============================================================
 
 async function handleStoreInteraction(sock, from, message) {
     let buttonId = null;
     let text = null;
 
+    // Check for button response
     if (message?.buttonsResponseMessage?.selectedButtonId) {
         buttonId = message.buttonsResponseMessage.selectedButtonId;
     } else if (message?.templateButtonReplyMessage?.selectedId) {
@@ -557,8 +598,22 @@ async function handleButtonClick(sock, from, buttonId) {
     // View Product
     if (buttonId.startsWith('view_')) {
         const productId = buttonId.replace('view_', '');
-        const product = getProductById(productId);
+        // Check if it's a quantity variant
+        if (productId.endsWith('_qty2')) {
+            const actualId = productId.replace('_qty2', '');
+            const product = getProductById(actualId);
+            if (product && product.stock >= 2) {
+                addToTempOrder(from, actualId, 2);
+                await sock.sendMessage(from, { text: `✅ Added 2x ${product.name} to cart!` });
+                const { text: detailText, buttons } = generateProductDetailMessage(product);
+                await sendButtonMessage(sock, from, detailText, buttons);
+            } else {
+                await sock.sendMessage(from, { text: '❌ Not enough stock!' });
+            }
+            return true;
+        }
         
+        const product = getProductById(productId);
         if (!product || product.stock <= 0) {
             await sock.sendMessage(from, { text: '❌ This product is out of stock!' });
             return true;
@@ -569,7 +624,7 @@ async function handleButtonClick(sock, from, buttonId) {
         return true;
     }
 
-    // Add to Cart
+    // Add to Cart (1x)
     if (buttonId.startsWith('add_')) {
         const productId = buttonId.replace('add_', '');
         const product = getProductById(productId);
@@ -586,19 +641,6 @@ async function handleButtonClick(sock, from, buttonId) {
             await sendButtonMessage(sock, from, detailText, buttons);
         } else {
             await sock.sendMessage(from, { text: '❌ Could not add product to cart.' });
-        }
-        return true;
-    }
-
-    // Remove from Cart (via text command)
-    if (buttonId.startsWith('remove_')) {
-        const productId = buttonId.replace('remove_', '');
-        const product = getProductById(productId);
-        const success = removeFromTempOrder(from, productId);
-        if (success) {
-            await sock.sendMessage(from, { text: `✅ Removed ${product?.name || 'item'} from cart!` });
-            const { text: cartText, buttons } = generateCartMessage(from);
-            await sendButtonMessage(sock, from, cartText, buttons);
         }
         return true;
     }
@@ -688,23 +730,24 @@ async function handleTextInput(sock, from, text) {
         return true;
     }
     
+    // Order information collection
     if (!temp.name && !temp.phone && !temp.address) {
         temp.name = text;
         temp.step = 'phone';
         saveStoreData();
-        await sock.sendMessage(from, { text: `✅ Name saved: ${temp.name}\n\nNow please send your *Phone Number*:` });
+        await sock.sendMessage(from, { text: `✅ Name saved: ${temp.name}\n\n📱 Now please send your *Phone Number*:` });
         return true;
     } else if (temp.name && !temp.phone) {
         temp.phone = text;
         temp.step = 'address';
         saveStoreData();
-        await sock.sendMessage(from, { text: `✅ Phone saved: ${temp.phone}\n\nNow please send your *Delivery Address*:` });
+        await sock.sendMessage(from, { text: `✅ Phone saved: ${temp.phone}\n\n📍 Now please send your *Delivery Address*:` });
         return true;
     } else if (temp.name && temp.phone && !temp.address) {
         temp.address = text;
         temp.step = 'notes';
         saveStoreData();
-        await sock.sendMessage(from, { text: `✅ Address saved: ${temp.address}\n\nOptional: Send any *Notes* for your order (or type "skip")` });
+        await sock.sendMessage(from, { text: `✅ Address saved: ${temp.address}\n\n📝 Optional: Send any *Notes* for your order (or type "skip")` });
         return true;
     } else if (temp.name && temp.phone && temp.address && !temp.notes) {
         if (text.toLowerCase() !== 'skip') {
@@ -720,17 +763,31 @@ async function handleTextInput(sock, from, text) {
     return false;
 }
 
+// ============================================================
+// SEND BUTTON MESSAGE - FIXED for WhatsApp
+// ============================================================
+
 async function sendButtonMessage(sock, to, text, buttons) {
     try {
+        if (!buttons || buttons.length === 0) {
+            await sock.sendMessage(to, { text: text });
+            return;
+        }
+
+        // Create button message
         const buttonMessage = {
             text: text,
             buttons: buttons,
             headerType: 1
         };
+        
         await sock.sendMessage(to, buttonMessage);
+        console.log(`✅ Button message sent to ${to} with ${buttons.length} buttons`);
+        
     } catch (error) {
         console.error('Error sending button message:', error);
-        await sock.sendMessage(to, { text: text });
+        // Fallback - send plain text
+        await sock.sendMessage(to, { text: text + '\n\n⚠️ Buttons not supported, please type commands.' });
     }
 }
 
@@ -989,15 +1046,13 @@ async function startSession(sessionId) {
             sessionState.isConnected = true;
             sessionState.qr = null;
             console.log(`✅ ${sessionId}: Connected to WhatsApp`);
-            
-            // Send welcome message to new users when they first message
         }
     });
 
     wasi_sock.ev.on('creds.update', saveCreds);
 
     // ============================================================
-    // MESSAGE HANDLER - مکمل اسٹور کے ساتھ
+    // MESSAGE HANDLER - مکمل اسٹور کے ساتھ (FIXED)
     // ============================================================
 
     wasi_sock.ev.on('messages.upsert', async wasi_m => {
@@ -1009,18 +1064,25 @@ async function startSession(sessionId) {
 
         if (isFromMe) return;
 
+        // Check if user is in temp order flow (collecting info)
+        const temp = getTempOrder(from);
+        const isInOrderFlow = temp && (temp.name || temp.phone || temp.address || temp.step !== 'browsing');
+
         // STORE INTERACTION - بٹن اور ٹیکسٹ ان پٹ
         const storeHandled = await handleStoreInteraction(wasi_sock, from, wasi_msg.message);
         if (storeHandled) return;
 
-        // اگر کوئی اسٹور انٹریکشن نہیں تھی تو ڈیفالٹ پراڈکٹ لسٹ بھیجیں
-        // یہ صرف پہلی بار کے لیے ہے جب یوزر بوٹ کو میسج کرے
-        const products = getAvailableProducts();
-        const { text, buttons } = generateProductListMessage(products);
-        if (buttons && buttons.length > 0) {
-            await sendButtonMessage(wasi_sock, from, text, buttons);
-        } else {
-            await wasi_sock.sendMessage(from, { text: '🛍️ Welcome to our store! No products available right now.' });
+        // اگر کوئی اسٹور انٹریکشن نہیں تھی اور یوزر آرڈر فل میں نہیں ہے تو مین مینو بھیجیں
+        if (!isInOrderFlow) {
+            const products = getAvailableProducts();
+            if (products.length > 0) {
+                const { text, buttons } = generateProductListMessage(products);
+                await sendButtonMessage(wasi_sock, from, text, buttons);
+            } else {
+                await wasi_sock.sendMessage(from, { 
+                    text: '🛍️ Welcome to our store!\n\nNo products available right now. Please check back later.' 
+                });
+            }
         }
     });
 }
