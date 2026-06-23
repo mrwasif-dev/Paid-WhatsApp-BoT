@@ -29,300 +29,907 @@ const wasi_port = process.env.PORT || 3000;
 
 const QRCode = require('qrcode');
 
-// -----------------------------------------------------------------------------
+// ============================================================
+// STORE SYSTEM - مکمل اسٹور سسٹم
+// ============================================================
+
+const STORE_FILE = path.join(__dirname, 'storeData.json');
+
+let storeData = {
+    products: [],
+    orders: [],
+    tempOrders: {},
+    categories: ['Electronics', 'Clothing', 'Books', 'Accessories', 'Other']
+};
+
+function loadStoreData() {
+    try {
+        if (fs.existsSync(STORE_FILE)) {
+            const data = fs.readFileSync(STORE_FILE, 'utf8');
+            storeData = JSON.parse(data);
+            console.log('✅ Store data loaded');
+        } else {
+            storeData.products = [
+                {
+                    id: 'p1',
+                    name: 'iPhone 15 Pro',
+                    price: 350000,
+                    category: 'Electronics',
+                    description: 'Latest iPhone with A17 chip',
+                    stock: 10,
+                    image: '',
+                    createdAt: new Date().toISOString()
+                },
+                {
+                    id: 'p2',
+                    name: 'Samsung Galaxy S24',
+                    price: 280000,
+                    category: 'Electronics',
+                    description: 'Premium Android phone',
+                    stock: 15,
+                    image: '',
+                    createdAt: new Date().toISOString()
+                }
+            ];
+            storeData.orders = [];
+            storeData.tempOrders = {};
+            saveStoreData();
+        }
+    } catch (error) {
+        console.error('Error loading store:', error);
+    }
+}
+
+function saveStoreData() {
+    try {
+        fs.writeFileSync(STORE_FILE, JSON.stringify(storeData, null, 2));
+        return true;
+    } catch (error) {
+        console.error('Error saving store:', error);
+        return false;
+    }
+}
+
+function getAvailableProducts() {
+    return storeData.products.filter(p => p.stock > 0);
+}
+
+function getProductById(id) {
+    return storeData.products.find(p => p.id === id);
+}
+
+function addProduct(product) {
+    product.id = `p${Date.now()}`;
+    product.createdAt = new Date().toISOString();
+    storeData.products.push(product);
+    saveStoreData();
+    return product;
+}
+
+function deleteProduct(id) {
+    storeData.products = storeData.products.filter(p => p.id !== id);
+    saveStoreData();
+    return true;
+}
+
+function getTempOrder(userJid) {
+    if (!storeData.tempOrders[userJid]) {
+        storeData.tempOrders[userJid] = {
+            products: [],
+            total: 0,
+            step: 'browsing',
+            address: '',
+            phone: '',
+            name: '',
+            notes: ''
+        };
+    }
+    return storeData.tempOrders[userJid];
+}
+
+function addToTempOrder(userJid, productId, quantity = 1) {
+    const product = getProductById(productId);
+    if (!product || product.stock < quantity) return false;
+
+    const temp = getTempOrder(userJid);
+    const existing = temp.products.find(p => p.productId === productId);
+    
+    if (existing) {
+        existing.quantity += quantity;
+    } else {
+        temp.products.push({ productId, quantity, price: product.price });
+    }
+    
+    temp.total = temp.products.reduce((sum, p) => {
+        const prod = getProductById(p.productId);
+        return sum + (prod ? prod.price * p.quantity : 0);
+    }, 0);
+    
+    saveStoreData();
+    return true;
+}
+
+function removeFromTempOrder(userJid, productId) {
+    const temp = getTempOrder(userJid);
+    temp.products = temp.products.filter(p => p.productId !== productId);
+    temp.total = temp.products.reduce((sum, p) => {
+        const prod = getProductById(p.productId);
+        return sum + (prod ? prod.price * p.quantity : 0);
+    }, 0);
+    saveStoreData();
+    return true;
+}
+
+function clearTempOrder(userJid) {
+    storeData.tempOrders[userJid] = null;
+    saveStoreData();
+}
+
+function placeOrder(userJid) {
+    const temp = getTempOrder(userJid);
+    if (temp.products.length === 0) return null;
+    if (!temp.address || !temp.phone || !temp.name) return null;
+
+    const order = {
+        id: `ORD${Date.now()}`,
+        userId: userJid,
+        name: temp.name,
+        phone: temp.phone,
+        address: temp.address,
+        notes: temp.notes || '',
+        items: temp.products.map(p => ({
+            productId: p.productId,
+            quantity: p.quantity,
+            price: p.price
+        })),
+        totalAmount: temp.total,
+        status: 'Pending',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+    };
+
+    for (const item of temp.products) {
+        const product = getProductById(item.productId);
+        if (product) {
+            product.stock -= item.quantity;
+        }
+    }
+
+    storeData.orders.push(order);
+    clearTempOrder(userJid);
+    saveStoreData();
+    return order;
+}
+
+function getUserOrders(userJid) {
+    return storeData.orders.filter(o => o.userId === userJid);
+}
+
+function getOrderById(orderId) {
+    return storeData.orders.find(o => o.id === orderId);
+}
+
+function updateOrderStatus(orderId, status) {
+    const order = getOrderById(orderId);
+    if (order) {
+        order.status = status;
+        order.updatedAt = new Date().toISOString();
+        saveStoreData();
+        return order;
+    }
+    return null;
+}
+
+function getAllOrders() {
+    return storeData.orders;
+}
+
+function getStats() {
+    const products = getAvailableProducts();
+    const orders = getAllOrders();
+    return {
+        totalProducts: products.length,
+        totalOrders: orders.length,
+        pendingOrders: orders.filter(o => o.status === 'Pending' || o.status === 'Processing').length,
+        totalRevenue: orders.filter(o => o.status === 'Delivered' || o.status === 'Shipped')
+            .reduce((sum, o) => sum + o.totalAmount, 0)
+    };
+}
+
+// ============================================================
+// BUTTONS GENERATOR
+// ============================================================
+
+function createProductButtons(products) {
+    const buttons = [];
+    for (const p of products) {
+        buttons.push({
+            buttonId: `view_${p.id}`,
+            buttonText: { displayText: `📱 ${p.name} - Rs.${p.price.toLocaleString()}` },
+            type: 1
+        });
+    }
+    buttons.push({
+        buttonId: 'view_cart',
+        buttonText: { displayText: '🛒 View Cart' },
+        type: 1
+    });
+    buttons.push({
+        buttonId: 'my_orders',
+        buttonText: { displayText: '📦 My Orders' },
+        type: 1
+    });
+    return buttons;
+}
+
+function createProductDetailButtons(productId) {
+    return [
+        {
+            buttonId: `add_${productId}`,
+            buttonText: { displayText: '🛒 Add to Cart' },
+            type: 1
+        },
+        {
+            buttonId: 'back_to_products',
+            buttonText: { displayText: '⬅️ Back to Products' },
+            type: 1
+        },
+        {
+            buttonId: 'view_cart',
+            buttonText: { displayText: '🛒 View Cart' },
+            type: 1
+        }
+    ];
+}
+
+function createCartButtons() {
+    return [
+        {
+            buttonId: 'checkout',
+            buttonText: { displayText: '✅ Checkout' },
+            type: 1
+        },
+        {
+            buttonId: 'clear_cart',
+            buttonText: { displayText: '🗑️ Clear Cart' },
+            type: 1
+        },
+        {
+            buttonId: 'back_to_products',
+            buttonText: { displayText: '⬅️ Continue Shopping' },
+            type: 1
+        }
+    ];
+}
+
+function createCheckoutButtons() {
+    return [
+        {
+            buttonId: 'confirm_order',
+            buttonText: { displayText: '✅ Confirm Order' },
+            type: 1
+        },
+        {
+            buttonId: 'back_to_cart',
+            buttonText: { displayText: '⬅️ Back to Cart' },
+            type: 1
+        }
+    ];
+}
+
+function createOrderButtons() {
+    return [
+        {
+            buttonId: 'back_to_products',
+            buttonText: { displayText: '🛍️ Continue Shopping' },
+            type: 1
+        },
+        {
+            buttonId: 'view_cart',
+            buttonText: { displayText: '🛒 View Cart' },
+            type: 1
+        }
+    ];
+}
+
+// ============================================================
+// MESSAGE GENERATORS
+// ============================================================
+
+function generateProductListMessage(products) {
+    if (products.length === 0) {
+        return {
+            text: '🛍️ *No products available right now!*\n\nPlease check back later.',
+            buttons: []
+        };
+    }
+
+    let text = '🛍️ *Welcome to Our Store!*\n\n';
+    text += 'Here are our available products:\n\n';
+    
+    for (const p of products) {
+        text += `📱 *${p.name}*\n`;
+        text += `💰 Rs. ${p.price.toLocaleString()}\n`;
+        text += `📂 ${p.category}\n`;
+        text += `📦 Stock: ${p.stock}\n`;
+        text += `─────────────\n\n`;
+    }
+    
+    text += 'Tap a button below to view product details.';
+
+    return { text, buttons: createProductButtons(products) };
+}
+
+function generateProductDetailMessage(product) {
+    let text = `🛍️ *${product.name}*\n\n`;
+    text += `📝 ${product.description || 'No description'}\n\n`;
+    text += `💰 Price: Rs. ${product.price.toLocaleString()}\n`;
+    text += `📂 Category: ${product.category}\n`;
+    text += `📦 Stock: ${product.stock}\n\n`;
+    text += 'Tap the buttons below to add to cart or go back.';
+
+    return { text, buttons: createProductDetailButtons(product.id) };
+}
+
+function generateCartMessage(userJid) {
+    const temp = getTempOrder(userJid);
+    
+    if (temp.products.length === 0) {
+        return {
+            text: '🛒 *Your cart is empty!*\n\nBrowse products and add items to your cart.',
+            buttons: [
+                {
+                    buttonId: 'back_to_products',
+                    buttonText: { displayText: '🛍️ Browse Products' },
+                    type: 1
+                }
+            ]
+        };
+    }
+
+    let text = '🛒 *Your Cart*\n\n';
+    let total = 0;
+    let index = 1;
+    
+    for (const item of temp.products) {
+        const product = getProductById(item.productId);
+        if (product) {
+            const itemTotal = product.price * item.quantity;
+            total += itemTotal;
+            text += `${index}. *${product.name}*\n`;
+            text += `   ${item.quantity}x Rs. ${product.price.toLocaleString()} = Rs. ${itemTotal.toLocaleString()}\n`;
+            text += `   ➖ Remove: \`remove_${product.id}\`\n\n`;
+            index++;
+        }
+    }
+    
+    text += `💰 *Total: Rs. ${total.toLocaleString()}*\n\n`;
+    text += 'Tap Checkout to proceed or Continue Shopping to add more items.';
+
+    return { text, buttons: createCartButtons() };
+}
+
+function generateCheckoutMessage(userJid) {
+    const temp = getTempOrder(userJid);
+    
+    if (temp.products.length === 0) {
+        return { text: '❌ Your cart is empty!', buttons: [] };
+    }
+
+    let text = '📝 *Order Summary*\n\n';
+    let total = 0;
+    
+    for (const item of temp.products) {
+        const product = getProductById(item.productId);
+        if (product) {
+            const itemTotal = product.price * item.quantity;
+            total += itemTotal;
+            text += `📱 ${product.name} x${item.quantity} = Rs. ${itemTotal.toLocaleString()}\n`;
+        }
+    }
+    
+    text += `\n💰 *Total: Rs. ${total.toLocaleString()}*\n\n`;
+    
+    if (temp.name) text += `👤 Name: ${temp.name}\n`;
+    if (temp.phone) text += `📱 Phone: ${temp.phone}\n`;
+    if (temp.address) text += `📍 Address: ${temp.address}\n`;
+    if (temp.notes) text += `📝 Notes: ${temp.notes}\n`;
+    
+    if (!temp.name || !temp.phone || !temp.address) {
+        text += '\n⚠️ *Please provide the following information:*\n';
+        if (!temp.name) text += '• Your full name\n';
+        if (!temp.phone) text += '• Phone number\n';
+        if (!temp.address) text += '• Delivery address\n';
+        text += '\n_Type your information one by one:_\n';
+        text += '1️⃣ Name\n2️⃣ Phone\n3️⃣ Address\n4️⃣ Notes (optional)';
+    } else {
+        text += '\n✅ All information provided!\nTap Confirm Order to place your order.';
+    }
+
+    return { text, buttons: createCheckoutButtons() };
+}
+
+function generateOrderConfirmationMessage(order) {
+    let text = '✅ *Order Placed Successfully!*\n\n';
+    text += `🆔 Order ID: *${order.id}*\n`;
+    text += `👤 Name: ${order.name}\n`;
+    text += `📱 Phone: ${order.phone}\n`;
+    text += `📍 Address: ${order.address}\n`;
+    text += `💰 Total: Rs. ${order.totalAmount.toLocaleString()}\n`;
+    text += `📊 Status: ${order.status}\n\n`;
+    text += '*Order Items:*\n';
+    
+    for (const item of order.items) {
+        const product = getProductById(item.productId);
+        if (product) {
+            text += `• ${product.name} x${item.quantity} = Rs. ${(item.price * item.quantity).toLocaleString()}\n`;
+        }
+    }
+    
+    text += '\n📦 We\'ll contact you soon for delivery confirmation!';
+    
+    return { text, buttons: createOrderButtons() };
+}
+
+function generateOrderListMessage(userJid) {
+    const orders = getUserOrders(userJid);
+    
+    if (orders.length === 0) {
+        return {
+            text: '📭 *No orders found*\n\nYou haven\'t placed any orders yet.',
+            buttons: [
+                {
+                    buttonId: 'back_to_products',
+                    buttonText: { displayText: '🛍️ Start Shopping' },
+                    type: 1
+                }
+            ]
+        };
+    }
+
+    let text = '📦 *Your Orders*\n\n';
+    for (const order of orders) {
+        const statusEmoji = {
+            'Pending': '⏳',
+            'Processing': '🔄',
+            'Shipped': '🚚',
+            'Delivered': '✅',
+            'Cancelled': '❌'
+        };
+        text += `${statusEmoji[order.status] || '📦'} *${order.id}*\n`;
+        text += `💰 Rs. ${order.totalAmount.toLocaleString()}\n`;
+        text += `📊 ${order.status}\n`;
+        text += `📅 ${new Date(order.createdAt).toLocaleDateString()}\n`;
+        text += `─────────────\n\n`;
+    }
+    
+    return {
+        text,
+        buttons: [
+            {
+                buttonId: 'back_to_products',
+                buttonText: { displayText: '🛍️ Continue Shopping' },
+                type: 1
+            }
+        ]
+    };
+}
+
+// ============================================================
+// STORE INTERACTION HANDLER
+// ============================================================
+
+async function handleStoreInteraction(sock, from, message) {
+    let buttonId = null;
+    let text = null;
+
+    if (message?.buttonsResponseMessage?.selectedButtonId) {
+        buttonId = message.buttonsResponseMessage.selectedButtonId;
+    } else if (message?.templateButtonReplyMessage?.selectedId) {
+        buttonId = message.templateButtonReplyMessage.selectedId;
+    } else if (message?.conversation) {
+        text = message.conversation.trim();
+    } else if (message?.extendedTextMessage?.text) {
+        text = message.extendedTextMessage.text.trim();
+    }
+
+    if (buttonId) {
+        return await handleButtonClick(sock, from, buttonId);
+    }
+
+    if (text) {
+        return await handleTextInput(sock, from, text);
+    }
+
+    return false;
+}
+
+async function handleButtonClick(sock, from, buttonId) {
+    console.log(`Button clicked: ${buttonId} from ${from}`);
+
+    // My Orders
+    if (buttonId === 'my_orders') {
+        const { text, buttons } = generateOrderListMessage(from);
+        await sendButtonMessage(sock, from, text, buttons);
+        return true;
+    }
+
+    // View Product
+    if (buttonId.startsWith('view_')) {
+        const productId = buttonId.replace('view_', '');
+        const product = getProductById(productId);
+        
+        if (!product || product.stock <= 0) {
+            await sock.sendMessage(from, { text: '❌ This product is out of stock!' });
+            return true;
+        }
+
+        const { text, buttons } = generateProductDetailMessage(product);
+        await sendButtonMessage(sock, from, text, buttons);
+        return true;
+    }
+
+    // Add to Cart
+    if (buttonId.startsWith('add_')) {
+        const productId = buttonId.replace('add_', '');
+        const product = getProductById(productId);
+        
+        if (!product || product.stock <= 0) {
+            await sock.sendMessage(from, { text: '❌ Product out of stock!' });
+            return true;
+        }
+
+        const success = addToTempOrder(from, productId, 1);
+        if (success) {
+            await sock.sendMessage(from, { text: `✅ Added 1x ${product.name} to cart!` });
+            const { text: detailText, buttons } = generateProductDetailMessage(product);
+            await sendButtonMessage(sock, from, detailText, buttons);
+        } else {
+            await sock.sendMessage(from, { text: '❌ Could not add product to cart.' });
+        }
+        return true;
+    }
+
+    // Remove from Cart (via text command)
+    if (buttonId.startsWith('remove_')) {
+        const productId = buttonId.replace('remove_', '');
+        const product = getProductById(productId);
+        const success = removeFromTempOrder(from, productId);
+        if (success) {
+            await sock.sendMessage(from, { text: `✅ Removed ${product?.name || 'item'} from cart!` });
+            const { text: cartText, buttons } = generateCartMessage(from);
+            await sendButtonMessage(sock, from, cartText, buttons);
+        }
+        return true;
+    }
+
+    // View Cart
+    if (buttonId === 'view_cart') {
+        const { text, buttons } = generateCartMessage(from);
+        await sendButtonMessage(sock, from, text, buttons);
+        return true;
+    }
+
+    // Checkout
+    if (buttonId === 'checkout') {
+        const temp = getTempOrder(from);
+        if (temp.products.length === 0) {
+            await sock.sendMessage(from, { text: '❌ Your cart is empty!' });
+            return true;
+        }
+        const { text, buttons } = generateCheckoutMessage(from);
+        await sendButtonMessage(sock, from, text, buttons);
+        return true;
+    }
+
+    // Back to Products
+    if (buttonId === 'back_to_products') {
+        const products = getAvailableProducts();
+        const { text, buttons } = generateProductListMessage(products);
+        await sendButtonMessage(sock, from, text, buttons);
+        return true;
+    }
+
+    // Clear Cart
+    if (buttonId === 'clear_cart') {
+        clearTempOrder(from);
+        await sock.sendMessage(from, { text: '🗑️ Cart cleared successfully!' });
+        const products = getAvailableProducts();
+        const { text, buttons } = generateProductListMessage(products);
+        await sendButtonMessage(sock, from, text, buttons);
+        return true;
+    }
+
+    // Back to Cart
+    if (buttonId === 'back_to_cart') {
+        const { text, buttons } = generateCartMessage(from);
+        await sendButtonMessage(sock, from, text, buttons);
+        return true;
+    }
+
+    // Confirm Order
+    if (buttonId === 'confirm_order') {
+        const temp = getTempOrder(from);
+        if (!temp.name || !temp.phone || !temp.address) {
+            await sock.sendMessage(from, { text: '❌ Please provide all required information: Name, Phone, Address' });
+            const { text: checkoutText, buttons } = generateCheckoutMessage(from);
+            await sendButtonMessage(sock, from, checkoutText, buttons);
+            return true;
+        }
+
+        const order = placeOrder(from);
+        if (order) {
+            const { text, buttons } = generateOrderConfirmationMessage(order);
+            await sendButtonMessage(sock, from, text, buttons);
+        } else {
+            await sock.sendMessage(from, { text: '❌ Failed to place order. Please try again.' });
+        }
+        return true;
+    }
+
+    return false;
+}
+
+async function handleTextInput(sock, from, text) {
+    const temp = getTempOrder(from);
+    
+    if (temp.products.length === 0) return false;
+    
+    // Check if it's a remove command
+    if (text.startsWith('remove_')) {
+        const productId = text.replace('remove_', '');
+        const product = getProductById(productId);
+        const success = removeFromTempOrder(from, productId);
+        if (success) {
+            await sock.sendMessage(from, { text: `✅ Removed ${product?.name || 'item'} from cart!` });
+            const { text: cartText, buttons } = generateCartMessage(from);
+            await sendButtonMessage(sock, from, cartText, buttons);
+        }
+        return true;
+    }
+    
+    if (!temp.name && !temp.phone && !temp.address) {
+        temp.name = text;
+        temp.step = 'phone';
+        saveStoreData();
+        await sock.sendMessage(from, { text: `✅ Name saved: ${temp.name}\n\nNow please send your *Phone Number*:` });
+        return true;
+    } else if (temp.name && !temp.phone) {
+        temp.phone = text;
+        temp.step = 'address';
+        saveStoreData();
+        await sock.sendMessage(from, { text: `✅ Phone saved: ${temp.phone}\n\nNow please send your *Delivery Address*:` });
+        return true;
+    } else if (temp.name && temp.phone && !temp.address) {
+        temp.address = text;
+        temp.step = 'notes';
+        saveStoreData();
+        await sock.sendMessage(from, { text: `✅ Address saved: ${temp.address}\n\nOptional: Send any *Notes* for your order (or type "skip")` });
+        return true;
+    } else if (temp.name && temp.phone && temp.address && !temp.notes) {
+        if (text.toLowerCase() !== 'skip') {
+            temp.notes = text;
+        }
+        temp.step = 'confirm';
+        saveStoreData();
+        const { text: checkoutText, buttons } = generateCheckoutMessage(from);
+        await sendButtonMessage(sock, from, checkoutText, buttons);
+        return true;
+    }
+
+    return false;
+}
+
+async function sendButtonMessage(sock, to, text, buttons) {
+    try {
+        const buttonMessage = {
+            text: text,
+            buttons: buttons,
+            headerType: 1
+        };
+        await sock.sendMessage(to, buttonMessage);
+    } catch (error) {
+        console.error('Error sending button message:', error);
+        await sock.sendMessage(to, { text: text });
+    }
+}
+
+// ============================================================
 // SESSION STATE
-// -----------------------------------------------------------------------------
+// ============================================================
+
 const sessions = new Map();
 
 // Middleware
 wasi_app.use(express.json());
 wasi_app.use(express.static(path.join(__dirname, 'public')));
 
+// ============================================================
+// STORE API ROUTES
+// ============================================================
+
+// GET - تمام پروڈکٹس
+wasi_app.get('/api/store/products', (req, res) => {
+    try {
+        const products = getAvailableProducts();
+        const stats = getStats();
+        res.json({ success: true, products, stats });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// POST - نیا پروڈکٹ
+wasi_app.post('/api/store/products', (req, res) => {
+    try {
+        const { name, price, category, description, stock } = req.body;
+        if (!name || !price) {
+            return res.status(400).json({ success: false, message: 'Name and price required' });
+        }
+        const product = addProduct({
+            name,
+            price: parseInt(price),
+            category: category || 'Other',
+            description: description || '',
+            stock: parseInt(stock) || 0
+        });
+        res.json({ success: true, product });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// DELETE - پروڈکٹ ڈیلیٹ
+wasi_app.delete('/api/store/products/:id', (req, res) => {
+    try {
+        const deleted = deleteProduct(req.params.id);
+        if (deleted) {
+            res.json({ success: true });
+        } else {
+            res.status(404).json({ success: false, message: 'Product not found' });
+        }
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// GET - تمام آرڈرز
+wasi_app.get('/api/store/orders', (req, res) => {
+    try {
+        const orders = getAllOrders().sort((a, b) => 
+            new Date(b.createdAt) - new Date(a.createdAt)
+        );
+        res.json({ success: true, orders });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// PATCH - آرڈر اسٹیٹس اپڈیٹ
+wasi_app.patch('/api/store/orders/:id', (req, res) => {
+    try {
+        const { status } = req.body;
+        const order = updateOrderStatus(req.params.id, status);
+        if (order) {
+            const stats = getStats();
+            res.json({ success: true, order, stats });
+        } else {
+            res.status(404).json({ success: false, message: 'Order not found' });
+        }
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Serve Admin Panel
+wasi_app.get('/admin', (req, res) => {
+    res.sendFile(path.join(__dirname, 'admin.html'));
+});
+
 // Keep-Alive Route
 wasi_app.get('/ping', (req, res) => res.status(200).send('pong'));
 
-// -----------------------------------------------------------------------------
-// AUTO FORWARD CONFIGURATION
-// -----------------------------------------------------------------------------
-const SOURCE_JIDS = process.env.SOURCE_JIDS
-    ? process.env.SOURCE_JIDS.split(',')
-    : [];
+// ============================================================
+// API: GET STATUS
+// ============================================================
 
-const TARGET_JIDS = process.env.TARGET_JIDS
-    ? process.env.TARGET_JIDS.split(',')
-    : [];
+wasi_app.get('/api/status', async (req, res) => {
+    const sessionId = req.query.sessionId || config.sessionId || 'wasi_session';
+    const session = sessions.get(sessionId);
 
-const OLD_TEXT_REGEX = process.env.OLD_TEXT_REGEX
-    ? process.env.OLD_TEXT_REGEX.split(',').map(pattern => {
-        try {
-            return pattern.trim() ? new RegExp(pattern.trim(), 'gu') : null;
-        } catch (e) {
-            console.error(`Invalid regex pattern: ${pattern}`, e);
-            return null;
+    let qrDataUrl = null;
+    let connected = false;
+
+    if (session) {
+        connected = session.isConnected;
+        if (session.qr) {
+            try {
+                qrDataUrl = await QRCode.toDataURL(session.qr, { width: 256 });
+            } catch (e) { }
         }
-      }).filter(regex => regex !== null)
-    : [];
+    }
 
-const NEW_TEXT = process.env.NEW_TEXT
-    ? process.env.NEW_TEXT
-    : '';
+    res.json({
+        sessionId,
+        connected,
+        qr: qrDataUrl,
+        activeSessions: Array.from(sessions.keys())
+    });
+});
 
-// -----------------------------------------------------------------------------
-// HELPER FUNCTIONS FOR MESSAGE CLEANING
-// -----------------------------------------------------------------------------
+wasi_app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 
-/**
- * Clean forwarded label from message
- */
-function cleanForwardedLabel(message) {
+// ============================================================
+// API: RESTART BOT
+// ============================================================
+
+wasi_app.post('/api/restart', async (req, res) => {
     try {
-        let cleanedMessage = JSON.parse(JSON.stringify(message));
-        
-        if (cleanedMessage.extendedTextMessage?.contextInfo) {
-            cleanedMessage.extendedTextMessage.contextInfo.isForwarded = false;
-            if (cleanedMessage.extendedTextMessage.contextInfo.forwardingScore) {
-                cleanedMessage.extendedTextMessage.contextInfo.forwardingScore = 0;
-            }
-        }
-        
-        if (cleanedMessage.imageMessage?.contextInfo) {
-            cleanedMessage.imageMessage.contextInfo.isForwarded = false;
-            if (cleanedMessage.imageMessage.contextInfo.forwardingScore) {
-                cleanedMessage.imageMessage.contextInfo.forwardingScore = 0;
-            }
-        }
-        
-        if (cleanedMessage.videoMessage?.contextInfo) {
-            cleanedMessage.videoMessage.contextInfo.isForwarded = false;
-            if (cleanedMessage.videoMessage.contextInfo.forwardingScore) {
-                cleanedMessage.videoMessage.contextInfo.forwardingScore = 0;
-            }
-        }
-        
-        if (cleanedMessage.audioMessage?.contextInfo) {
-            cleanedMessage.audioMessage.contextInfo.isForwarded = false;
-            if (cleanedMessage.audioMessage.contextInfo.forwardingScore) {
-                cleanedMessage.audioMessage.contextInfo.forwardingScore = 0;
-            }
-        }
-        
-        if (cleanedMessage.documentMessage?.contextInfo) {
-            cleanedMessage.documentMessage.contextInfo.isForwarded = false;
-            if (cleanedMessage.documentMessage.contextInfo.forwardingScore) {
-                cleanedMessage.documentMessage.contextInfo.forwardingScore = 0;
-            }
-        }
-        
-        if (cleanedMessage.protocolMessage) {
-            if (cleanedMessage.protocolMessage.type === 14 || 
-                cleanedMessage.protocolMessage.type === 26) {
-                if (cleanedMessage.protocolMessage.historySyncNotification) {
-                    const syncData = cleanedMessage.protocolMessage.historySyncNotification;
-                    if (syncData.pushName) {
-                        console.log('Newsletter from:', syncData.pushName);
-                    }
+        console.log('🔄 Restarting bot...');
+        for (const [sessionId, session] of sessions) {
+            if (session.sock) {
+                try {
+                    session.sock.end(undefined);
+                } catch (e) {
+                    console.error(`Error ending session ${sessionId}:`, e);
                 }
             }
         }
-        
-        return cleanedMessage;
+        sessions.clear();
+        setTimeout(() => {
+            main().catch(err => console.error('Restart error:', err));
+        }, 1000);
+        res.json({ success: true, message: 'Bot restarting...' });
     } catch (error) {
-        console.error('Error cleaning forwarded label:', error);
-        return message;
+        console.error('Restart error:', error);
+        res.status(500).json({ success: false, error: error.message });
     }
-}
+});
 
-/**
- * Clean newsletter/information markers from text
- */
-function cleanNewsletterText(text) {
-    if (!text) return text;
-    
-    const newsletterMarkers = [
-        /📢\s*/g,
-        /🔔\s*/g,
-        /📰\s*/g,
-        /🗞️\s*/g,
-        /\[NEWSLETTER\]/gi,
-        /\[BROADCAST\]/gi,
-        /\[ANNOUNCEMENT\]/gi,
-        /Newsletter:/gi,
-        /Broadcast:/gi,
-        /Announcement:/gi,
-        /Forwarded many times/gi,
-        /Forwarded message/gi,
-        /This is a broadcast message/gi
-    ];
-    
-    let cleanedText = text;
-    newsletterMarkers.forEach(marker => {
-        cleanedText = cleanedText.replace(marker, '');
+// ============================================================
+// API: LOGOUT
+// ============================================================
+
+wasi_app.post('/api/logout', async (req, res) => {
+    try {
+        const sessionId = req.query.sessionId || config.sessionId || 'wasi_session';
+        const session = sessions.get(sessionId);
+        if (session && session.sock) {
+            try {
+                await session.sock.logout();
+            } catch (e) {
+                console.error('Logout error:', e);
+            }
+            sessions.delete(sessionId);
+            await wasi_clearSession(sessionId);
+        }
+        res.json({ success: true, message: 'Logged out successfully' });
+    } catch (error) {
+        console.error('Logout error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ============================================================
+// API: HEALTH CHECK
+// ============================================================
+
+wasi_app.get('/api/health', async (req, res) => {
+    res.json({
+        status: 'ok',
+        uptime: process.uptime(),
+        timestamp: new Date().toISOString(),
+        memory: process.memoryUsage(),
+        sessions: sessions.size
     });
-    
-    cleanedText = cleanedText.trim();
-    return cleanedText;
-}
+});
 
-/**
- * Replace caption text using regex patterns
- */
-function replaceCaption(caption) {
-    if (!caption) return caption;
-    if (!OLD_TEXT_REGEX.length || !NEW_TEXT) return caption;
-    
-    let result = caption;
-    
-    OLD_TEXT_REGEX.forEach(regex => {
-        result = result.replace(regex, NEW_TEXT);
-    });
-    
-    return result;
-}
-
-/**
- * Process and clean a message completely
- */
-function processAndCleanMessage(originalMessage) {
-    try {
-        let cleanedMessage = JSON.parse(JSON.stringify(originalMessage));
-        cleanedMessage = cleanForwardedLabel(cleanedMessage);
-        
-        const text = cleanedMessage.conversation ||
-            cleanedMessage.extendedTextMessage?.text ||
-            cleanedMessage.imageMessage?.caption ||
-            cleanedMessage.videoMessage?.caption ||
-            cleanedMessage.documentMessage?.caption || '';
-        
-        if (text) {
-            const cleanedText = cleanNewsletterText(text);
-            
-            if (cleanedMessage.conversation) {
-                cleanedMessage.conversation = cleanedText;
-            } else if (cleanedMessage.extendedTextMessage?.text) {
-                cleanedMessage.extendedTextMessage.text = cleanedText;
-            } else if (cleanedMessage.imageMessage?.caption) {
-                cleanedMessage.imageMessage.caption = replaceCaption(cleanedText);
-            } else if (cleanedMessage.videoMessage?.caption) {
-                cleanedMessage.videoMessage.caption = replaceCaption(cleanedText);
-            } else if (cleanedMessage.documentMessage?.caption) {
-                cleanedMessage.documentMessage.caption = replaceCaption(cleanedText);
-            }
-        }
-        
-        delete cleanedMessage.protocolMessage;
-        
-        if (cleanedMessage.extendedTextMessage?.contextInfo?.participant) {
-            const participant = cleanedMessage.extendedTextMessage.contextInfo.participant;
-            if (participant.includes('newsletter') || participant.includes('broadcast')) {
-                delete cleanedMessage.extendedTextMessage.contextInfo.participant;
-                delete cleanedMessage.extendedTextMessage.contextInfo.stanzaId;
-                delete cleanedMessage.extendedTextMessage.contextInfo.remoteJid;
-            }
-        }
-        
-        if (cleanedMessage.extendedTextMessage) {
-            cleanedMessage.extendedTextMessage.contextInfo = cleanedMessage.extendedTextMessage.contextInfo || {};
-            cleanedMessage.extendedTextMessage.contextInfo.isForwarded = false;
-            cleanedMessage.extendedTextMessage.contextInfo.forwardingScore = 0;
-        }
-        
-        return cleanedMessage;
-    } catch (error) {
-        console.error('Error processing message:', error);
-        return originalMessage;
-    }
-}
-
-// -----------------------------------------------------------------------------
-// COMMAND HANDLER FUNCTIONS
-// -----------------------------------------------------------------------------
-
-async function handlePingCommand(sock, from) {
-    await sock.sendMessage(from, { text: "Love You😘" });
-    console.log(`Ping command executed for ${from}`);
-}
-
-async function handleJidCommand(sock, from) {
-    await sock.sendMessage(from, { text: `${from}` });
-    console.log(`JID command executed for ${from}`);
-}
-
-async function handleGjidCommand(sock, from) {
-    try {
-        const groups = await sock.groupFetchAllParticipating();
-        
-        let response = "📌 *Groups List:*\n\n";
-        let groupCount = 1;
-        
-        for (const [jid, group] of Object.entries(groups)) {
-            const groupName = group.subject || "Unnamed Group";
-            const participantsCount = group.participants ? group.participants.length : 0;
-            
-            let groupType = "Simple Group";
-            if (group.isCommunity) {
-                groupType = "Community";
-            } else if (group.isCommunityAnnounce) {
-                groupType = "Community Announcement";
-            } else if (group.parentGroup) {
-                groupType = "Subgroup";
-            }
-            
-            response += `${groupCount}. *${groupName}*\n`;
-            response += `   👥 Members: ${participantsCount}\n`;
-            response += `   🆔: \`${jid}\`\n`;
-            response += `   📝 Type: ${groupType}\n`;
-            response += `   ──────────────\n\n`;
-            
-            groupCount++;
-        }
-        
-        if (groupCount === 1) {
-            response = "❌ No groups found. You are not in any groups.";
-        } else {
-            response += `\n*Total Groups: ${groupCount - 1}*`;
-        }
-        
-        await sock.sendMessage(from, { text: response });
-        console.log(`GJID command executed. Sent ${groupCount - 1} groups list.`);
-        
-    } catch (error) {
-        console.error('Error fetching groups:', error);
-        await sock.sendMessage(from, { 
-            text: "❌ Error fetching groups list. Please try again later." 
-        });
-    }
-}
-
-async function processCommand(sock, msg) {
-    const from = msg.key.remoteJid;
-    const text = msg.message.conversation ||
-        msg.message.extendedTextMessage?.text ||
-        msg.message.imageMessage?.caption ||
-        msg.message.videoMessage?.caption ||
-        "";
-    
-    if (!text || !text.startsWith('!')) return;
-    
-    const command = text.trim().toLowerCase();
-    
-    try {
-        if (command === '!ping') {
-            await handlePingCommand(sock, from);
-        } 
-        else if (command === '!jid') {
-            await handleJidCommand(sock, from);
-        }
-        else if (command === '!gjid') {
-            await handleGjidCommand(sock, from);
-        }
-    } catch (error) {
-        console.error('Command execution error:', error);
-    }
-}
-
-// -----------------------------------------------------------------------------
+// ============================================================
 // SESSION MANAGEMENT
-// -----------------------------------------------------------------------------
+// ============================================================
+
 async function startSession(sessionId) {
     if (sessions.has(sessionId)) {
         const existing = sessions.get(sessionId);
@@ -382,248 +989,75 @@ async function startSession(sessionId) {
             sessionState.isConnected = true;
             sessionState.qr = null;
             console.log(`✅ ${sessionId}: Connected to WhatsApp`);
+            
+            // Send welcome message to new users when they first message
         }
     });
 
     wasi_sock.ev.on('creds.update', saveCreds);
 
-    // AUTO FORWARD MESSAGE HANDLER
+    // ============================================================
+    // MESSAGE HANDLER - مکمل اسٹور کے ساتھ
+    // ============================================================
+
     wasi_sock.ev.on('messages.upsert', async wasi_m => {
         const wasi_msg = wasi_m.messages[0];
         if (!wasi_msg.message) return;
 
-        const wasi_origin = wasi_msg.key.remoteJid;
-        const wasi_text = wasi_msg.message.conversation ||
-            wasi_msg.message.extendedTextMessage?.text ||
-            wasi_msg.message.imageMessage?.caption ||
-            wasi_msg.message.videoMessage?.caption ||
-            wasi_msg.message.documentMessage?.caption || "";
+        const from = wasi_msg.key.remoteJid;
+        const isFromMe = wasi_msg.key.fromMe;
 
-        // COMMAND HANDLER
-        if (wasi_text.startsWith('!')) {
-            await processCommand(wasi_sock, wasi_msg);
-        }
+        if (isFromMe) return;
 
-        // AUTO FORWARD LOGIC
-        if (SOURCE_JIDS.includes(wasi_origin) && !wasi_msg.key.fromMe) {
-            try {
-                let relayMsg = processAndCleanMessage(wasi_msg.message);
-                
-                if (!relayMsg) return;
+        // STORE INTERACTION - بٹن اور ٹیکسٹ ان پٹ
+        const storeHandled = await handleStoreInteraction(wasi_sock, from, wasi_msg.message);
+        if (storeHandled) return;
 
-                if (relayMsg.viewOnceMessageV2)
-                    relayMsg = relayMsg.viewOnceMessageV2.message;
-                if (relayMsg.viewOnceMessage)
-                    relayMsg = relayMsg.viewOnceMessage.message;
-
-                const isMedia = relayMsg.imageMessage ||
-                    relayMsg.videoMessage ||
-                    relayMsg.audioMessage ||
-                    relayMsg.documentMessage ||
-                    relayMsg.stickerMessage;
-
-                let isEmojiOnly = false;
-                if (relayMsg.conversation) {
-                    const emojiRegex = /^(?:\p{Extended_Pictographic}|\s)+$/u;
-                    isEmojiOnly = emojiRegex.test(relayMsg.conversation);
-                }
-
-                if (!isMedia && !isEmojiOnly) return;
-
-                if (relayMsg.imageMessage?.caption) {
-                    relayMsg.imageMessage.caption = replaceCaption(relayMsg.imageMessage.caption);
-                }
-                if (relayMsg.videoMessage?.caption) {
-                    relayMsg.videoMessage.caption = replaceCaption(relayMsg.videoMessage.caption);
-                }
-                if (relayMsg.documentMessage?.caption) {
-                    relayMsg.documentMessage.caption = replaceCaption(relayMsg.documentMessage.caption);
-                }
-
-                console.log(`📦 Forwarding (cleaned) from ${wasi_origin}`);
-
-                for (const targetJid of TARGET_JIDS) {
-                    try {
-                        await wasi_sock.relayMessage(
-                            targetJid,
-                            relayMsg,
-                            { messageId: wasi_sock.generateMessageTag() }
-                        );
-                        console.log(`✅ Clean message forwarded to ${targetJid}`);
-                    } catch (err) {
-                        console.error(`Failed to forward to ${targetJid}:`, err.message);
-                    }
-                }
-
-            } catch (err) {
-                console.error('Auto Forward Error:', err.message);
-            }
+        // اگر کوئی اسٹور انٹریکشن نہیں تھی تو ڈیفالٹ پراڈکٹ لسٹ بھیجیں
+        // یہ صرف پہلی بار کے لیے ہے جب یوزر بوٹ کو میسج کرے
+        const products = getAvailableProducts();
+        const { text, buttons } = generateProductListMessage(products);
+        if (buttons && buttons.length > 0) {
+            await sendButtonMessage(wasi_sock, from, text, buttons);
+        } else {
+            await wasi_sock.sendMessage(from, { text: '🛍️ Welcome to our store! No products available right now.' });
         }
     });
 }
 
 // ============================================================
-// 🚀 ALL APIS (ADD THESE TO YOUR INDEX.JS)
-// ============================================================
-
-// -----------------------------------------------------------------------------
-// API: GET STATUS
-// -----------------------------------------------------------------------------
-wasi_app.get('/api/status', async (req, res) => {
-    const sessionId = req.query.sessionId || config.sessionId || 'wasi_session';
-    const session = sessions.get(sessionId);
-
-    let qrDataUrl = null;
-    let connected = false;
-    let dbConnected = false;
-
-    // Check database connection
-    if (config.mongoDbUrl) {
-        try {
-            // You can add your actual DB check here
-            dbConnected = true; // Placeholder - replace with actual check
-        } catch (e) {
-            dbConnected = false;
-        }
-    }
-
-    if (session) {
-        connected = session.isConnected;
-        if (session.qr) {
-            try {
-                qrDataUrl = await QRCode.toDataURL(session.qr, { width: 256 });
-            } catch (e) { }
-        }
-    }
-
-    res.json({
-        sessionId,
-        connected,
-        qr: qrDataUrl,
-        dbConnected,
-        dbConfigured: !!config.mongoDbUrl,
-        phoneNumber: connected ? 'Connected ✅' : '-',
-        lastActive: new Date().toISOString(),
-        activeSessions: Array.from(sessions.keys())
-    });
-});
-
-// -----------------------------------------------------------------------------
-// API: RESTART BOT
-// -----------------------------------------------------------------------------
-wasi_app.post('/api/restart', async (req, res) => {
-    try {
-        console.log('🔄 Restarting bot...');
-        
-        // Clear all sessions
-        for (const [sessionId, session] of sessions) {
-            if (session.sock) {
-                try {
-                    session.sock.end(undefined);
-                } catch (e) {
-                    console.error(`Error ending session ${sessionId}:`, e);
-                }
-            }
-        }
-        sessions.clear();
-        
-        // Restart the main function after a delay
-        setTimeout(() => {
-            main().catch(err => console.error('Restart error:', err));
-        }, 1000);
-        
-        res.json({ success: true, message: 'Bot restarting...' });
-    } catch (error) {
-        console.error('Restart error:', error);
-        res.status(500).json({ success: false, error: error.message });
-    }
-});
-
-// -----------------------------------------------------------------------------
-// API: LOGOUT
-// -----------------------------------------------------------------------------
-wasi_app.post('/api/logout', async (req, res) => {
-    try {
-        const sessionId = req.query.sessionId || config.sessionId || 'wasi_session';
-        const session = sessions.get(sessionId);
-        
-        if (session && session.sock) {
-            try {
-                await session.sock.logout();
-            } catch (e) {
-                console.error('Logout error:', e);
-            }
-            sessions.delete(sessionId);
-            await wasi_clearSession(sessionId);
-        }
-        
-        res.json({ success: true, message: 'Logged out successfully' });
-    } catch (error) {
-        console.error('Logout error:', error);
-        res.status(500).json({ success: false, error: error.message });
-    }
-});
-
-// -----------------------------------------------------------------------------
-// API: GET SESSIONS LIST
-// -----------------------------------------------------------------------------
-wasi_app.get('/api/sessions', async (req, res) => {
-    try {
-        const sessionList = Array.from(sessions.keys()).map(id => ({
-            sessionId: id,
-            isConnected: sessions.get(id)?.isConnected || false
-        }));
-        
-        res.json({
-            success: true,
-            sessions: sessionList,
-            total: sessionList.length
-        });
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
-    }
-});
-
-// -----------------------------------------------------------------------------
-// API: HEALTH CHECK
-// -----------------------------------------------------------------------------
-wasi_app.get('/api/health', async (req, res) => {
-    res.json({
-        status: 'ok',
-        uptime: process.uptime(),
-        timestamp: new Date().toISOString(),
-        memory: process.memoryUsage(),
-        sessions: sessions.size
-    });
-});
-
-// ============================================================
-// END OF APIS
-// ============================================================
-
-// -----------------------------------------------------------------------------
 // SERVER START
-// -----------------------------------------------------------------------------
+// ============================================================
+
 function wasi_startServer() {
     wasi_app.listen(wasi_port, () => {
         console.log(`🌐 Server running on port ${wasi_port}`);
-        console.log(`📡 Auto Forward: ${SOURCE_JIDS.length} source(s) → ${TARGET_JIDS.length} target(s)`);
-        console.log(`✨ Message Cleaning: Forwarded labels removed, Newsletter markers cleaned`);
-        console.log(`🤖 Bot Commands: !ping, !jid, !gjid`);
-        console.log(`\n📌 API Endpoints:`);
-        console.log(`   GET  /api/status     - Get bot status`);
-        console.log(`   POST /api/restart    - Restart bot`);
-        console.log(`   POST /api/logout     - Logout bot`);
-        console.log(`   GET  /api/sessions   - List all sessions`);
-        console.log(`   GET  /api/health     - Health check`);
+        console.log(`🛍️ Store System Active`);
+        console.log(`📊 Products: ${getAvailableProducts().length}`);
+        console.log(`📋 Orders: ${getAllOrders().length}`);
+        console.log(`\n📌 Admin Panel: http://localhost:${wasi_port}/admin`);
+        console.log(`📌 API Endpoints:`);
+        console.log(`   GET  /api/store/products  - Get products`);
+        console.log(`   POST /api/store/products  - Add product`);
+        console.log(`   DELETE /api/store/products/:id - Delete product`);
+        console.log(`   GET  /api/store/orders    - Get orders`);
+        console.log(`   PATCH /api/store/orders/:id - Update order`);
+        console.log(`   GET  /api/status          - Bot status`);
+        console.log(`   POST /api/restart         - Restart bot`);
+        console.log(`   POST /api/logout          - Logout bot`);
     });
 }
 
-// -----------------------------------------------------------------------------
+// ============================================================
 // MAIN STARTUP
-// -----------------------------------------------------------------------------
+// ============================================================
+
 async function main() {
-    // 1. Connect DB if configured
+    // 1. STORE DATA LOAD
+    loadStoreData();
+    console.log('✅ Store system initialized');
+
+    // 2. Connect DB if configured
     if (config.mongoDbUrl) {
         const dbResult = await wasi_connectDatabase(config.mongoDbUrl);
         if (dbResult) {
@@ -631,11 +1065,11 @@ async function main() {
         }
     }
 
-    // 2. Start default session
+    // 3. Start default session
     const sessionId = config.sessionId || 'wasi_session';
     await startSession(sessionId);
 
-    // 3. Start server
+    // 4. Start server
     wasi_startServer();
 }
 
