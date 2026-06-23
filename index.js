@@ -76,13 +76,10 @@ const NEW_TEXT = process.env.NEW_TEXT
  */
 function cleanForwardedLabel(message) {
     try {
-        // Clone the message to avoid modifying original
         let cleanedMessage = JSON.parse(JSON.stringify(message));
         
-        // Remove forwarded flag from different message types
         if (cleanedMessage.extendedTextMessage?.contextInfo) {
             cleanedMessage.extendedTextMessage.contextInfo.isForwarded = false;
-            // Also remove forwarding news if present
             if (cleanedMessage.extendedTextMessage.contextInfo.forwardingScore) {
                 cleanedMessage.extendedTextMessage.contextInfo.forwardingScore = 0;
             }
@@ -116,18 +113,12 @@ function cleanForwardedLabel(message) {
             }
         }
         
-        // Remove newsletter/broadcast specific markers
         if (cleanedMessage.protocolMessage) {
-            // For newsletter messages, we extract the actual message content
             if (cleanedMessage.protocolMessage.type === 14 || 
                 cleanedMessage.protocolMessage.type === 26) {
-                // These are typically newsletter/broadcast messages
-                // We'll try to extract the actual message if possible
                 if (cleanedMessage.protocolMessage.historySyncNotification) {
-                    // Extract from history sync
                     const syncData = cleanedMessage.protocolMessage.historySyncNotification;
                     if (syncData.pushName) {
-                        // Use pushName as sender info
                         console.log('Newsletter from:', syncData.pushName);
                     }
                 }
@@ -147,7 +138,6 @@ function cleanForwardedLabel(message) {
 function cleanNewsletterText(text) {
     if (!text) return text;
     
-    // Remove common newsletter markers
     const newsletterMarkers = [
         /📢\s*/g,
         /🔔\s*/g,
@@ -169,9 +159,7 @@ function cleanNewsletterText(text) {
         cleanedText = cleanedText.replace(marker, '');
     });
     
-    // Trim extra whitespace
     cleanedText = cleanedText.trim();
-    
     return cleanedText;
 }
 
@@ -180,8 +168,6 @@ function cleanNewsletterText(text) {
  */
 function replaceCaption(caption) {
     if (!caption) return caption;
-    
-    // اگر OLD_TEXT_REGEX یا NEW_TEXT خالی ہوں تو کچھ نہیں کریں گے
     if (!OLD_TEXT_REGEX.length || !NEW_TEXT) return caption;
     
     let result = caption;
@@ -198,13 +184,9 @@ function replaceCaption(caption) {
  */
 function processAndCleanMessage(originalMessage) {
     try {
-        // Step 1: Clone the message
         let cleanedMessage = JSON.parse(JSON.stringify(originalMessage));
-        
-        // Step 2: Remove forwarded labels
         cleanedMessage = cleanForwardedLabel(cleanedMessage);
         
-        // Step 3: Extract text and clean newsletter markers
         const text = cleanedMessage.conversation ||
             cleanedMessage.extendedTextMessage?.text ||
             cleanedMessage.imageMessage?.caption ||
@@ -214,7 +196,6 @@ function processAndCleanMessage(originalMessage) {
         if (text) {
             const cleanedText = cleanNewsletterText(text);
             
-            // Update the cleaned text in appropriate field
             if (cleanedMessage.conversation) {
                 cleanedMessage.conversation = cleanedText;
             } else if (cleanedMessage.extendedTextMessage?.text) {
@@ -228,10 +209,8 @@ function processAndCleanMessage(originalMessage) {
             }
         }
         
-        // Step 4: Remove protocol messages (newsletter metadata)
         delete cleanedMessage.protocolMessage;
         
-        // Step 5: Remove newsletter sender info
         if (cleanedMessage.extendedTextMessage?.contextInfo?.participant) {
             const participant = cleanedMessage.extendedTextMessage.contextInfo.participant;
             if (participant.includes('newsletter') || participant.includes('broadcast')) {
@@ -241,7 +220,6 @@ function processAndCleanMessage(originalMessage) {
             }
         }
         
-        // Step 6: Ensure message appears as original (not forwarded)
         if (cleanedMessage.extendedTextMessage) {
             cleanedMessage.extendedTextMessage.contextInfo = cleanedMessage.extendedTextMessage.contextInfo || {};
             cleanedMessage.extendedTextMessage.contextInfo.isForwarded = false;
@@ -259,25 +237,16 @@ function processAndCleanMessage(originalMessage) {
 // COMMAND HANDLER FUNCTIONS
 // -----------------------------------------------------------------------------
 
-/**
- * Handle !ping command
- */
 async function handlePingCommand(sock, from) {
     await sock.sendMessage(from, { text: "Love You😘" });
     console.log(`Ping command executed for ${from}`);
 }
 
-/**
- * Handle !jid command - Get current chat JID
- */
 async function handleJidCommand(sock, from) {
     await sock.sendMessage(from, { text: `${from}` });
     console.log(`JID command executed for ${from}`);
 }
 
-/**
- * Handle !gjid command - Get all groups with details
- */
 async function handleGjidCommand(sock, from) {
     try {
         const groups = await sock.groupFetchAllParticipating();
@@ -289,7 +258,6 @@ async function handleGjidCommand(sock, from) {
             const groupName = group.subject || "Unnamed Group";
             const participantsCount = group.participants ? group.participants.length : 0;
             
-            // Determine group type
             let groupType = "Simple Group";
             if (group.isCommunity) {
                 groupType = "Community";
@@ -325,9 +293,6 @@ async function handleGjidCommand(sock, from) {
     }
 }
 
-/**
- * Process incoming messages for commands
- */
 async function processCommand(sock, msg) {
     const from = msg.key.remoteJid;
     const text = msg.message.conversation ||
@@ -422,9 +387,7 @@ async function startSession(sessionId) {
 
     wasi_sock.ev.on('creds.update', saveCreds);
 
-    // -------------------------------------------------------------------------
     // AUTO FORWARD MESSAGE HANDLER
-    // -------------------------------------------------------------------------
     wasi_sock.ev.on('messages.upsert', async wasi_m => {
         const wasi_msg = wasi_m.messages[0];
         if (!wasi_msg.message) return;
@@ -444,18 +407,15 @@ async function startSession(sessionId) {
         // AUTO FORWARD LOGIC
         if (SOURCE_JIDS.includes(wasi_origin) && !wasi_msg.key.fromMe) {
             try {
-                // Process and clean the message
                 let relayMsg = processAndCleanMessage(wasi_msg.message);
                 
                 if (!relayMsg) return;
 
-                // View Once Unwrap
                 if (relayMsg.viewOnceMessageV2)
                     relayMsg = relayMsg.viewOnceMessageV2.message;
                 if (relayMsg.viewOnceMessage)
                     relayMsg = relayMsg.viewOnceMessage.message;
 
-                // Check for Media or Emoji Only
                 const isMedia = relayMsg.imageMessage ||
                     relayMsg.videoMessage ||
                     relayMsg.audioMessage ||
@@ -468,11 +428,8 @@ async function startSession(sessionId) {
                     isEmojiOnly = emojiRegex.test(relayMsg.conversation);
                 }
 
-                // Only forward if media or emoji
                 if (!isMedia && !isEmojiOnly) return;
 
-                // Apply caption replacement (already done in processAndCleanMessage)
-                // For safety, we'll do it again here
                 if (relayMsg.imageMessage?.caption) {
                     relayMsg.imageMessage.caption = replaceCaption(relayMsg.imageMessage.caption);
                 }
@@ -485,7 +442,6 @@ async function startSession(sessionId) {
 
                 console.log(`📦 Forwarding (cleaned) from ${wasi_origin}`);
 
-                // Forward to all target JIDs
                 for (const targetJid of TARGET_JIDS) {
                     try {
                         await wasi_sock.relayMessage(
@@ -506,8 +462,12 @@ async function startSession(sessionId) {
     });
 }
 
+// ============================================================
+// 🚀 ALL APIS (ADD THESE TO YOUR INDEX.JS)
+// ============================================================
+
 // -----------------------------------------------------------------------------
-// API ROUTES
+// API: GET STATUS
 // -----------------------------------------------------------------------------
 wasi_app.get('/api/status', async (req, res) => {
     const sessionId = req.query.sessionId || config.sessionId || 'wasi_session';
@@ -515,6 +475,17 @@ wasi_app.get('/api/status', async (req, res) => {
 
     let qrDataUrl = null;
     let connected = false;
+    let dbConnected = false;
+
+    // Check database connection
+    if (config.mongoDbUrl) {
+        try {
+            // You can add your actual DB check here
+            dbConnected = true; // Placeholder - replace with actual check
+        } catch (e) {
+            dbConnected = false;
+        }
+    }
 
     if (session) {
         connected = session.isConnected;
@@ -529,13 +500,106 @@ wasi_app.get('/api/status', async (req, res) => {
         sessionId,
         connected,
         qr: qrDataUrl,
+        dbConnected,
+        dbConfigured: !!config.mongoDbUrl,
+        phoneNumber: connected ? 'Connected ✅' : '-',
+        lastActive: new Date().toISOString(),
         activeSessions: Array.from(sessions.keys())
     });
 });
 
-wasi_app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+// -----------------------------------------------------------------------------
+// API: RESTART BOT
+// -----------------------------------------------------------------------------
+wasi_app.post('/api/restart', async (req, res) => {
+    try {
+        console.log('🔄 Restarting bot...');
+        
+        // Clear all sessions
+        for (const [sessionId, session] of sessions) {
+            if (session.sock) {
+                try {
+                    session.sock.end(undefined);
+                } catch (e) {
+                    console.error(`Error ending session ${sessionId}:`, e);
+                }
+            }
+        }
+        sessions.clear();
+        
+        // Restart the main function after a delay
+        setTimeout(() => {
+            main().catch(err => console.error('Restart error:', err));
+        }, 1000);
+        
+        res.json({ success: true, message: 'Bot restarting...' });
+    } catch (error) {
+        console.error('Restart error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
 });
+
+// -----------------------------------------------------------------------------
+// API: LOGOUT
+// -----------------------------------------------------------------------------
+wasi_app.post('/api/logout', async (req, res) => {
+    try {
+        const sessionId = req.query.sessionId || config.sessionId || 'wasi_session';
+        const session = sessions.get(sessionId);
+        
+        if (session && session.sock) {
+            try {
+                await session.sock.logout();
+            } catch (e) {
+                console.error('Logout error:', e);
+            }
+            sessions.delete(sessionId);
+            await wasi_clearSession(sessionId);
+        }
+        
+        res.json({ success: true, message: 'Logged out successfully' });
+    } catch (error) {
+        console.error('Logout error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// -----------------------------------------------------------------------------
+// API: GET SESSIONS LIST
+// -----------------------------------------------------------------------------
+wasi_app.get('/api/sessions', async (req, res) => {
+    try {
+        const sessionList = Array.from(sessions.keys()).map(id => ({
+            sessionId: id,
+            isConnected: sessions.get(id)?.isConnected || false
+        }));
+        
+        res.json({
+            success: true,
+            sessions: sessionList,
+            total: sessionList.length
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// -----------------------------------------------------------------------------
+// API: HEALTH CHECK
+// -----------------------------------------------------------------------------
+wasi_app.get('/api/health', async (req, res) => {
+    res.json({
+        status: 'ok',
+        uptime: process.uptime(),
+        timestamp: new Date().toISOString(),
+        memory: process.memoryUsage(),
+        sessions: sessions.size
+    });
+});
+
+// ============================================================
+// END OF APIS
+// ============================================================
 
 // -----------------------------------------------------------------------------
 // SERVER START
@@ -546,6 +610,12 @@ function wasi_startServer() {
         console.log(`📡 Auto Forward: ${SOURCE_JIDS.length} source(s) → ${TARGET_JIDS.length} target(s)`);
         console.log(`✨ Message Cleaning: Forwarded labels removed, Newsletter markers cleaned`);
         console.log(`🤖 Bot Commands: !ping, !jid, !gjid`);
+        console.log(`\n📌 API Endpoints:`);
+        console.log(`   GET  /api/status     - Get bot status`);
+        console.log(`   POST /api/restart    - Restart bot`);
+        console.log(`   POST /api/logout     - Logout bot`);
+        console.log(`   GET  /api/sessions   - List all sessions`);
+        console.log(`   GET  /api/health     - Health check`);
     });
 }
 
@@ -570,4 +640,3 @@ async function main() {
 }
 
 main();
-
