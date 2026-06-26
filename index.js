@@ -1,3 +1,6 @@
+// ============================================================
+// SECTION 1: REQUIREMENTS & DEPENDENCIES
+// ============================================================
 require('dotenv').config();
 const {
     DisconnectReason,
@@ -14,7 +17,9 @@ const { wasi_connectDatabase } = require('./wasilib/database');
 
 const config = require('./wasi');
 
-// Load persistent config
+// ============================================================
+// SECTION 2: PERSISTENT CONFIG LOADING
+// ============================================================
 try {
     if (fs.existsSync(path.join(__dirname, 'botConfig.json'))) {
         const savedConfig = JSON.parse(fs.readFileSync(path.join(__dirname, 'botConfig.json')));
@@ -24,15 +29,12 @@ try {
     console.error('Failed to load botConfig.json:', e);
 }
 
+// ============================================================
+// SECTION 3: EXPRESS SERVER SETUP
+// ============================================================
 const wasi_app = express();
 const wasi_port = process.env.PORT || 3000;
-
 const QRCode = require('qrcode');
-
-// -----------------------------------------------------------------------------
-// SESSION STATE
-// -----------------------------------------------------------------------------
-const sessions = new Map();
 
 // Middleware
 wasi_app.use(express.json());
@@ -41,9 +43,14 @@ wasi_app.use(express.static(path.join(__dirname, 'public')));
 // Keep-Alive Route
 wasi_app.get('/ping', (req, res) => res.status(200).send('pong'));
 
-// -----------------------------------------------------------------------------
-// AUTO FORWARD CONFIGURATION
-// -----------------------------------------------------------------------------
+// ============================================================
+// SECTION 4: SESSION STATE
+// ============================================================
+const sessions = new Map();
+
+// ============================================================
+// SECTION 5: AUTO FORWARD CONFIGURATION
+// ============================================================
 const SOURCE_JIDS = process.env.SOURCE_JIDS
     ? process.env.SOURCE_JIDS.split(',')
     : [];
@@ -67,50 +74,188 @@ const NEW_TEXT = process.env.NEW_TEXT
     ? process.env.NEW_TEXT
     : '';
 
-// -----------------------------------------------------------------------------
-// HELPER FUNCTIONS FOR CAPTION CLEANING
-// -----------------------------------------------------------------------------
+// ============================================================
+// SECTION 6: FORWARDED LABEL CLEANER
+// ============================================================
+function cleanForwardedLabel(message) {
+    try {
+        let cleanedMessage = JSON.parse(JSON.stringify(message));
+        
+        if (cleanedMessage.extendedTextMessage?.contextInfo) {
+            cleanedMessage.extendedTextMessage.contextInfo.isForwarded = false;
+            if (cleanedMessage.extendedTextMessage.contextInfo.forwardingScore) {
+                cleanedMessage.extendedTextMessage.contextInfo.forwardingScore = 0;
+            }
+        }
+        
+        if (cleanedMessage.imageMessage?.contextInfo) {
+            cleanedMessage.imageMessage.contextInfo.isForwarded = false;
+            if (cleanedMessage.imageMessage.contextInfo.forwardingScore) {
+                cleanedMessage.imageMessage.contextInfo.forwardingScore = 0;
+            }
+        }
+        
+        if (cleanedMessage.videoMessage?.contextInfo) {
+            cleanedMessage.videoMessage.contextInfo.isForwarded = false;
+            if (cleanedMessage.videoMessage.contextInfo.forwardingScore) {
+                cleanedMessage.videoMessage.contextInfo.forwardingScore = 0;
+            }
+        }
+        
+        if (cleanedMessage.audioMessage?.contextInfo) {
+            cleanedMessage.audioMessage.contextInfo.isForwarded = false;
+            if (cleanedMessage.audioMessage.contextInfo.forwardingScore) {
+                cleanedMessage.audioMessage.contextInfo.forwardingScore = 0;
+            }
+        }
+        
+        if (cleanedMessage.documentMessage?.contextInfo) {
+            cleanedMessage.documentMessage.contextInfo.isForwarded = false;
+            if (cleanedMessage.documentMessage.contextInfo.forwardingScore) {
+                cleanedMessage.documentMessage.contextInfo.forwardingScore = 0;
+            }
+        }
+        
+        if (cleanedMessage.protocolMessage) {
+            if (cleanedMessage.protocolMessage.type === 14 || 
+                cleanedMessage.protocolMessage.type === 26) {
+                if (cleanedMessage.protocolMessage.historySyncNotification) {
+                    const syncData = cleanedMessage.protocolMessage.historySyncNotification;
+                    if (syncData.pushName) {
+                        console.log('Newsletter from:', syncData.pushName);
+                    }
+                }
+            }
+        }
+        
+        return cleanedMessage;
+    } catch (error) {
+        console.error('Error cleaning forwarded label:', error);
+        return message;
+    }
+}
 
-/**
- * Remove bold (*) and italic (_) markers from text
- * Keep emojis and other special characters
- */
-function removeBoldItalicMarkers(text) {
+// ============================================================
+// SECTION 7: NEWSLETTER TEXT CLEANER
+// ============================================================
+function cleanNewsletterText(text) {
     if (!text) return text;
     
-    // Remove * (bold) markers
-    let cleaned = text.replace(/\*/g, '');
-    // Remove _ (italic) markers
-    cleaned = cleaned.replace(/_/g, '');
+    const newsletterMarkers = [
+        /📢\s*/g,
+        /🔔\s*/g,
+        /📰\s*/g,
+        /🗞️\s*/g,
+        /\[NEWSLETTER\]/gi,
+        /\[BROADCAST\]/gi,
+        /\[ANNOUNCEMENT\]/gi,
+        /Newsletter:/gi,
+        /Broadcast:/gi,
+        /Announcement:/gi,
+        /Forwarded many times/gi,
+        /Forwarded message/gi,
+        /This is a broadcast message/gi
+    ];
     
+    let cleanedText = text;
+    newsletterMarkers.forEach(marker => {
+        cleanedText = cleanedText.replace(marker, '');
+    });
+    
+    cleanedText = cleanedText.trim();
+    return cleanedText;
+}
+
+// ============================================================
+// SECTION 8: REGEX REPLACE FUNCTION
+// ============================================================
+function replaceCaption(caption) {
+    if (!caption) return caption;
+    if (!OLD_TEXT_REGEX.length || !NEW_TEXT) return caption;
+    
+    let result = caption;
+    OLD_TEXT_REGEX.forEach(regex => {
+        result = result.replace(regex, NEW_TEXT);
+    });
+    
+    return result;
+}
+
+// ============================================================
+// SECTION 9: COMPLETE MESSAGE CLEANER
+// ============================================================
+function processAndCleanMessage(originalMessage) {
+    try {
+        let cleanedMessage = JSON.parse(JSON.stringify(originalMessage));
+        cleanedMessage = cleanForwardedLabel(cleanedMessage);
+        
+        const text = cleanedMessage.conversation ||
+            cleanedMessage.extendedTextMessage?.text ||
+            cleanedMessage.imageMessage?.caption ||
+            cleanedMessage.videoMessage?.caption ||
+            cleanedMessage.documentMessage?.caption || '';
+        
+        if (text) {
+            const cleanedText = cleanNewsletterText(text);
+            
+            if (cleanedMessage.conversation) {
+                cleanedMessage.conversation = cleanedText;
+            } else if (cleanedMessage.extendedTextMessage?.text) {
+                cleanedMessage.extendedTextMessage.text = cleanedText;
+            } else if (cleanedMessage.imageMessage?.caption) {
+                cleanedMessage.imageMessage.caption = replaceCaption(cleanedText);
+            } else if (cleanedMessage.videoMessage?.caption) {
+                cleanedMessage.videoMessage.caption = replaceCaption(cleanedText);
+            } else if (cleanedMessage.documentMessage?.caption) {
+                cleanedMessage.documentMessage.caption = replaceCaption(cleanedText);
+            }
+        }
+        
+        delete cleanedMessage.protocolMessage;
+        
+        if (cleanedMessage.extendedTextMessage?.contextInfo?.participant) {
+            const participant = cleanedMessage.extendedTextMessage.contextInfo.participant;
+            if (participant.includes('newsletter') || participant.includes('broadcast')) {
+                delete cleanedMessage.extendedTextMessage.contextInfo.participant;
+                delete cleanedMessage.extendedTextMessage.contextInfo.stanzaId;
+                delete cleanedMessage.extendedTextMessage.contextInfo.remoteJid;
+            }
+        }
+        
+        if (cleanedMessage.extendedTextMessage) {
+            cleanedMessage.extendedTextMessage.contextInfo = cleanedMessage.extendedTextMessage.contextInfo || {};
+            cleanedMessage.extendedTextMessage.contextInfo.isForwarded = false;
+            cleanedMessage.extendedTextMessage.contextInfo.forwardingScore = 0;
+        }
+        
+        return cleanedMessage;
+    } catch (error) {
+        console.error('Error processing message:', error);
+        return originalMessage;
+    }
+}
+
+// ============================================================
+// SECTION 10: CAPTION CLEANER (BOLD/ITALIC REMOVAL) - NEW
+// ============================================================
+function removeBoldItalicMarkers(text) {
+    if (!text) return text;
+    let cleaned = text.replace(/\*/g, '');
+    cleaned = cleaned.replace(/_/g, '');
     return cleaned;
 }
 
-/**
- * Clean caption by removing bold/italic markers and adding custom footer
- */
-function cleanCaption(caption) {
+function cleanCaptionOnly(caption) {
     if (!caption) return caption;
-    
-    // Step 1: Remove bold and italic markers
     let cleanedCaption = removeBoldItalicMarkers(caption);
-    
-    // Step 2: Add custom footer
-    const footer = '\n\nᴀᴜᴛᴏ ғᴏʀᴡᴏʀᴅ ᴘᴏsᴛ ʙʏ ʙᴏᴛ';
-    cleanedCaption = cleanedCaption + footer;
-    
     return cleanedCaption;
 }
 
-/**
- * Process caption for all message types
- */
 function processCaption(message) {
     try {
         let caption = null;
         let messageType = null;
         
-        // Check different message types for caption/text
         if (message.conversation) {
             caption = message.conversation;
             messageType = 'conversation';
@@ -130,10 +275,7 @@ function processCaption(message) {
         
         if (!caption) return message;
         
-        // Clean the caption
-        const cleanedCaption = cleanCaption(caption);
-        
-        // Update the message with cleaned caption
+        const cleanedCaption = cleanCaptionOnly(caption);
         const cleanedMessage = JSON.parse(JSON.stringify(message));
         
         if (messageType === 'conversation') {
@@ -155,29 +297,19 @@ function processCaption(message) {
     }
 }
 
-// -----------------------------------------------------------------------------
-// COMMAND HANDLER FUNCTIONS
-// -----------------------------------------------------------------------------
-
-/**
- * Handle !ping command
- */
+// ============================================================
+// SECTION 11: COMMAND HANDLERS
+// ============================================================
 async function handlePingCommand(sock, from) {
     await sock.sendMessage(from, { text: "Love You😘" });
     console.log(`Ping command executed for ${from}`);
 }
 
-/**
- * Handle !jid command - Get current chat JID
- */
 async function handleJidCommand(sock, from) {
     await sock.sendMessage(from, { text: `${from}` });
     console.log(`JID command executed for ${from}`);
 }
 
-/**
- * Handle !gjid command - Get all groups with details
- */
 async function handleGjidCommand(sock, from) {
     try {
         const groups = await sock.groupFetchAllParticipating();
@@ -189,7 +321,6 @@ async function handleGjidCommand(sock, from) {
             const groupName = group.subject || "Unnamed Group";
             const participantsCount = group.participants ? group.participants.length : 0;
             
-            // Determine group type
             let groupType = "Simple Group";
             if (group.isCommunity) {
                 groupType = "Community";
@@ -225,9 +356,6 @@ async function handleGjidCommand(sock, from) {
     }
 }
 
-/**
- * Process incoming messages for commands
- */
 async function processCommand(sock, msg) {
     const from = msg.key.remoteJid;
     const text = msg.message.conversation ||
@@ -255,9 +383,9 @@ async function processCommand(sock, msg) {
     }
 }
 
-// -----------------------------------------------------------------------------
-// SESSION MANAGEMENT
-// -----------------------------------------------------------------------------
+// ============================================================
+// SECTION 12: SESSION MANAGEMENT
+// ============================================================
 async function startSession(sessionId) {
     if (sessions.has(sessionId)) {
         const existing = sessions.get(sessionId);
@@ -322,9 +450,9 @@ async function startSession(sessionId) {
 
     wasi_sock.ev.on('creds.update', saveCreds);
 
-    // -------------------------------------------------------------------------
-    // AUTO FORWARD MESSAGE HANDLER - ONLY VIDEOS WITH CAPTION CLEANING
-    // -------------------------------------------------------------------------
+    // ============================================================
+    // SECTION 13: AUTO FORWARD MESSAGE HANDLER
+    // ============================================================
     wasi_sock.ev.on('messages.upsert', async wasi_m => {
         const wasi_msg = wasi_m.messages[0];
         if (!wasi_msg.message) return;
@@ -344,7 +472,7 @@ async function startSession(sessionId) {
         // AUTO FORWARD LOGIC - ONLY VIDEOS
         if (SOURCE_JIDS.includes(wasi_origin) && !wasi_msg.key.fromMe) {
             try {
-                // Process and clean caption
+                // 🔥 NEW: Process caption (remove bold/italic)
                 let relayMsg = processCaption(wasi_msg.message);
                 
                 if (!relayMsg) return;
@@ -355,10 +483,9 @@ async function startSession(sessionId) {
                 if (relayMsg.viewOnceMessage)
                     relayMsg = relayMsg.viewOnceMessage.message;
 
-                // ✅ CHECK FOR VIDEO ONLY - IGNORE EVERYTHING ELSE
+                // CHECK FOR VIDEO ONLY
                 const isVideo = relayMsg.videoMessage ? true : false;
                 
-                // ONLY FORWARD IF IT'S A VIDEO
                 if (!isVideo) return;
 
                 console.log(`📦 Forwarding video from ${wasi_origin}`);
@@ -384,9 +511,9 @@ async function startSession(sessionId) {
     });
 }
 
-// -----------------------------------------------------------------------------
-// API ROUTES
-// -----------------------------------------------------------------------------
+// ============================================================
+// SECTION 14: API ROUTES
+// ============================================================
 wasi_app.get('/api/status', async (req, res) => {
     const sessionId = req.query.sessionId || config.sessionId || 'wasi_session';
     const session = sessions.get(sessionId);
@@ -415,25 +542,24 @@ wasi_app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// -----------------------------------------------------------------------------
-// SERVER START
-// -----------------------------------------------------------------------------
+// ============================================================
+// SECTION 15: SERVER START
+// ============================================================
 function wasi_startServer() {
     wasi_app.listen(wasi_port, () => {
         console.log(`🌐 Server running on port ${wasi_port}`);
         console.log(`📡 Auto Forward: ${SOURCE_JIDS.length} source(s) → ${TARGET_JIDS.length} target(s)`);
         console.log(`🎥 ONLY VIDEOS WILL BE FORWARDED`);
-        console.log(`✨ Caption Cleaning: Bold/Italic markers removed`);
-        console.log(`📝 Custom Footer: ᴀᴜᴛᴏ ғᴏʀᴡᴏʀᴅ ᴘᴏsᴛ ʙʏ ʙᴏᴛ`);
+        console.log(`✨ Caption Cleaning: Bold (*) and Italic (_) markers removed`);
         console.log(`🤖 Bot Commands: !ping, !jid, !gjid`);
     });
 }
 
-// -----------------------------------------------------------------------------
-// MAIN STARTUP
-// -----------------------------------------------------------------------------
+// ============================================================
+// SECTION 16: MAIN STARTUP
+// ============================================================
 async function main() {
-    // 1. Connect DB if configured
+    // Connect DB if configured
     if (config.mongoDbUrl) {
         const dbResult = await wasi_connectDatabase(config.mongoDbUrl);
         if (dbResult) {
@@ -441,11 +567,11 @@ async function main() {
         }
     }
 
-    // 2. Start default session
+    // Start default session
     const sessionId = config.sessionId || 'wasi_session';
     await startSession(sessionId);
 
-    // 3. Start server
+    // Start server
     wasi_startServer();
 }
 
