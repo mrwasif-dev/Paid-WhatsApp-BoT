@@ -68,190 +68,90 @@ const NEW_TEXT = process.env.NEW_TEXT
     : '';
 
 // -----------------------------------------------------------------------------
-// HELPER FUNCTIONS FOR MESSAGE CLEANING
+// HELPER FUNCTIONS FOR CAPTION CLEANING
 // -----------------------------------------------------------------------------
 
 /**
- * Clean forwarded label from message
+ * Remove bold (*) and italic (_) markers from text
+ * Keep emojis and other special characters
  */
-function cleanForwardedLabel(message) {
-    try {
-        // Clone the message to avoid modifying original
-        let cleanedMessage = JSON.parse(JSON.stringify(message));
-        
-        // Remove forwarded flag from different message types
-        if (cleanedMessage.extendedTextMessage?.contextInfo) {
-            cleanedMessage.extendedTextMessage.contextInfo.isForwarded = false;
-            // Also remove forwarding news if present
-            if (cleanedMessage.extendedTextMessage.contextInfo.forwardingScore) {
-                cleanedMessage.extendedTextMessage.contextInfo.forwardingScore = 0;
-            }
-        }
-        
-        if (cleanedMessage.imageMessage?.contextInfo) {
-            cleanedMessage.imageMessage.contextInfo.isForwarded = false;
-            if (cleanedMessage.imageMessage.contextInfo.forwardingScore) {
-                cleanedMessage.imageMessage.contextInfo.forwardingScore = 0;
-            }
-        }
-        
-        if (cleanedMessage.videoMessage?.contextInfo) {
-            cleanedMessage.videoMessage.contextInfo.isForwarded = false;
-            if (cleanedMessage.videoMessage.contextInfo.forwardingScore) {
-                cleanedMessage.videoMessage.contextInfo.forwardingScore = 0;
-            }
-        }
-        
-        if (cleanedMessage.audioMessage?.contextInfo) {
-            cleanedMessage.audioMessage.contextInfo.isForwarded = false;
-            if (cleanedMessage.audioMessage.contextInfo.forwardingScore) {
-                cleanedMessage.audioMessage.contextInfo.forwardingScore = 0;
-            }
-        }
-        
-        if (cleanedMessage.documentMessage?.contextInfo) {
-            cleanedMessage.documentMessage.contextInfo.isForwarded = false;
-            if (cleanedMessage.documentMessage.contextInfo.forwardingScore) {
-                cleanedMessage.documentMessage.contextInfo.forwardingScore = 0;
-            }
-        }
-        
-        // Remove newsletter/broadcast specific markers
-        if (cleanedMessage.protocolMessage) {
-            // For newsletter messages, we extract the actual message content
-            if (cleanedMessage.protocolMessage.type === 14 || 
-                cleanedMessage.protocolMessage.type === 26) {
-                // These are typically newsletter/broadcast messages
-                // We'll try to extract the actual message if possible
-                if (cleanedMessage.protocolMessage.historySyncNotification) {
-                    // Extract from history sync
-                    const syncData = cleanedMessage.protocolMessage.historySyncNotification;
-                    if (syncData.pushName) {
-                        // Use pushName as sender info
-                        console.log('Newsletter from:', syncData.pushName);
-                    }
-                }
-            }
-        }
-        
-        return cleanedMessage;
-    } catch (error) {
-        console.error('Error cleaning forwarded label:', error);
-        return message;
-    }
-}
-
-/**
- * Clean newsletter/information markers from text
- */
-function cleanNewsletterText(text) {
+function removeBoldItalicMarkers(text) {
     if (!text) return text;
     
-    // Remove common newsletter markers
-    const newsletterMarkers = [
-        /📢\s*/g,
-        /🔔\s*/g,
-        /📰\s*/g,
-        /🗞️\s*/g,
-        /\[NEWSLETTER\]/gi,
-        /\[BROADCAST\]/gi,
-        /\[ANNOUNCEMENT\]/gi,
-        /Newsletter:/gi,
-        /Broadcast:/gi,
-        /Announcement:/gi,
-        /Forwarded many times/gi,
-        /Forwarded message/gi,
-        /This is a broadcast message/gi
-    ];
+    // Remove * (bold) markers
+    let cleaned = text.replace(/\*/g, '');
+    // Remove _ (italic) markers
+    cleaned = cleaned.replace(/_/g, '');
     
-    let cleanedText = text;
-    newsletterMarkers.forEach(marker => {
-        cleanedText = cleanedText.replace(marker, '');
-    });
-    
-    // Trim extra whitespace
-    cleanedText = cleanedText.trim();
-    
-    return cleanedText;
+    return cleaned;
 }
 
 /**
- * Replace caption text using regex patterns
+ * Clean caption by removing bold/italic markers and adding custom footer
  */
-function replaceCaption(caption) {
+function cleanCaption(caption) {
     if (!caption) return caption;
     
-    // اگر OLD_TEXT_REGEX یا NEW_TEXT خالی ہوں تو کچھ نہیں کریں گے
-    if (!OLD_TEXT_REGEX.length || !NEW_TEXT) return caption;
+    // Step 1: Remove bold and italic markers
+    let cleanedCaption = removeBoldItalicMarkers(caption);
     
-    let result = caption;
+    // Step 2: Add custom footer
+    const footer = '\n\nᴀᴜᴛᴏ ғᴏʀᴡᴏʀᴅ ᴘᴏsᴛ ʙʏ ʙᴏᴛ';
+    cleanedCaption = cleanedCaption + footer;
     
-    OLD_TEXT_REGEX.forEach(regex => {
-        result = result.replace(regex, NEW_TEXT);
-    });
-    
-    return result;
+    return cleanedCaption;
 }
 
 /**
- * Process and clean a message completely
+ * Process caption for all message types
  */
-function processAndCleanMessage(originalMessage) {
+function processCaption(message) {
     try {
-        // Step 1: Clone the message
-        let cleanedMessage = JSON.parse(JSON.stringify(originalMessage));
+        let caption = null;
+        let messageType = null;
         
-        // Step 2: Remove forwarded labels
-        cleanedMessage = cleanForwardedLabel(cleanedMessage);
-        
-        // Step 3: Extract text and clean newsletter markers
-        const text = cleanedMessage.conversation ||
-            cleanedMessage.extendedTextMessage?.text ||
-            cleanedMessage.imageMessage?.caption ||
-            cleanedMessage.videoMessage?.caption ||
-            cleanedMessage.documentMessage?.caption || '';
-        
-        if (text) {
-            const cleanedText = cleanNewsletterText(text);
-            
-            // Update the cleaned text in appropriate field
-            if (cleanedMessage.conversation) {
-                cleanedMessage.conversation = cleanedText;
-            } else if (cleanedMessage.extendedTextMessage?.text) {
-                cleanedMessage.extendedTextMessage.text = cleanedText;
-            } else if (cleanedMessage.imageMessage?.caption) {
-                cleanedMessage.imageMessage.caption = replaceCaption(cleanedText);
-            } else if (cleanedMessage.videoMessage?.caption) {
-                cleanedMessage.videoMessage.caption = replaceCaption(cleanedText);
-            } else if (cleanedMessage.documentMessage?.caption) {
-                cleanedMessage.documentMessage.caption = replaceCaption(cleanedText);
-            }
+        // Check different message types for caption/text
+        if (message.conversation) {
+            caption = message.conversation;
+            messageType = 'conversation';
+        } else if (message.extendedTextMessage?.text) {
+            caption = message.extendedTextMessage.text;
+            messageType = 'extendedText';
+        } else if (message.imageMessage?.caption) {
+            caption = message.imageMessage.caption;
+            messageType = 'image';
+        } else if (message.videoMessage?.caption) {
+            caption = message.videoMessage.caption;
+            messageType = 'video';
+        } else if (message.documentMessage?.caption) {
+            caption = message.documentMessage.caption;
+            messageType = 'document';
         }
         
-        // Step 4: Remove protocol messages (newsletter metadata)
-        delete cleanedMessage.protocolMessage;
+        if (!caption) return message;
         
-        // Step 5: Remove newsletter sender info
-        if (cleanedMessage.extendedTextMessage?.contextInfo?.participant) {
-            const participant = cleanedMessage.extendedTextMessage.contextInfo.participant;
-            if (participant.includes('newsletter') || participant.includes('broadcast')) {
-                delete cleanedMessage.extendedTextMessage.contextInfo.participant;
-                delete cleanedMessage.extendedTextMessage.contextInfo.stanzaId;
-                delete cleanedMessage.extendedTextMessage.contextInfo.remoteJid;
-            }
-        }
+        // Clean the caption
+        const cleanedCaption = cleanCaption(caption);
         
-        // Step 6: Ensure message appears as original (not forwarded)
-        if (cleanedMessage.extendedTextMessage) {
-            cleanedMessage.extendedTextMessage.contextInfo = cleanedMessage.extendedTextMessage.contextInfo || {};
-            cleanedMessage.extendedTextMessage.contextInfo.isForwarded = false;
-            cleanedMessage.extendedTextMessage.contextInfo.forwardingScore = 0;
+        // Update the message with cleaned caption
+        const cleanedMessage = JSON.parse(JSON.stringify(message));
+        
+        if (messageType === 'conversation') {
+            cleanedMessage.conversation = cleanedCaption;
+        } else if (messageType === 'extendedText') {
+            cleanedMessage.extendedTextMessage.text = cleanedCaption;
+        } else if (messageType === 'image') {
+            cleanedMessage.imageMessage.caption = cleanedCaption;
+        } else if (messageType === 'video') {
+            cleanedMessage.videoMessage.caption = cleanedCaption;
+        } else if (messageType === 'document') {
+            cleanedMessage.documentMessage.caption = cleanedCaption;
         }
         
         return cleanedMessage;
     } catch (error) {
-        console.error('Error processing message:', error);
-        return originalMessage;
+        console.error('Error processing caption:', error);
+        return message;
     }
 }
 
@@ -423,7 +323,7 @@ async function startSession(sessionId) {
     wasi_sock.ev.on('creds.update', saveCreds);
 
     // -------------------------------------------------------------------------
-    // AUTO FORWARD MESSAGE HANDLER - ONLY VIDEOS
+    // AUTO FORWARD MESSAGE HANDLER - ONLY VIDEOS WITH CAPTION CLEANING
     // -------------------------------------------------------------------------
     wasi_sock.ev.on('messages.upsert', async wasi_m => {
         const wasi_msg = wasi_m.messages[0];
@@ -444,8 +344,8 @@ async function startSession(sessionId) {
         // AUTO FORWARD LOGIC - ONLY VIDEOS
         if (SOURCE_JIDS.includes(wasi_origin) && !wasi_msg.key.fromMe) {
             try {
-                // Process and clean the message
-                let relayMsg = processAndCleanMessage(wasi_msg.message);
+                // Process and clean caption
+                let relayMsg = processCaption(wasi_msg.message);
                 
                 if (!relayMsg) return;
 
@@ -460,11 +360,6 @@ async function startSession(sessionId) {
                 
                 // ONLY FORWARD IF IT'S A VIDEO
                 if (!isVideo) return;
-
-                // Apply caption replacement for video
-                if (relayMsg.videoMessage?.caption) {
-                    relayMsg.videoMessage.caption = replaceCaption(relayMsg.videoMessage.caption);
-                }
 
                 console.log(`📦 Forwarding video from ${wasi_origin}`);
 
@@ -528,7 +423,8 @@ function wasi_startServer() {
         console.log(`🌐 Server running on port ${wasi_port}`);
         console.log(`📡 Auto Forward: ${SOURCE_JIDS.length} source(s) → ${TARGET_JIDS.length} target(s)`);
         console.log(`🎥 ONLY VIDEOS WILL BE FORWARDED`);
-        console.log(`✨ Message Cleaning: Forwarded labels removed, Newsletter markers cleaned`);
+        console.log(`✨ Caption Cleaning: Bold/Italic markers removed`);
+        console.log(`📝 Custom Footer: ᴀᴜᴛᴏ ғᴏʀᴡᴏʀᴅ ᴘᴏsᴛ ʙʏ ʙᴏᴛ`);
         console.log(`🤖 Bot Commands: !ping, !jid, !gjid`);
     });
 }
