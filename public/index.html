@@ -2,11 +2,14 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WhatsApp Bot - QR & Pair Code</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
+    <title>Muzamil-MD • Dashboard</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
+        /* ============================================
+           RESET & BASE
+           ============================================ */
         * {
             margin: 0;
             padding: 0;
@@ -14,8 +17,8 @@
         }
 
         body {
-            font-family: 'Inter', sans-serif;
-            background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: #0a0a0f;
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -24,260 +27,522 @@
             color: #fff;
         }
 
-        .container {
-            width: 100%;
-            max-width: 900px;
-            background: rgba(255, 255, 255, 0.05);
+        /* ============================================
+           CARD - BIGGER SIZE
+           ============================================ */
+        .card {
+            background: rgba(255, 255, 255, 0.04);
             backdrop-filter: blur(20px);
-            border-radius: 30px;
-            padding: 40px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5);
+            border-radius: 28px;
+            padding: 40px 36px 32px;
+            max-width: 560px;
+            width: 100%;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            margin: 0 auto;
         }
 
+        /* ============================================
+           HEADER - BIGGER
+           ============================================ */
         .header {
-            text-align: center;
-            margin-bottom: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 28px;
         }
 
-        .header .logo {
-            font-size: 48px;
-            margin-bottom: 10px;
+        .header .brand {
+            display: flex;
+            align-items: center;
+            gap: 14px;
         }
 
-        .header h1 {
-            font-size: 32px;
+        .header .brand .icon {
+            width: 52px;
+            height: 52px;
+            background: linear-gradient(135deg, #7c3aed, #ec4899);
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            flex-shrink: 0;
+        }
+
+        .header .brand h1 {
+            font-size: 24px;
             font-weight: 800;
-            background: linear-gradient(135deg, #25D366, #128C7E);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+            letter-spacing: -0.5px;
+            color: #fff;
         }
 
-        .header p {
-            color: rgba(255, 255, 255, 0.6);
-            font-size: 16px;
-            margin-top: 8px;
+        .header .brand h1 span {
+            color: #7c3aed;
         }
 
-        .status-badge {
-            display: inline-block;
-            padding: 6px 18px;
+        .header .status-badge {
+            font-size: 13px;
+            font-weight: 600;
+            padding: 8px 18px;
             border-radius: 20px;
+            background: rgba(34, 197, 94, 0.12);
+            color: #22c55e;
+            border: 1px solid rgba(34, 197, 94, 0.15);
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        .status-badge.offline {
+            background: rgba(239, 68, 68, 0.12);
+            color: #ef4444;
+            border-color: rgba(239, 68, 68, 0.15);
+        }
+
+        .status-badge.scan {
+            background: rgba(251, 191, 36, 0.12);
+            color: #fbbf24;
+            border-color: rgba(251, 191, 36, 0.15);
+        }
+
+        /* ============================================
+           CONNECTION TABS
+           ============================================ */
+        .connection-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 16px;
+            padding: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.04);
+        }
+
+        .connection-tabs .tab-btn {
+            flex: 1;
+            padding: 12px 16px;
+            border: none;
+            border-radius: 12px;
             font-size: 14px;
             font-weight: 600;
-            margin-top: 12px;
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-family: 'Inter', sans-serif;
+            background: transparent;
+            color: rgba(255, 255, 255, 0.4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
         }
 
-        .status-badge.connected {
-            background: rgba(37, 211, 102, 0.2);
-            border-color: #25D366;
-            color: #25D366;
+        .connection-tabs .tab-btn:hover {
+            color: rgba(255, 255, 255, 0.7);
         }
 
-        .status-badge.disconnected {
-            background: rgba(255, 68, 68, 0.2);
-            border-color: #ff4444;
-            color: #ff4444;
+        .connection-tabs .tab-btn.active {
+            background: rgba(124, 58, 237, 0.2);
+            color: #fff;
+            box-shadow: 0 4px 12px rgba(124, 58, 237, 0.15);
         }
 
-        .methods-grid {
+        .connection-tabs .tab-btn i {
+            font-size: 16px;
+        }
+
+        /* ============================================
+           INFO GRID - BIGGER
+           ============================================ */
+        .info-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 30px;
-            margin-top: 20px;
-        }
-
-        .method-card {
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 20px;
-            padding: 30px;
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            transition: all 0.3s ease;
-        }
-
-        .method-card:hover {
-            transform: translateY(-5px);
-            border-color: rgba(37, 211, 102, 0.3);
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-        }
-
-        .method-card .icon {
-            font-size: 40px;
-            margin-bottom: 15px;
-            display: block;
-        }
-
-        .method-card h3 {
-            font-size: 20px;
-            font-weight: 700;
-            margin-bottom: 8px;
-        }
-
-        .method-card p {
-            color: rgba(255, 255, 255, 0.6);
-            font-size: 14px;
+            gap: 12px;
             margin-bottom: 20px;
-            line-height: 1.6;
         }
 
-        .qr-container {
+        .info-card {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 16px;
+            padding: 16px 18px;
+            border: 1px solid rgba(255, 255, 255, 0.04);
+        }
+
+        .info-card .label {
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.35);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 600;
+        }
+
+        .info-card .value {
+            font-size: 18px;
+            font-weight: 700;
+            margin-top: 4px;
+            color: #fff;
+        }
+
+        .info-card .value.green { color: #22c55e; }
+        .info-card .value.pink { color: #ec4899; }
+        .info-card .value.blue { color: #06b6d4; }
+        .info-card .value.red { color: #ef4444; }
+        .info-card .value.gray { color: rgba(255,255,255,0.3); }
+
+        /* ============================================
+           QR SECTION - BIG QR CODE
+           ============================================ */
+        .qr-section {
             text-align: center;
-            padding: 20px;
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 15px;
-            border: 2px dashed rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 18px;
+            padding: 28px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            transition: all 0.4s ease;
+            overflow: hidden;
+            max-height: 600px;
+            opacity: 1;
         }
 
-        .qr-container img {
-            max-width: 200px;
-            height: auto;
+        .qr-section.collapsed {
+            max-height: 0 !important;
+            padding: 0 !important;
+            margin-bottom: 0 !important;
+            opacity: 0 !important;
+            border: none !important;
+        }
+
+        .qr-section .qr-wrapper {
+            display: inline-block;
+            background: #ffffff;
+            border-radius: 16px;
+            padding: 12px;
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+        }
+
+        .qr-section .qr-wrapper img {
+            width: 220px;
+            height: 220px;
+            display: block;
             border-radius: 10px;
         }
 
-        .qr-placeholder {
-            padding: 40px;
-            color: rgba(255, 255, 255, 0.3);
-            font-size: 14px;
+        .qr-section .qr-wrapper .placeholder {
+            width: 220px;
+            height: 220px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: #f0f0f0;
+            border-radius: 10px;
+            color: #999;
         }
 
-        .input-group {
+        .qr-section .qr-wrapper .placeholder i {
+            font-size: 56px;
+            margin-bottom: 10px;
+            opacity: 0.3;
+        }
+
+        .qr-section .qr-wrapper .placeholder span {
+            font-size: 15px;
+            font-weight: 500;
+        }
+
+        .qr-section .qr-status {
+            display: inline-block;
+            margin-top: 14px;
+            padding: 6px 20px;
+            border-radius: 14px;
+            font-size: 14px;
+            font-weight: 600;
+            background: rgba(251, 191, 36, 0.1);
+            color: #fbbf24;
+            border: 1px solid rgba(251, 191, 36, 0.1);
+        }
+
+        .qr-section .qr-status.ready {
+            background: rgba(34, 197, 94, 0.1);
+            color: #22c55e;
+            border-color: rgba(34, 197, 94, 0.1);
+        }
+
+        .qr-section .qr-status.waiting {
+            background: rgba(251, 191, 36, 0.1);
+            color: #fbbf24;
+            border-color: rgba(251, 191, 36, 0.1);
+        }
+
+        .qr-section .hint {
+            margin-top: 14px;
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.35);
+            font-weight: 500;
+        }
+
+        .qr-section .hint i {
+            color: #06b6d4;
+            margin-right: 6px;
+        }
+
+        .qr-section .hint .highlight {
+            color: rgba(255, 255, 255, 0.6);
+            font-weight: 600;
+        }
+
+        /* ============================================
+           PAIR CODE SECTION
+           ============================================ */
+        .pair-section {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 18px;
+            padding: 24px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            transition: all 0.4s ease;
+            overflow: hidden;
+            max-height: 600px;
+            opacity: 1;
+        }
+
+        .pair-section.collapsed {
+            max-height: 0 !important;
+            padding: 0 !important;
+            margin-bottom: 0 !important;
+            opacity: 0 !important;
+            border: none !important;
+        }
+
+        .pair-section .pair-input-group {
             display: flex;
             flex-direction: column;
             gap: 12px;
         }
 
-        .input-group input {
+        .pair-section .pair-input-group .input-wrapper {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .pair-section .pair-input-group input {
+            flex: 1;
             padding: 14px 18px;
             border-radius: 12px;
-            border: 2px solid rgba(255, 255, 255, 0.1);
+            border: 2px solid rgba(255, 255, 255, 0.08);
             background: rgba(255, 255, 255, 0.05);
             color: #fff;
             font-size: 16px;
             transition: all 0.3s ease;
             outline: none;
+            font-family: 'Inter', sans-serif;
         }
 
-        .input-group input:focus {
-            border-color: #25D366;
+        .pair-section .pair-input-group input:focus {
+            border-color: #7c3aed;
             background: rgba(255, 255, 255, 0.08);
         }
 
-        .input-group input::placeholder {
+        .pair-section .pair-input-group input::placeholder {
             color: rgba(255, 255, 255, 0.3);
         }
 
-        .btn {
+        .pair-section .pair-input-group .btn-pair {
             padding: 14px 24px;
             border: none;
             border-radius: 12px;
-            font-size: 16px;
-            font-weight: 600;
+            background: linear-gradient(135deg, #7c3aed, #ec4899);
+            color: #fff;
+            font-weight: 700;
+            font-size: 15px;
             cursor: pointer;
             transition: all 0.3s ease;
-            display: inline-flex;
+            font-family: 'Inter', sans-serif;
+            white-space: nowrap;
+            display: flex;
             align-items: center;
-            justify-content: center;
-            gap: 10px;
+            gap: 8px;
         }
 
-        .btn-primary {
-            background: linear-gradient(135deg, #25D366, #128C7E);
-            color: #fff;
-        }
-
-        .btn-primary:hover {
+        .pair-section .pair-input-group .btn-pair:hover {
             transform: scale(1.02);
-            box-shadow: 0 10px 25px rgba(37, 211, 102, 0.3);
+            box-shadow: 0 8px 24px rgba(124, 58, 237, 0.3);
         }
 
-        .btn-secondary {
-            background: rgba(255, 255, 255, 0.1);
-            color: #fff;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .btn-secondary:hover {
-            background: rgba(255, 255, 255, 0.15);
-        }
-
-        .btn:disabled {
+        .pair-section .pair-input-group .btn-pair:disabled {
             opacity: 0.5;
             cursor: not-allowed;
+            transform: none !important;
         }
 
         .pair-code-display {
-            margin-top: 15px;
+            margin-top: 16px;
             padding: 20px;
-            background: rgba(37, 211, 102, 0.1);
-            border-radius: 12px;
-            border: 2px solid #25D366;
+            background: rgba(34, 197, 94, 0.08);
+            border-radius: 14px;
+            border: 2px solid #22c55e;
             text-align: center;
             display: none;
+            animation: fadeIn 0.5s ease;
         }
 
         .pair-code-display.show {
             display: block;
-            animation: fadeIn 0.5s ease;
         }
 
         .pair-code-display .code {
-            font-size: 36px;
+            font-size: 32px;
             font-weight: 800;
-            color: #25D366;
+            color: #22c55e;
             letter-spacing: 8px;
             font-family: 'Courier New', monospace;
         }
 
         .pair-code-display .instruction {
-            color: rgba(255, 255, 255, 0.7);
-            font-size: 14px;
-            margin-top: 10px;
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 13px;
+            margin-top: 8px;
         }
 
-        .footer-actions {
+        .pair-code-display .expires {
+            color: rgba(255, 255, 255, 0.3);
+            font-size: 12px;
+            margin-top: 4px;
+        }
+
+        .pair-section .pair-hint {
+            margin-top: 12px;
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.25);
+            text-align: center;
+        }
+
+        .pair-section .pair-hint i {
+            color: #06b6d4;
+            margin-right: 6px;
+        }
+
+        /* ============================================
+           SESSION INFO - BIGGER
+           ============================================ */
+        .session-info {
             display: flex;
-            justify-content: center;
-            gap: 15px;
-            margin-top: 30px;
+            justify-content: space-between;
+            padding: 14px 18px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 14px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.04);
             flex-wrap: wrap;
+            gap: 8px;
         }
 
-        .footer-actions .btn {
-            padding: 10px 20px;
+        .session-info .item {
+            flex: 1;
+            min-width: 70px;
+        }
+
+        .session-info .item .label {
+            font-size: 10px;
+            color: rgba(255, 255, 255, 0.3);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 600;
+        }
+
+        .session-info .item .value {
             font-size: 14px;
+            font-weight: 600;
+            color: rgba(255, 255, 255, 0.7);
+            margin-top: 2px;
+        }
+
+        .session-info .item .value.code {
+            font-family: 'Monaco', monospace;
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.3);
+        }
+
+        /* ============================================
+           BUTTONS - BIGGER
+           ============================================ */
+        .btn-group {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .btn {
+            padding: 16px 24px;
+            border: none;
+            border-radius: 16px;
+            font-weight: 700;
+            font-size: 15px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-family: 'Inter', sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .btn:active {
+            transform: scale(0.96);
+        }
+
+        .btn-primary {
+            flex: 1;
+            background: linear-gradient(135deg, #7c3aed, #ec4899);
+            color: #fff;
+            box-shadow: 0 4px 20px rgba(124, 58, 237, 0.25);
+        }
+
+        .btn-primary:hover {
+            box-shadow: 0 8px 32px rgba(124, 58, 237, 0.4);
+            transform: translateY(-2px);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            transform: none !important;
+            box-shadow: none !important;
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.06);
+            color: rgba(255, 255, 255, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            padding: 16px 22px;
+            flex: 0.4;
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.1);
         }
 
         .btn-danger {
-            background: rgba(255, 68, 68, 0.2);
-            color: #ff4444;
-            border: 1px solid rgba(255, 68, 68, 0.3);
+            width: 100%;
+            background: rgba(239, 68, 68, 0.08);
+            color: #ef4444;
+            border: 1px solid rgba(239, 68, 68, 0.1);
+            padding: 16px;
         }
 
         .btn-danger:hover {
-            background: rgba(255, 68, 68, 0.3);
+            background: rgba(239, 68, 68, 0.15);
         }
 
-        .btn-success {
-            background: rgba(37, 211, 102, 0.2);
-            color: #25D366;
-            border: 1px solid rgba(37, 211, 102, 0.3);
-        }
-
-        .btn-success:hover {
-            background: rgba(37, 211, 102, 0.3);
-        }
-
-        .loading-spinner {
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 3px solid rgba(255, 255, 255, 0.1);
+        .btn .spinner {
+            width: 18px;
+            height: 18px;
+            border: 2px solid rgba(255,255,255,0.2);
+            border-top: 2px solid #fff;
             border-radius: 50%;
-            border-top-color: #25D366;
-            animation: spin 0.8s ease infinite;
+            animation: spin 0.7s linear infinite;
+            display: inline-block;
         }
 
         @keyframes spin {
@@ -289,77 +554,719 @@
             to { opacity: 1; transform: translateY(0); }
         }
 
+        /* ============================================
+           TOAST
+           ============================================ */
         .toast {
             position: fixed;
-            top: 20px;
-            right: 20px;
-            padding: 16px 24px;
-            border-radius: 12px;
-            background: rgba(0, 0, 0, 0.9);
-            color: #fff;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: rgba(255, 255, 255, 0.06);
+            backdrop-filter: blur(20px);
+            padding: 14px 28px;
+            border-radius: 14px;
+            border: 1px solid rgba(255, 255, 255, 0.06);
             font-size: 14px;
-            font-weight: 500;
-            z-index: 1000;
-            transform: translateX(120%);
-            transition: transform 0.4s ease;
-            max-width: 400px;
-            border-left: 4px solid #25D366;
+            font-weight: 600;
+            color: #fff;
+            transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+            z-index: 999;
+            max-width: 90%;
+            opacity: 0;
+            pointer-events: none;
+            text-align: center;
         }
 
         .toast.show {
-            transform: translateX(0);
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+            pointer-events: auto;
         }
 
-        .toast.error {
-            border-left-color: #ff4444;
+        .toast.success { border-left: 3px solid #22c55e; }
+        .toast.error { border-left: 3px solid #ef4444; }
+        .toast.warning { border-left: 3px solid #fbbf24; }
+        .toast.info { border-left: 3px solid #06b6d4; }
+
+        /* ============================================
+           FOOTER
+           ============================================ */
+        .footer {
+            text-align: center;
+            padding: 18px 0 0;
+            color: rgba(255, 255, 255, 0.12);
+            font-size: 12px;
+            font-weight: 500;
+            letter-spacing: 0.3px;
         }
 
-        .toast.warning {
-            border-left-color: #ffa500;
+        .footer i {
+            color: #ec4899;
         }
 
-        @media (max-width: 768px) {
-            .container {
+        /* ============================================
+           RESPONSIVE
+           ============================================ */
+        @media (max-width: 520px) {
+            .card {
+                max-width: 100%;
+                padding: 28px 20px 24px;
+                border-radius: 24px;
+            }
+
+            .header .brand h1 {
+                font-size: 20px;
+            }
+
+            .header .brand .icon {
+                width: 44px;
+                height: 44px;
+                font-size: 20px;
+            }
+
+            .header .status-badge {
+                font-size: 11px;
+                padding: 6px 14px;
+            }
+
+            .connection-tabs .tab-btn {
+                font-size: 12px;
+                padding: 10px 12px;
+            }
+
+            .connection-tabs .tab-btn i {
+                font-size: 14px;
+            }
+
+            .info-grid {
+                gap: 10px;
+            }
+
+            .info-card {
+                padding: 14px 16px;
+            }
+
+            .info-card .value {
+                font-size: 16px;
+            }
+
+            .qr-section .qr-wrapper img,
+            .qr-section .qr-wrapper .placeholder {
+                width: 190px;
+                height: 190px;
+            }
+
+            .qr-section {
                 padding: 20px;
             }
 
-            .methods-grid {
-                grid-template-columns: 1fr;
-                gap: 20px;
+            .qr-section .qr-wrapper {
+                padding: 10px;
             }
 
-            .header h1 {
-                font-size: 24px;
+            .pair-section {
+                padding: 20px;
+            }
+
+            .pair-section .pair-input-group .input-wrapper {
+                flex-direction: column;
+            }
+
+            .pair-section .pair-input-group .btn-pair {
+                width: 100%;
+                justify-content: center;
             }
 
             .pair-code-display .code {
                 font-size: 28px;
                 letter-spacing: 4px;
             }
+
+            .qr-section .qr-wrapper .placeholder i {
+                font-size: 48px;
+            }
+
+            .qr-section .qr-status {
+                font-size: 13px;
+                padding: 5px 18px;
+            }
+
+            .qr-section .hint {
+                font-size: 12px;
+            }
+
+            .session-info {
+                padding: 12px 16px;
+            }
+
+            .session-info .item .value {
+                font-size: 13px;
+            }
+
+            .btn {
+                font-size: 14px;
+                padding: 14px 18px;
+            }
+
+            .btn-secondary {
+                padding: 14px 18px;
+            }
+        }
+
+        @media (max-width: 400px) {
+            .card {
+                padding: 20px 14px 18px;
+                border-radius: 20px;
+            }
+
+            .header .brand h1 {
+                font-size: 17px;
+            }
+
+            .header .brand .icon {
+                width: 38px;
+                height: 38px;
+                font-size: 17px;
+            }
+
+            .header .status-badge {
+                font-size: 10px;
+                padding: 4px 12px;
+            }
+
+            .connection-tabs .tab-btn {
+                font-size: 11px;
+                padding: 8px 10px;
+            }
+
+            .connection-tabs .tab-btn i {
+                font-size: 12px;
+            }
+
+            .info-grid {
+                gap: 8px;
+            }
+
+            .info-card {
+                padding: 10px 12px;
+                border-radius: 12px;
+            }
+
+            .info-card .value {
+                font-size: 14px;
+            }
+
+            .info-card .label {
+                font-size: 9px;
+            }
+
+            .qr-section .qr-wrapper img,
+            .qr-section .qr-wrapper .placeholder {
+                width: 160px;
+                height: 160px;
+            }
+
+            .qr-section {
+                padding: 16px;
+                border-radius: 14px;
+            }
+
+            .qr-section .qr-wrapper {
+                padding: 8px;
+            }
+
+            .pair-section {
+                padding: 16px;
+                border-radius: 14px;
+            }
+
+            .pair-section .pair-input-group input {
+                padding: 12px 14px;
+                font-size: 14px;
+            }
+
+            .pair-code-display .code {
+                font-size: 24px;
+                letter-spacing: 3px;
+            }
+
+            .qr-section .qr-wrapper .placeholder i {
+                font-size: 40px;
+            }
+
+            .qr-section .qr-wrapper .placeholder span {
+                font-size: 13px;
+            }
+
+            .qr-section .qr-status {
+                font-size: 12px;
+                padding: 4px 14px;
+            }
+
+            .qr-section .hint {
+                font-size: 11px;
+            }
+
+            .session-info {
+                padding: 10px 14px;
+            }
+
+            .session-info .item .value {
+                font-size: 12px;
+            }
+
+            .btn {
+                font-size: 13px;
+                padding: 13px 14px;
+                border-radius: 14px;
+            }
+
+            .btn-secondary {
+                padding: 13px 14px;
+            }
+
+            .btn-danger {
+                padding: 13px;
+            }
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <!-- Header -->
+
+    <!-- Toast -->
+    <div id="toast" class="toast"></div>
+
+    <div class="card">
+        <!-- ===== HEADER ===== -->
         <div class="header">
-            <div class="logo">🤖</div>
-            <h1>WhatsApp Bot Manager</h1>
-            <p>Connect your bot using QR Code or Pair Code</p>
-            <div id="statusBadge" class="status-badge disconnected">
-                <i class="fas fa-circle"></i> Disconnected
+            <div class="brand">
+                <div class="icon">
+                    <i class="fas fa-bolt"></i>
+                </div>
+                <h1>Muzamil <span>MD</span></h1>
+            </div>
+            <span class="status-badge" id="statusBadge">● Online</span>
+        </div>
+
+        <!-- ===== CONNECTION TABS ===== -->
+        <div class="connection-tabs">
+            <button class="tab-btn active" data-tab="qr" onclick="switchTab('qr')">
+                <i class="fas fa-qrcode"></i> QR Code
+            </button>
+            <button class="tab-btn" data-tab="pair" onclick="switchTab('pair')">
+                <i class="fas fa-phone"></i> Pair Code
+            </button>
+        </div>
+
+        <!-- ===== INFO GRID ===== -->
+        <div class="info-grid">
+            <div class="info-card">
+                <div class="label">Bot Status</div>
+                <div class="value green" id="botStatus">● Connected</div>
+            </div>
+            <div class="info-card">
+                <div class="label">Database</div>
+                <div class="value pink" id="dbStatus">● Active</div>
+            </div>
+            <div class="info-card">
+                <div class="label">Uptime</div>
+                <div class="value blue" id="uptimeDisplay">0s</div>
+            </div>
+            <div class="info-card">
+                <div class="label">Session</div>
+                <div class="value" id="sessionDisplay" style="font-size:14px; color:rgba(255,255,255,0.4);">-</div>
             </div>
         </div>
 
-        <!-- Methods Grid -->
-        <div class="methods-grid">
-            <!-- QR Code Method -->
-            <div class="method-card">
-                <span class="icon">📱</span>
-                <h3>QR Code</h3>
-                <p>Scan with WhatsApp Web to connect instantly</p>
-                <div class="qr-container" id="qrContainer">
-                    <div id="qrDisplay">
-                        <div class="qr-placeholder">
-                            <i class="fas fa-qrcode" style="font-size: 48px; display: block; margin-bottom: 10px;"></i>
-                            <span>
+        <!-- ===== QR SECTION ===== -->
+        <div class="qr-section" id="qrSection">
+            <div class="qr-wrapper">
+                <img id="qrImage" src="" alt="QR" style="display:none;">
+                <div class="placeholder" id="qrPlaceholder">
+                    <i class="fas fa-qrcode"></i>
+                    <span>Scan to Connect</span>
+                </div>
+            </div>
+            <div class="qr-status waiting" id="qrStatus">● Waiting for QR</div>
+            <div class="hint" id="qrHint">
+                <i class="fas fa-phone"></i> WhatsApp → <span class="highlight">Linked Devices</span> → Link a Device
+            </div>
+        </div>
+
+        <!-- ===== PAIR CODE SECTION ===== -->
+        <div class="pair-section collapsed" id="pairSection">
+            <div class="pair-input-group">
+                <div class="input-wrapper">
+                    <input type="text" id="phoneInput" placeholder="Enter phone number (e.g., 923001234567)" maxlength="15">
+                    <button class="btn-pair" id="pairBtn" onclick="generatePairCode()">
+                        <i class="fas fa-link"></i> Get Code
+                    </button>
+                </div>
+            </div>
+            <div class="pair-code-display" id="pairCodeDisplay">
+                <div class="code" id="pairCodeText">12345678</div>
+                <div class="instruction">📱 Enter this code in WhatsApp → Linked Devices</div>
+                <div class="expires">⏳ Expires in 5 minutes</div>
+            </div>
+            <div class="pair-hint">
+                <i class="fas fa-info-circle"></i> Enter your phone number with country code (e.g., 92 for Pakistan)
+            </div>
+        </div>
+
+        <!-- ===== SESSION INFO ===== -->
+        <div class="session-info">
+            <div class="item">
+                <div class="label">Device</div>
+                <div class="value" id="deviceDisplay">-</div>
+            </div>
+            <div class="item">
+                <div class="label">Last Active</div>
+                <div class="value" id="activeDisplay">-</div>
+            </div>
+        </div>
+
+        <!-- ===== BUTTONS ===== -->
+        <div class="btn-group">
+            <button class="btn btn-primary" id="restartBtn" onclick="restartBot()">
+                <i class="fas fa-sync-alt"></i> Restart
+            </button>
+            <button class="btn btn-secondary" onclick="refreshStatus()" title="Refresh">
+                <i class="fas fa-rotate"></i>
+            </button>
+        </div>
+        <button class="btn btn-danger" onclick="logoutBot()">
+            <i class="fas fa-sign-out-alt"></i> Logout
+        </button>
+
+        <!-- ===== FOOTER ===== -->
+        <div class="footer">
+            Made with <i class="fas fa-heart"></i> by Muzamil
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // STATE
+        // ============================================
+        let statusInterval = null;
+        let startTime = Date.now();
+        let currentTab = 'qr';
+        let pairTimeout = null;
+
+        // ============================================
+        // TOAST
+        // ============================================
+        function showToast(msg, type = 'success') {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.className = `toast ${type}`;
+            setTimeout(() => t.classList.add('show'), 10);
+            clearTimeout(t._hide);
+            t._hide = setTimeout(() => t.classList.remove('show'), 4000);
+        }
+
+        // ============================================
+        // TAB SWITCHING
+        // ============================================
+        function switchTab(tab) {
+            currentTab = tab;
+            
+            // Update tab buttons
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.tab === tab);
+            });
+
+            // Show/hide sections
+            const qrSection = document.getElementById('qrSection');
+            const pairSection = document.getElementById('pairSection');
+
+            if (tab === 'qr') {
+                qrSection.classList.remove('collapsed');
+                pairSection.classList.add('collapsed');
+            } else {
+                qrSection.classList.add('collapsed');
+                pairSection.classList.remove('collapsed');
+                // Hide old pair code if any
+                document.getElementById('pairCodeDisplay').classList.remove('show');
+            }
+        }
+
+        // ============================================
+        // FORMAT TIME
+        // ============================================
+        function formatTime(s) {
+            const h = Math.floor(s / 3600);
+            const m = Math.floor((s % 3600) / 60);
+            const sec = Math.floor(s % 60);
+            if (h > 0) return h + 'h ' + m + 'm';
+            if (m > 0) return m + 'm ' + sec + 's';
+            return sec + 's';
+        }
+
+        // ============================================
+        // GENERATE PAIR CODE
+        // ============================================
+        async function generatePairCode() {
+            const input = document.getElementById('phoneInput');
+            const btn = document.getElementById('pairBtn');
+            const display = document.getElementById('pairCodeDisplay');
+            const codeText = document.getElementById('pairCodeText');
+
+            const phone = input.value.trim();
+            if (!phone) {
+                showToast('Please enter phone number', 'warning');
+                input.focus();
+                return;
+            }
+
+            // Validate phone number
+            const cleanPhone = phone.replace(/[^0-9]/g, '');
+            if (cleanPhone.length < 10 || cleanPhone.length > 15) {
+                showToast('Invalid phone number (10-15 digits)', 'error');
+                return;
+            }
+
+            // Disable button
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
+
+            try {
+                const res = await fetch('/api/pair', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phoneNumber: cleanPhone })
+                });
+
+                const data = await res.json();
+
+                if (data.success) {
+                    // Show pair code
+                    codeText.textContent = data.pairCode;
+                    display.classList.add('show');
+                    showToast('✅ Pair code generated! Check below.', 'success');
+                    
+                    // Auto hide after 5 minutes
+                    clearTimeout(pairTimeout);
+                    pairTimeout = setTimeout(() => {
+                        display.classList.remove('show');
+                        showToast('⏳ Pair code expired. Generate a new one.', 'warning');
+                    }, 5 * 60 * 1000);
+                } else {
+                    showToast('❌ ' + (data.error || 'Failed to generate code'), 'error');
+                }
+            } catch (e) {
+                showToast('❌ Server error: ' + e.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-link"></i> Get Code';
+            }
+        }
+
+        // ============================================
+        // FETCH STATUS
+        // ============================================
+        async function fetchStatus() {
+            try {
+                const res = await fetch('/api/status');
+                const data = await res.json();
+
+                // --- BADGE ---
+                const badge = document.getElementById('statusBadge');
+                let badgeText, badgeClass;
+
+                if (data.connected) {
+                    badgeText = '● Online';
+                    badgeClass = '';
+                } else if (data.qr) {
+                    badgeText = '◉ Scan';
+                    badgeClass = 'scan';
+                } else {
+                    badgeText = '○ Offline';
+                    badgeClass = 'offline';
+                }
+
+                badge.textContent = badgeText;
+                badge.className = 'status-badge' + (badgeClass ? ' ' + badgeClass : '');
+
+                // --- BOT STATUS ---
+                const botStatus = document.getElementById('botStatus');
+                if (data.connected) {
+                    botStatus.textContent = '● Connected';
+                    botStatus.className = 'value green';
+                } else if (data.qr) {
+                    botStatus.textContent = '◉ Waiting for QR';
+                    botStatus.className = 'value blue';
+                } else {
+                    botStatus.textContent = '● Disconnected';
+                    botStatus.className = 'value red';
+                }
+
+                // --- DATABASE ---
+                const dbStatus = document.getElementById('dbStatus');
+                if (data.dbConnected) {
+                    dbStatus.textContent = '● Active';
+                    dbStatus.className = 'value green';
+                } else if (data.dbConfigured) {
+                    dbStatus.textContent = '◉ Connecting';
+                    dbStatus.className = 'value blue';
+                } else {
+                    dbStatus.textContent = '○ Disabled';
+                    dbStatus.className = 'value gray';
+                }
+
+                // --- UPTIME ---
+                document.getElementById('uptimeDisplay').textContent = formatTime(Math.floor((Date.now() - startTime) / 1000));
+
+                // --- SESSION ---
+                document.getElementById('sessionDisplay').textContent = data.sessionId || '-';
+
+                // --- QR SECTION (only if QR tab is active) ---
+                if (currentTab === 'qr') {
+                    const qrSection = document.getElementById('qrSection');
+                    const img = document.getElementById('qrImage');
+                    const ph = document.getElementById('qrPlaceholder');
+                    const qrStatus = document.getElementById('qrStatus');
+                    const hint = document.getElementById('qrHint');
+
+                    if (data.connected) {
+                        qrSection.classList.add('collapsed');
+                    } else {
+                        qrSection.classList.remove('collapsed');
+
+                        if (data.qr) {
+                            img.src = data.qr;
+                            img.style.display = 'block';
+                            ph.style.display = 'none';
+                            qrStatus.textContent = '📱 Scan QR Code';
+                            qrStatus.className = 'qr-status ready';
+                            hint.innerHTML = '<i class="fas fa-phone"></i> WhatsApp → <span class="highlight">Linked Devices</span> → Link a Device';
+                        } else {
+                            img.style.display = 'none';
+                            ph.style.display = 'flex';
+                            qrStatus.textContent = '⏳ Generating QR...';
+                            qrStatus.className = 'qr-status waiting';
+                            hint.innerHTML = '<i class="fas fa-clock"></i> Please wait, <span class="highlight">QR code</span> is being generated';
+                        }
+                    }
+                }
+
+                // --- DEVICE ---
+                document.getElementById('deviceDisplay').textContent = data.connected ? '✅ Connected' : '-';
+
+                // --- LAST ACTIVE ---
+                document.getElementById('activeDisplay').textContent = data.lastActive ? new Date(data.lastActive).toLocaleTimeString() : '-';
+
+                // --- ENABLE RESTART ---
+                document.getElementById('restartBtn').disabled = false;
+
+                return data;
+
+            } catch (e) {
+                console.error(e);
+                document.getElementById('statusBadge').textContent = '⚠ Error';
+                document.getElementById('statusBadge').className = 'status-badge offline';
+                document.getElementById('botStatus').textContent = '⚠ Error';
+                document.getElementById('botStatus').className = 'value red';
+                showToast('Failed to fetch status', 'error');
+                return null;
+            }
+        }
+
+        // ============================================
+        // REFRESH
+        // ============================================
+        function refreshStatus() {
+            const btn = document.querySelector('.btn-secondary');
+            const orig = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            btn.disabled = true;
+            fetchStatus().finally(() => {
+                btn.innerHTML = orig;
+                btn.disabled = false;
+                showToast('Status updated', 'info');
+            });
+        }
+
+        // ============================================
+        // RESTART
+        // ============================================
+        async function restartBot() {
+            const btn = document.getElementById('restartBtn');
+            const orig = btn.innerHTML;
+            btn.innerHTML = '<span class="spinner"></span> Restarting...';
+            btn.disabled = true;
+
+            try {
+                const res = await fetch('/api/restart', { method: 'POST' });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('⚡ Bot restarting...', 'warning');
+                    setTimeout(() => {
+                        fetchStatus();
+                        showToast('✅ Bot restarted!', 'success');
+                    }, 5000);
+                } else {
+                    showToast('❌ Failed: ' + (data.error || 'Unknown'), 'error');
+                }
+            } catch (e) {
+                showToast('❌ Request failed', 'error');
+            } finally {
+                btn.innerHTML = orig;
+                btn.disabled = false;
+            }
+        }
+
+        // ============================================
+        // LOGOUT
+        // ============================================
+        async function logoutBot() {
+            if (!confirm('⚠️ Logout will disconnect the bot. Continue?')) return;
+            const btn = document.querySelector('.btn-danger');
+            const orig = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Logging out...';
+            btn.disabled = true;
+
+            try {
+                const res = await fetch('/api/logout', { method: 'POST' });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('👋 Logged out', 'success');
+                    setTimeout(fetchStatus, 2000);
+                } else {
+                    showToast('❌ Logout failed', 'error');
+                }
+            } catch (e) {
+                showToast('❌ Request failed', 'error');
+            } finally {
+                btn.innerHTML = orig;
+                btn.disabled = false;
+            }
+        }
+
+        // ============================================
+        // AUTO REFRESH
+        // ============================================
+        function startAutoRefresh() {
+            if (statusInterval) clearInterval(statusInterval);
+            fetchStatus();
+            statusInterval = setInterval(fetchStatus, 10000);
+        }
+
+        // ============================================
+        // KEYBOARD SHORTCUT - Enter to generate pair code
+        // ============================================
+        document.getElementById('phoneInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                generatePairCode();
+            }
+        });
+
+        document.addEventListener('DOMContentLoaded', startAutoRefresh);
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) fetchStatus();
+        });
+    </script>
+
+</body>
+</html>
