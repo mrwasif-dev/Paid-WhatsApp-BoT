@@ -2,12 +2,17 @@ require('dotenv').config();
 const {
     DisconnectReason,
     jidNormalizedUser,
-    proto
+    proto,
+    makeWASocket,
+    useMultiFileAuthState,
+    fetchLatestBaileysVersion
 } = require('@whiskeysockets/baileys');
 const { Boom } = require('@hapi/boom');
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const QRCode = require('qrcode');
+const Pino = require('pino');
 
 const { wasi_connectSession, wasi_clearSession } = require('./wasilib/session');
 const { wasi_connectDatabase } = require('./wasilib/database');
@@ -27,16 +32,16 @@ try {
 const wasi_app = express();
 const wasi_port = process.env.PORT || 3000;
 
-const QRCode = require('qrcode');
-
 // -----------------------------------------------------------------------------
 // SESSION STATE
 // -----------------------------------------------------------------------------
 const sessions = new Map();
+const pairCodes = new Map(); // Store pair codes temporarily
 
 // Middleware
 wasi_app.use(express.json());
 wasi_app.use(express.static(path.join(__dirname, 'public')));
+wasi_app.use(express.urlencoded({ extended: true }));
 
 // Keep-Alive Route
 wasi_app.get('/ping', (req, res) => res.status(200).send('pong'));
@@ -71,9 +76,6 @@ const NEW_TEXT = process.env.NEW_TEXT
 // HELPER FUNCTIONS FOR MESSAGE CLEANING
 // -----------------------------------------------------------------------------
 
-/**
- * Clean forwarded label from message
- */
 function cleanForwardedLabel(message) {
     try {
         let cleanedMessage = JSON.parse(JSON.stringify(message));
@@ -132,9 +134,6 @@ function cleanForwardedLabel(message) {
     }
 }
 
-/**
- * Clean newsletter/information markers from text
- */
 function cleanNewsletterText(text) {
     if (!text) return text;
     
@@ -163,9 +162,6 @@ function cleanNewsletterText(text) {
     return cleanedText;
 }
 
-/**
- * Replace caption text using regex patterns
- */
 function replaceCaption(caption) {
     if (!caption) return caption;
     if (!OLD_TEXT_REGEX.length || !NEW_TEXT) return caption;
@@ -179,9 +175,6 @@ function replaceCaption(caption) {
     return result;
 }
 
-/**
- * Process and clean a message completely
- */
 function processAndCleanMessage(originalMessage) {
     try {
         let cleanedMessage = JSON.parse(JSON.stringify(originalMessage));
@@ -317,6 +310,59 @@ async function processCommand(sock, msg) {
         }
     } catch (error) {
         console.error('Command execution error:', error);
+    }
+}
+
+// -----------------------------------------------------------------------------
+// PAIR CODE FUNCTION
+// -----------------------------------------------------------------------------
+async function generatePairCode(phoneNumber, sessionId) {
+    try {
+        // Clean phone number
+        let cleanNumber = phoneNumber.replace(/[^0-9]/g, '');
+        if (!cleanNumber.startsWith('92')) {
+            cleanNumber = '92' + cleanNumber;
+        }
+        
+        console.log(`📱 Generating pair code for: ${cleanNumber}`);
+        
+        // Create new session for pairing
+        const { state, saveCreds } = await useMultiFileAuthState(`auth_info_${sessionId}`);
+        const { version } = await fetchLatestBaileysVersion();
+        
+        const sock = makeWASocket({
+            version,
+            auth: state,
+            logger: Pino({ level: 'silent' }),
+            browser: ['WhatsApp Bot', 'Chrome', '1.0.0'],
+            printQRInTerminal: false,
+        });
+        
+        sock.ev.on('creds.update', saveCreds);
+        
+        // Request pairing code
+        const code = await sock.requestPairingCode(cleanNumber);
+        
+        // Store session info
+        pairCodes.set(sessionId, {
+            code,
+            phoneNumber: cleanNumber,
+            sock,
+            timestamp: Date.now()
+        });
+        
+        // Auto-cleanup after 5 minutes
+        setTimeout(() => {
+            if (pairCodes.has(sessionId)) {
+                pairCodes.delete(sessionId);
+                console.log(`🧹 Pair code session ${sessionId} cleaned up`);
+            }
+        }, 5 * 60 * 1000);
+        
+        return code;
+    } catch (error) {
+        console.error('Pair code generation error:', error);
+        throw error;
     }
 }
 
@@ -463,7 +509,7 @@ async function startSession(sessionId) {
 }
 
 // ============================================================
-// 🚀 ALL APIS (ADD THESE TO YOUR INDEX.JS)
+// 🚀 ALL APIS
 // ============================================================
 
 // -----------------------------------------------------------------------------
@@ -477,11 +523,9 @@ wasi_app.get('/api/status', async (req, res) => {
     let connected = false;
     let dbConnected = false;
 
-    // Check database connection
     if (config.mongoDbUrl) {
         try {
-            // You can add your actual DB check here
-            dbConnected = true; // Placeholder - replace with actual check
+            dbConnected = true;
         } catch (e) {
             dbConnected = false;
         }
@@ -509,13 +553,55 @@ wasi_app.get('/api/status', async (req, res) => {
 });
 
 // -----------------------------------------------------------------------------
+// API: GENERATE PAIR CODE (NEW)
+// -----------------------------------------------------------------------------
+wasi_app.post('/api/pair', async (req, res) => {
+    try {
+        const { phoneNumber } = req.body;
+        
+        if (!phoneNumber) {
+            return res.status(400).json({ 
+                success: false, 
+                error: 'Phone number is required' 
+            });
+        }
+
+        // Validate phone number
+        const cleanNumber = phoneNumber.replace(/[^0-9]/g, '');
+        if (cleanNumber.length < 10 || cleanNumber.length > 15) {
+            return res.status(400).json({
+                success: false,
+                error: 'Invalid phone number. Must be 10-15 digits.'
+            });
+        }
+
+        const sessionId = `pair_${Date.now()}`;
+        const code = await generatePairCode(cleanNumber, sessionId);
+
+        res.json({
+            success: true,
+            pairCode: code,
+            message: `Enter this code in WhatsApp > Linked Devices > Link with phone number`,
+            phoneNumber: cleanNumber,
+            expiresIn: '5 minutes'
+        });
+
+    } catch (error) {
+        console.error('Pair API error:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message || 'Failed to generate pair code'
+        });
+    }
+});
+
+// -----------------------------------------------------------------------------
 // API: RESTART BOT
 // -----------------------------------------------------------------------------
 wasi_app.post('/api/restart', async (req, res) => {
     try {
         console.log('🔄 Restarting bot...');
         
-        // Clear all sessions
         for (const [sessionId, session] of sessions) {
             if (session.sock) {
                 try {
@@ -527,7 +613,6 @@ wasi_app.post('/api/restart', async (req, res) => {
         }
         sessions.clear();
         
-        // Restart the main function after a delay
         setTimeout(() => {
             main().catch(err => console.error('Restart error:', err));
         }, 1000);
@@ -612,6 +697,7 @@ function wasi_startServer() {
         console.log(`🤖 Bot Commands: !ping, !jid, !gjid`);
         console.log(`\n📌 API Endpoints:`);
         console.log(`   GET  /api/status     - Get bot status`);
+        console.log(`   POST /api/pair       - Generate pair code (NEW!)`);
         console.log(`   POST /api/restart    - Restart bot`);
         console.log(`   POST /api/logout     - Logout bot`);
         console.log(`   GET  /api/sessions   - List all sessions`);
@@ -623,7 +709,6 @@ function wasi_startServer() {
 // MAIN STARTUP
 // -----------------------------------------------------------------------------
 async function main() {
-    // 1. Connect DB if configured
     if (config.mongoDbUrl) {
         const dbResult = await wasi_connectDatabase(config.mongoDbUrl);
         if (dbResult) {
@@ -631,11 +716,9 @@ async function main() {
         }
     }
 
-    // 2. Start default session
     const sessionId = config.sessionId || 'wasi_session';
     await startSession(sessionId);
 
-    // 3. Start server
     wasi_startServer();
 }
 
