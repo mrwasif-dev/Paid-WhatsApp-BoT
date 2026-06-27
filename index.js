@@ -256,9 +256,9 @@ function processAndCleanMessage(originalMessage) {
 }
 
 // -----------------------------------------------------------------------------
-// NEW: CAPTION CLEANER (BOLD/ITALIC REMOVAL)
+// NEW: CAPTION CLEANER (BOLD/ITALIC REMOVAL) + FOOTER
 // -----------------------------------------------------------------------------
-
+         
 /**
  * Remove bold (*) and italic (_) markers from text
  * Keep emojis and other special characters
@@ -299,9 +299,16 @@ function processCaption(message) {
         
         if (!caption) return message;
         
-        const cleanedCaption = cleanCaptionOnly(caption);
+        // Clean caption (remove * and _)
+        let cleanedCaption = cleanCaptionOnly(caption);
+        
+        // Add footer
+        cleanedCaption = cleanedCaption + "\n\nғᴏʀᴡᴏʀᴅ ʙʏ ᴍʀ ᴡᴀsɪғ ʙᴏᴛ";
+        
+        // Create a deep copy of the message
         const cleanedMessage = JSON.parse(JSON.stringify(message));
         
+        // Update the cleaned caption in the appropriate field
         if (messageType === 'conversation') {
             cleanedMessage.conversation = cleanedCaption;
         } else if (messageType === 'extendedText') {
