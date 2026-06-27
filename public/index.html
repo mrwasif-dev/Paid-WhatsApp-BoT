@@ -7,9 +7,6 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
-        /* ============================================
-           RESET & BASE
-           ============================================ */
         * {
             margin: 0;
             padding: 0;
@@ -27,9 +24,6 @@
             color: #fff;
         }
 
-        /* ============================================
-           CARD - BIGGER SIZE
-           ============================================ */
         .card {
             background: rgba(255, 255, 255, 0.04);
             backdrop-filter: blur(20px);
@@ -42,9 +36,6 @@
             margin: 0 auto;
         }
 
-        /* ============================================
-           HEADER - BIGGER
-           ============================================ */
         .header {
             display: flex;
             align-items: center;
@@ -105,9 +96,6 @@
             border-color: rgba(251, 191, 36, 0.15);
         }
 
-        /* ============================================
-           CONNECTION TABS
-           ============================================ */
         .connection-tabs {
             display: flex;
             gap: 10px;
@@ -150,9 +138,6 @@
             font-size: 16px;
         }
 
-        /* ============================================
-           INFO GRID - BIGGER
-           ============================================ */
         .info-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -188,9 +173,6 @@
         .info-card .value.red { color: #ef4444; }
         .info-card .value.gray { color: rgba(255,255,255,0.3); }
 
-        /* ============================================
-           QR SECTION - BIG QR CODE
-           ============================================ */
         .qr-section {
             text-align: center;
             background: rgba(255, 255, 255, 0.03);
@@ -291,9 +273,6 @@
             font-weight: 600;
         }
 
-        /* ============================================
-           PAIR CODE SECTION
-           ============================================ */
         .pair-section {
             background: rgba(255, 255, 255, 0.03);
             border-radius: 18px;
@@ -423,9 +402,6 @@
             margin-right: 6px;
         }
 
-        /* ============================================
-           SESSION INFO - BIGGER
-           ============================================ */
         .session-info {
             display: flex;
             justify-content: space-between;
@@ -458,15 +434,6 @@
             margin-top: 2px;
         }
 
-        .session-info .item .value.code {
-            font-family: 'Monaco', monospace;
-            font-size: 11px;
-            color: rgba(255, 255, 255, 0.3);
-        }
-
-        /* ============================================
-           BUTTONS - BIGGER
-           ============================================ */
         .btn-group {
             display: flex;
             gap: 12px;
@@ -554,9 +521,6 @@
             to { opacity: 1; transform: translateY(0); }
         }
 
-        /* ============================================
-           TOAST
-           ============================================ */
         .toast {
             position: fixed;
             bottom: 30px;
@@ -589,9 +553,6 @@
         .toast.warning { border-left: 3px solid #fbbf24; }
         .toast.info { border-left: 3px solid #06b6d4; }
 
-        /* ============================================
-           FOOTER
-           ============================================ */
         .footer {
             text-align: center;
             padding: 18px 0 0;
@@ -605,9 +566,6 @@
             color: #ec4899;
         }
 
-        /* ============================================
-           RESPONSIVE
-           ============================================ */
         @media (max-width: 520px) {
             .card {
                 max-width: 100%;
@@ -834,11 +792,9 @@
 </head>
 <body>
 
-    <!-- Toast -->
     <div id="toast" class="toast"></div>
 
     <div class="card">
-        <!-- ===== HEADER ===== -->
         <div class="header">
             <div class="brand">
                 <div class="icon">
@@ -849,7 +805,6 @@
             <span class="status-badge" id="statusBadge">● Online</span>
         </div>
 
-        <!-- ===== CONNECTION TABS ===== -->
         <div class="connection-tabs">
             <button class="tab-btn active" data-tab="qr" onclick="switchTab('qr')">
                 <i class="fas fa-qrcode"></i> QR Code
@@ -859,7 +814,6 @@
             </button>
         </div>
 
-        <!-- ===== INFO GRID ===== -->
         <div class="info-grid">
             <div class="info-card">
                 <div class="label">Bot Status</div>
@@ -879,7 +833,6 @@
             </div>
         </div>
 
-        <!-- ===== QR SECTION ===== -->
         <div class="qr-section" id="qrSection">
             <div class="qr-wrapper">
                 <img id="qrImage" src="" alt="QR" style="display:none;">
@@ -894,7 +847,6 @@
             </div>
         </div>
 
-        <!-- ===== PAIR CODE SECTION ===== -->
         <div class="pair-section collapsed" id="pairSection">
             <div class="pair-input-group">
                 <div class="input-wrapper">
@@ -914,7 +866,6 @@
             </div>
         </div>
 
-        <!-- ===== SESSION INFO ===== -->
         <div class="session-info">
             <div class="item">
                 <div class="label">Device</div>
@@ -926,7 +877,6 @@
             </div>
         </div>
 
-        <!-- ===== BUTTONS ===== -->
         <div class="btn-group">
             <button class="btn btn-primary" id="restartBtn" onclick="restartBot()">
                 <i class="fas fa-sync-alt"></i> Restart
@@ -939,24 +889,17 @@
             <i class="fas fa-sign-out-alt"></i> Logout
         </button>
 
-        <!-- ===== FOOTER ===== -->
         <div class="footer">
             Made with <i class="fas fa-heart"></i> by Muzamil
         </div>
     </div>
 
     <script>
-        // ============================================
-        // STATE
-        // ============================================
         let statusInterval = null;
         let startTime = Date.now();
         let currentTab = 'qr';
         let pairTimeout = null;
 
-        // ============================================
-        // TOAST
-        // ============================================
         function showToast(msg, type = 'success') {
             const t = document.getElementById('toast');
             t.textContent = msg;
@@ -966,18 +909,13 @@
             t._hide = setTimeout(() => t.classList.remove('show'), 4000);
         }
 
-        // ============================================
-        // TAB SWITCHING
-        // ============================================
         function switchTab(tab) {
             currentTab = tab;
             
-            // Update tab buttons
             document.querySelectorAll('.tab-btn').forEach(btn => {
                 btn.classList.toggle('active', btn.dataset.tab === tab);
             });
 
-            // Show/hide sections
             const qrSection = document.getElementById('qrSection');
             const pairSection = document.getElementById('pairSection');
 
@@ -987,14 +925,10 @@
             } else {
                 qrSection.classList.add('collapsed');
                 pairSection.classList.remove('collapsed');
-                // Hide old pair code if any
                 document.getElementById('pairCodeDisplay').classList.remove('show');
             }
         }
 
-        // ============================================
-        // FORMAT TIME
-        // ============================================
         function formatTime(s) {
             const h = Math.floor(s / 3600);
             const m = Math.floor((s % 3600) / 60);
@@ -1004,9 +938,6 @@
             return sec + 's';
         }
 
-        // ============================================
-        // GENERATE PAIR CODE
-        // ============================================
         async function generatePairCode() {
             const input = document.getElementById('phoneInput');
             const btn = document.getElementById('pairBtn');
@@ -1020,14 +951,12 @@
                 return;
             }
 
-            // Validate phone number
             const cleanPhone = phone.replace(/[^0-9]/g, '');
             if (cleanPhone.length < 10 || cleanPhone.length > 15) {
                 showToast('Invalid phone number (10-15 digits)', 'error');
                 return;
             }
 
-            // Disable button
             btn.disabled = true;
             btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
 
@@ -1041,12 +970,10 @@
                 const data = await res.json();
 
                 if (data.success) {
-                    // Show pair code
                     codeText.textContent = data.pairCode;
                     display.classList.add('show');
                     showToast('✅ Pair code generated! Check below.', 'success');
                     
-                    // Auto hide after 5 minutes
                     clearTimeout(pairTimeout);
                     pairTimeout = setTimeout(() => {
                         display.classList.remove('show');
@@ -1063,15 +990,11 @@
             }
         }
 
-        // ============================================
-        // FETCH STATUS
-        // ============================================
         async function fetchStatus() {
             try {
                 const res = await fetch('/api/status');
                 const data = await res.json();
 
-                // --- BADGE ---
                 const badge = document.getElementById('statusBadge');
                 let badgeText, badgeClass;
 
@@ -1089,7 +1012,6 @@
                 badge.textContent = badgeText;
                 badge.className = 'status-badge' + (badgeClass ? ' ' + badgeClass : '');
 
-                // --- BOT STATUS ---
                 const botStatus = document.getElementById('botStatus');
                 if (data.connected) {
                     botStatus.textContent = '● Connected';
@@ -1102,7 +1024,6 @@
                     botStatus.className = 'value red';
                 }
 
-                // --- DATABASE ---
                 const dbStatus = document.getElementById('dbStatus');
                 if (data.dbConnected) {
                     dbStatus.textContent = '● Active';
@@ -1115,13 +1036,9 @@
                     dbStatus.className = 'value gray';
                 }
 
-                // --- UPTIME ---
                 document.getElementById('uptimeDisplay').textContent = formatTime(Math.floor((Date.now() - startTime) / 1000));
-
-                // --- SESSION ---
                 document.getElementById('sessionDisplay').textContent = data.sessionId || '-';
 
-                // --- QR SECTION (only if QR tab is active) ---
                 if (currentTab === 'qr') {
                     const qrSection = document.getElementById('qrSection');
                     const img = document.getElementById('qrImage');
@@ -1151,13 +1068,8 @@
                     }
                 }
 
-                // --- DEVICE ---
                 document.getElementById('deviceDisplay').textContent = data.connected ? '✅ Connected' : '-';
-
-                // --- LAST ACTIVE ---
                 document.getElementById('activeDisplay').textContent = data.lastActive ? new Date(data.lastActive).toLocaleTimeString() : '-';
-
-                // --- ENABLE RESTART ---
                 document.getElementById('restartBtn').disabled = false;
 
                 return data;
@@ -1173,9 +1085,6 @@
             }
         }
 
-        // ============================================
-        // REFRESH
-        // ============================================
         function refreshStatus() {
             const btn = document.querySelector('.btn-secondary');
             const orig = btn.innerHTML;
@@ -1188,9 +1097,6 @@
             });
         }
 
-        // ============================================
-        // RESTART
-        // ============================================
         async function restartBot() {
             const btn = document.getElementById('restartBtn');
             const orig = btn.innerHTML;
@@ -1217,9 +1123,6 @@
             }
         }
 
-        // ============================================
-        // LOGOUT
-        // ============================================
         async function logoutBot() {
             if (!confirm('⚠️ Logout will disconnect the bot. Continue?')) return;
             const btn = document.querySelector('.btn-danger');
@@ -1244,18 +1147,12 @@
             }
         }
 
-        // ============================================
-        // AUTO REFRESH
-        // ============================================
         function startAutoRefresh() {
             if (statusInterval) clearInterval(statusInterval);
             fetchStatus();
             statusInterval = setInterval(fetchStatus, 10000);
         }
 
-        // ============================================
-        // KEYBOARD SHORTCUT - Enter to generate pair code
-        // ============================================
         document.getElementById('phoneInput').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
                 generatePairCode();
