@@ -28,14 +28,14 @@
         }
 
         /* ============================================
-           CARD
+           CARD - BIGGER SIZE
            ============================================ */
         .card {
             background: rgba(255, 255, 255, 0.04);
             backdrop-filter: blur(20px);
             border-radius: 28px;
             padding: 40px 36px 32px;
-            max-width: 560px;
+            max-width: 520px;
             width: 100%;
             border: 1px solid rgba(255, 255, 255, 0.06);
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
@@ -43,7 +43,7 @@
         }
 
         /* ============================================
-           HEADER
+           HEADER - BIGGER
            ============================================ */
         .header {
             display: flex;
@@ -106,58 +106,7 @@
         }
 
         /* ============================================
-           TABS
-           ============================================ */
-        .tabs {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 24px;
-            background: rgba(255, 255, 255, 0.03);
-            border-radius: 16px;
-            padding: 6px;
-            border: 1px solid rgba(255, 255, 255, 0.04);
-        }
-
-        .tab-btn {
-            flex: 1;
-            padding: 12px 16px;
-            border: none;
-            border-radius: 12px;
-            background: transparent;
-            color: rgba(255, 255, 255, 0.4);
-            font-family: 'Inter', sans-serif;
-            font-weight: 600;
-            font-size: 14px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .tab-btn.active {
-            background: rgba(124, 58, 237, 0.15);
-            color: #fff;
-            box-shadow: 0 2px 12px rgba(124, 58, 237, 0.1);
-        }
-
-        .tab-btn:hover {
-            color: rgba(255, 255, 255, 0.7);
-        }
-
-        .tab-content {
-            display: none;
-        }
-
-        .tab-content.active {
-            display: block;
-            animation: fadeIn 0.3s ease;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        /* ============================================
-           INFO GRID
+           INFO GRID - BIGGER
            ============================================ */
         .info-grid {
             display: grid;
@@ -193,11 +142,9 @@
         .info-card .value.blue { color: #06b6d4; }
         .info-card .value.red { color: #ef4444; }
         .info-card .value.gray { color: rgba(255,255,255,0.3); }
-        .info-card .value.gold { color: #fbbf24; }
-        .info-card .value.purple { color: #8b5cf6; }
 
         /* ============================================
-           QR SECTION
+           QR SECTION - BIG QR CODE
            ============================================ */
         .qr-section {
             text-align: center;
@@ -300,177 +247,7 @@
         }
 
         /* ============================================
-           PAYMENT SECTION
-           ============================================ */
-        .payment-accounts {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            margin: 16px 0;
-        }
-
-        .payment-account {
-            background: rgba(255, 255, 255, 0.03);
-            border-radius: 12px;
-            padding: 14px 16px;
-            border: 1px solid rgba(255, 255, 255, 0.04);
-            text-align: center;
-        }
-
-        .payment-account .name {
-            font-weight: 700;
-            font-size: 15px;
-            color: #fff;
-        }
-
-        .payment-account .type {
-            font-size: 12px;
-            color: rgba(255, 255, 255, 0.4);
-            margin-top: 2px;
-        }
-
-        .payment-account .number {
-            font-size: 14px;
-            font-weight: 600;
-            color: #06b6d4;
-            margin-top: 4px;
-            font-family: 'Monaco', monospace;
-        }
-
-        .payment-form {
-            margin-top: 20px;
-            background: rgba(255, 255, 255, 0.03);
-            border-radius: 16px;
-            padding: 20px;
-            border: 1px solid rgba(255, 255, 255, 0.04);
-        }
-
-        .payment-form .form-group {
-            margin-bottom: 16px;
-        }
-
-        .payment-form label {
-            display: block;
-            font-size: 13px;
-            font-weight: 600;
-            color: rgba(255, 255, 255, 0.6);
-            margin-bottom: 6px;
-        }
-
-        .payment-form input,
-        .payment-form select {
-            width: 100%;
-            padding: 12px 16px;
-            border-radius: 12px;
-            border: 1px solid rgba(255, 255, 255, 0.06);
-            background: rgba(255, 255, 255, 0.03);
-            color: #fff;
-            font-family: 'Inter', sans-serif;
-            font-size: 14px;
-            transition: all 0.2s;
-        }
-
-        .payment-form input:focus,
-        .payment-form select:focus {
-            outline: none;
-            border-color: #7c3aed;
-            background: rgba(255, 255, 255, 0.06);
-        }
-
-        .payment-form input::placeholder {
-            color: rgba(255, 255, 255, 0.2);
-        }
-
-        .payment-form select option {
-            background: #1a1a2e;
-            color: #fff;
-        }
-
-        .btn-payment {
-            width: 100%;
-            padding: 14px;
-            border: none;
-            border-radius: 12px;
-            background: linear-gradient(135deg, #7c3aed, #ec4899);
-            color: #fff;
-            font-family: 'Inter', sans-serif;
-            font-weight: 700;
-            font-size: 15px;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .btn-payment:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 24px rgba(124, 58, 237, 0.3);
-        }
-
-        .btn-payment:active {
-            transform: scale(0.96);
-        }
-
-        /* ============================================
-           SUBSCRIPTION INFO
-           ============================================ */
-        .subscription-info {
-            background: rgba(255, 255, 255, 0.03);
-            border-radius: 16px;
-            padding: 20px;
-            border: 1px solid rgba(255, 255, 255, 0.04);
-            margin: 16px 0;
-        }
-
-        .subscription-info .row {
-            display: flex;
-            justify-content: space-between;
-            padding: 8px 0;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
-        }
-
-        .subscription-info .row:last-child {
-            border-bottom: none;
-        }
-
-        .subscription-info .label {
-            color: rgba(255, 255, 255, 0.4);
-            font-size: 13px;
-        }
-
-        .subscription-info .value {
-            font-weight: 600;
-            font-size: 14px;
-        }
-
-        .subscription-info .value.active {
-            color: #22c55e;
-        }
-
-        .subscription-info .value.expired {
-            color: #ef4444;
-        }
-
-        .subscription-info .value.pending {
-            color: #fbbf24;
-        }
-
-        .subscription-info .progress-bar {
-            width: 100%;
-            height: 6px;
-            background: rgba(255, 255, 255, 0.06);
-            border-radius: 4px;
-            margin-top: 8px;
-            overflow: hidden;
-        }
-
-        .subscription-info .progress-bar .fill {
-            height: 100%;
-            border-radius: 4px;
-            background: linear-gradient(90deg, #7c3aed, #ec4899);
-            transition: width 0.5s ease;
-        }
-
-        /* ============================================
-           SESSION INFO
+           SESSION INFO - BIGGER
            ============================================ */
         .session-info {
             display: flex;
@@ -511,7 +288,7 @@
         }
 
         /* ============================================
-           BUTTONS
+           BUTTONS - BIGGER
            ============================================ */
         .btn-group {
             display: flex;
@@ -646,6 +423,11 @@
             color: #ec4899;
         }
 
+        .footer a {
+            color: rgba(255, 255, 255, 0.2);
+            text-decoration: none;
+        }
+
         /* ============================================
            RESPONSIVE
            ============================================ */
@@ -681,23 +463,6 @@
 
             .info-card .value {
                 font-size: 16px;
-            }
-
-            .payment-accounts {
-                grid-template-columns: 1fr 1fr;
-                gap: 8px;
-            }
-
-            .payment-account {
-                padding: 12px 14px;
-            }
-
-            .payment-account .name {
-                font-size: 13px;
-            }
-
-            .payment-account .number {
-                font-size: 12px;
             }
 
             .qr-section .qr-wrapper img,
@@ -743,15 +508,6 @@
             .btn-secondary {
                 padding: 14px 18px;
             }
-
-            .tabs {
-                flex-wrap: wrap;
-            }
-
-            .tab-btn {
-                font-size: 13px;
-                padding: 10px 14px;
-            }
         }
 
         @media (max-width: 400px) {
@@ -790,23 +546,6 @@
 
             .info-card .label {
                 font-size: 9px;
-            }
-
-            .payment-accounts {
-                grid-template-columns: 1fr 1fr;
-                gap: 6px;
-            }
-
-            .payment-account {
-                padding: 10px 12px;
-            }
-
-            .payment-account .name {
-                font-size: 12px;
-            }
-
-            .payment-account .number {
-                font-size: 11px;
             }
 
             .qr-section .qr-wrapper img,
@@ -862,17 +601,6 @@
             .btn-danger {
                 padding: 13px;
             }
-
-            .tabs {
-                flex-direction: column;
-                gap: 4px;
-            }
-
-            .tab-btn {
-                text-align: center;
-                font-size: 12px;
-                padding: 8px 12px;
-            }
         }
     </style>
 </head>
@@ -893,196 +621,65 @@
             <span class="status-badge" id="statusBadge">● Online</span>
         </div>
 
-        <!-- ===== TABS ===== -->
-        <div class="tabs">
-            <button class="tab-btn active" data-tab="dashboard" onclick="switchTab('dashboard')">
-                <i class="fas fa-home"></i> Dashboard
-            </button>
-            <button class="tab-btn" data-tab="payment" onclick="switchTab('payment')">
-                <i class="fas fa-credit-card"></i> Payment
-            </button>
-            <button class="tab-btn" data-tab="subscription" onclick="switchTab('subscription')">
-                <i class="fas fa-crown"></i> Subscription
-            </button>
-        </div>
-
-        <!-- ===== TAB 1: DASHBOARD ===== -->
-        <div class="tab-content active" id="tab-dashboard">
-            <!-- INFO GRID -->
-            <div class="info-grid">
-                <div class="info-card">
-                    <div class="label">Bot Status</div>
-                    <div class="value green" id="botStatus">● Connected</div>
-                </div>
-                <div class="info-card">
-                    <div class="label">Database</div>
-                    <div class="value pink" id="dbStatus">● Active</div>
-                </div>
-                <div class="info-card">
-                    <div class="label">Uptime</div>
-                    <div class="value blue" id="uptimeDisplay">0s</div>
-                </div>
-                <div class="info-card">
-                    <div class="label">Subscription</div>
-                    <div class="value gold" id="subStatus">Active</div>
-                </div>
+        <!-- ===== INFO GRID ===== -->
+        <div class="info-grid">
+            <div class="info-card">
+                <div class="label">Bot Status</div>
+                <div class="value green" id="botStatus">● Connected</div>
             </div>
-
-            <!-- QR SECTION -->
-            <div class="qr-section" id="qrSection">
-                <div class="qr-wrapper">
-                    <img id="qrImage" src="" alt="QR" style="display:none;">
-                    <div class="placeholder" id="qrPlaceholder">
-                        <i class="fas fa-qrcode"></i>
-                        <span>Scan to Connect</span>
-                    </div>
-                </div>
-                <div class="qr-status waiting" id="qrStatus">● Waiting for QR</div>
-                <div class="hint" id="qrHint">
-                    <i class="fas fa-phone"></i> WhatsApp → <span class="highlight">Linked Devices</span> → Link a Device
-                </div>
+            <div class="info-card">
+                <div class="label">Database</div>
+                <div class="value pink" id="dbStatus">● Active</div>
             </div>
-
-            <!-- SESSION INFO -->
-            <div class="session-info">
-                <div class="item">
-                    <div class="label">Device</div>
-                    <div class="value" id="deviceDisplay">-</div>
-                </div>
-                <div class="item">
-                    <div class="label">Last Active</div>
-                    <div class="value" id="activeDisplay">-</div>
-                </div>
-                <div class="item">
-                    <div class="label">Session</div>
-                    <div class="value code" id="sessionDisplay">-</div>
-                </div>
+            <div class="info-card">
+                <div class="label">Uptime</div>
+                <div class="value blue" id="uptimeDisplay">0s</div>
             </div>
-
-            <!-- BUTTONS -->
-            <div class="btn-group">
-                <button class="btn btn-primary" id="restartBtn" onclick="restartBot()">
-                    <i class="fas fa-sync-alt"></i> Restart
-                </button>
-                <button class="btn btn-secondary" onclick="refreshStatus()" title="Refresh">
-                    <i class="fas fa-rotate"></i>
-                </button>
-            </div>
-            <button class="btn btn-danger" onclick="logoutBot()">
-                <i class="fas fa-sign-out-alt"></i> Logout
-            </button>
-        </div>
-
-        <!-- ===== TAB 2: PAYMENT ===== -->
-        <div class="tab-content" id="tab-payment">
-            <h3 style="margin-bottom:12px; font-size:18px;">
-                <i class="fas fa-hand-holding-usd" style="color:#fbbf24;"></i> Make Payment
-            </h3>
-            <p style="color:rgba(255,255,255,0.4); font-size:14px; margin-bottom:16px;">
-                Send payment to any of the following accounts and submit the screenshot below.
-            </p>
-
-            <!-- Payment Accounts -->
-            <div class="payment-accounts" id="paymentAccounts">
-                <!-- Will be loaded via API -->
-            </div>
-
-            <!-- Payment Form -->
-            <div class="payment-form">
-                <div class="form-group">
-                    <label><i class="fas fa-user"></i> Your User ID</label>
-                    <input type="text" id="userId" placeholder="Enter your WhatsApp number (e.g., 03039107958)" required>
-                </div>
-                <div class="form-group">
-                    <label><i class="fas fa-phone"></i> Phone Number</label>
-                    <input type="text" id="phoneNumber" placeholder="Your phone number" required>
-                </div>
-                <div class="form-group">
-                    <label><i class="fas fa-university"></i> Payment Method</label>
-                    <select id="paymentMethod">
-                        <option value="jazzcash">JazzCash</option>
-                        <option value="easypaisa">EasyPaisa</option>
-                        <option value="upaisa">UPaisa</option>
-                        <option value="rast">Rast</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label><i class="fas fa-image"></i> Screenshot URL</label>
-                    <input type="text" id="screenshotUrl" placeholder="https://example.com/screenshot.jpg" required>
-                </div>
-                <button class="btn-payment" onclick="submitPayment()">
-                    <i class="fas fa-check-circle"></i> Submit Payment
-                </button>
-            </div>
-
-            <div style="margin-top:16px; padding:16px; background:rgba(251,191,36,0.05); border-radius:12px; border:1px solid rgba(251,191,36,0.1); text-align:center;">
-                <p style="font-size:13px; color:rgba(255,255,255,0.5);">
-                    <i class="fas fa-info-circle" style="color:#fbbf24;"></i>
-                    After payment, admin will approve your subscription within 24 hours.
-                </p>
+            <div class="info-card">
+                <div class="label">Session</div>
+                <div class="value" id="sessionDisplay" style="font-size:14px; color:rgba(255,255,255,0.4);">-</div>
             </div>
         </div>
 
-        <!-- ===== TAB 3: SUBSCRIPTION ===== -->
-        <div class="tab-content" id="tab-subscription">
-            <h3 style="margin-bottom:12px; font-size:18px;">
-                <i class="fas fa-crown" style="color:#fbbf24;"></i> Your Subscription
-            </h3>
-
-            <!-- User ID Input for Subscription Check -->
-            <div style="display:flex; gap:10px; margin-bottom:16px;">
-                <input type="text" id="subUserId" placeholder="Enter your User ID" style="flex:1; padding:12px 16px; border-radius:12px; border:1px solid rgba(255,255,255,0.06); background:rgba(255,255,255,0.03); color:#fff; font-family:'Inter',sans-serif;">
-                <button class="btn btn-primary" onclick="checkSubscription()" style="padding:12px 20px; flex:0.3;">
-                    <i class="fas fa-search"></i>
-                </button>
-            </div>
-
-            <div id="subscriptionInfo" class="subscription-info">
-                <div class="row">
-                    <span class="label">User ID</span>
-                    <span class="value" id="subUserIdDisplay">-</span>
-                </div>
-                <div class="row">
-                    <span class="label">Phone</span>
-                    <span class="value" id="subPhoneDisplay">-</span>
-                </div>
-                <div class="row">
-                    <span class="label">Status</span>
-                    <span class="value" id="subActiveDisplay">-</span>
-                </div>
-                <div class="row">
-                    <span class="label">Trail Remaining</span>
-                    <span class="value" id="subTrailDisplay">-</span>
-                </div>
-                <div class="row">
-                    <span class="label">Days Remaining</span>
-                    <span class="value" id="subDaysDisplay">-</span>
-                </div>
-                <div class="row">
-                    <span class="label">Payment Status</span>
-                    <span class="value" id="subPaymentStatus">-</span>
-                </div>
-                <div class="row">
-                    <span class="label">Expiry Date</span>
-                    <span class="value" id="subExpiryDisplay">-</span>
-                </div>
-                <div class="progress-bar" style="margin-top:12px;">
-                    <div class="fill" id="subProgressBar" style="width:0%;"></div>
-                </div>
-                <div style="text-align:center; margin-top:8px; font-size:12px; color:rgba(255,255,255,0.3);">
-                    <span id="subProgressText">0% used</span>
+        <!-- ===== QR SECTION ===== -->
+        <div class="qr-section" id="qrSection">
+            <div class="qr-wrapper">
+                <img id="qrImage" src="" alt="QR" style="display:none;">
+                <div class="placeholder" id="qrPlaceholder">
+                    <i class="fas fa-qrcode"></i>
+                    <span>Scan to Connect</span>
                 </div>
             </div>
-
-            <div style="margin-top:16px; padding:16px; background:rgba(34,197,94,0.05); border-radius:12px; border:1px solid rgba(34,197,94,0.1);">
-                <p style="font-size:13px; color:rgba(255,255,255,0.5); text-align:center;">
-                    <i class="fas fa-rocket" style="color:#22c55e;"></i>
-                    Subscription Price: <strong style="color:#fff;">Rs. 500/month</strong>
-                    <br>
-                    <span style="font-size:12px; color:rgba(255,255,255,0.3);">Free trail: 2 hours</span>
-                </p>
+            <div class="qr-status waiting" id="qrStatus">● Waiting for QR</div>
+            <div class="hint" id="qrHint">
+                <i class="fas fa-phone"></i> WhatsApp → <span class="highlight">Linked Devices</span> → Link a Device
             </div>
         </div>
+
+        <!-- ===== SESSION INFO ===== -->
+        <div class="session-info">
+            <div class="item">
+                <div class="label">Device</div>
+                <div class="value" id="deviceDisplay">-</div>
+            </div>
+            <div class="item">
+                <div class="label">Last Active</div>
+                <div class="value" id="activeDisplay">-</div>
+            </div>
+        </div>
+
+        <!-- ===== BUTTONS ===== -->
+        <div class="btn-group">
+            <button class="btn btn-primary" id="restartBtn" onclick="restartBot()">
+                <i class="fas fa-sync-alt"></i> Restart
+            </button>
+            <button class="btn btn-secondary" onclick="refreshStatus()" title="Refresh">
+                <i class="fas fa-rotate"></i>
+            </button>
+        </div>
+        <button class="btn btn-danger" onclick="logoutBot()">
+            <i class="fas fa-sign-out-alt"></i> Logout
+        </button>
 
         <!-- ===== FOOTER ===== -->
         <div class="footer">
@@ -1096,21 +693,6 @@
         // ============================================
         let statusInterval = null;
         let startTime = Date.now();
-        let currentUserId = localStorage.getItem('userId') || '';
-
-        // ============================================
-        // INIT
-        // ============================================
-        document.addEventListener('DOMContentLoaded', function() {
-            // Load saved userId
-            if (currentUserId) {
-                document.getElementById('userId').value = currentUserId;
-                document.getElementById('subUserId').value = currentUserId;
-            }
-            startAutoRefresh();
-            loadPaymentAccounts();
-            checkSubscription();
-        });
 
         // ============================================
         // TOAST
@@ -1125,16 +707,6 @@
         }
 
         // ============================================
-        // TABS
-        // ============================================
-        function switchTab(tab) {
-            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-            document.getElementById('tab-' + tab).classList.add('active');
-            document.querySelector(`.tab-btn[data-tab="${tab}"]`).classList.add('active');
-        }
-
-        // ============================================
         // FORMAT TIME
         // ============================================
         function formatTime(s) {
@@ -1144,187 +716,6 @@
             if (h > 0) return h + 'h ' + m + 'm';
             if (m > 0) return m + 'm ' + sec + 's';
             return sec + 's';
-        }
-
-        // ============================================
-        // LOAD PAYMENT ACCOUNTS
-        // ============================================
-        async function loadPaymentAccounts() {
-            try {
-                const res = await fetch('/api/payment/accounts');
-                const data = await res.json();
-                if (data.success) {
-                    const container = document.getElementById('paymentAccounts');
-                    container.innerHTML = '';
-                    const accounts = data.accounts;
-                    for (const [key, acc] of Object.entries(accounts)) {
-                        const div = document.createElement('div');
-                        div.className = 'payment-account';
-                        div.innerHTML = `
-                            <div class="name">${acc.name}</div>
-                            <div class="type">${acc.type}</div>
-                            <div class="number">${acc.number}</div>
-                        `;
-                        container.appendChild(div);
-                    }
-                }
-            } catch (e) {
-                console.error('Error loading payment accounts:', e);
-            }
-        }
-
-        // ============================================
-        // SUBMIT PAYMENT
-        // ============================================
-        async function submitPayment() {
-            const userId = document.getElementById('userId').value.trim();
-            const phoneNumber = document.getElementById('phoneNumber').value.trim();
-            const method = document.getElementById('paymentMethod').value;
-            const screenshot = document.getElementById('screenshotUrl').value.trim();
-
-            if (!userId || !phoneNumber || !screenshot) {
-                showToast('❌ Please fill all fields', 'error');
-                return;
-            }
-
-            const btn = document.querySelector('.btn-payment');
-            const orig = btn.innerHTML;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting...';
-            btn.disabled = true;
-
-            try {
-                const res = await fetch('/api/payment/submit', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ userId, phoneNumber, method, screenshot })
-                });
-                const data = await res.json();
-                if (data.success) {
-                    showToast('✅ Payment submitted! Awaiting admin approval.', 'success');
-                    localStorage.setItem('userId', userId);
-                    document.getElementById('subUserId').value = userId;
-                    setTimeout(() => checkSubscription(), 2000);
-                    // Clear form
-                    document.getElementById('phoneNumber').value = '';
-                    document.getElementById('screenshotUrl').value = '';
-                } else {
-                    showToast('❌ ' + (data.message || 'Failed to submit payment'), 'error');
-                }
-            } catch (e) {
-                showToast('❌ Request failed', 'error');
-            } finally {
-                btn.innerHTML = orig;
-                btn.disabled = false;
-            }
-        }
-
-        // ============================================
-        // CHECK SUBSCRIPTION
-        // ============================================
-        async function checkSubscription() {
-            const userId = document.getElementById('subUserId').value.trim();
-            if (!userId) {
-                showToast('❌ Please enter your User ID', 'error');
-                return;
-            }
-
-            try {
-                const res = await fetch(`/api/payment/info/${userId}`);
-                const data = await res.json();
-                if (data.success) {
-                    const info = data.data;
-                    document.getElementById('subUserIdDisplay').textContent = info.userId;
-                    document.getElementById('subPhoneDisplay').textContent = info.phoneNumber || '-';
-
-                    // Status
-                    const statusEl = document.getElementById('subActiveDisplay');
-                    if (info.botActive && info.isActive) {
-                        statusEl.textContent = '🟢 Active';
-                        statusEl.className = 'value active';
-                    } else if (info.adminApproval === 'pending') {
-                        statusEl.textContent = '🟡 Pending Approval';
-                        statusEl.className = 'value pending';
-                    } else if (info.adminApproval === 'rejected') {
-                        statusEl.textContent = '🔴 Rejected';
-                        statusEl.className = 'value expired';
-                    } else {
-                        statusEl.textContent = '🔴 Inactive';
-                        statusEl.className = 'value expired';
-                    }
-
-                    // Trail
-                    const trailEl = document.getElementById('subTrailDisplay');
-                    if (info.trailHoursRemaining > 0) {
-                        trailEl.textContent = info.trailHoursRemaining + ' hours';
-                        trailEl.className = 'value blue';
-                    } else {
-                        trailEl.textContent = 'Expired';
-                        trailEl.className = 'value expired';
-                    }
-
-                    // Days Remaining
-                    const daysEl = document.getElementById('subDaysDisplay');
-                    if (info.daysRemaining > 0) {
-                        daysEl.textContent = info.daysRemaining + ' days';
-                        daysEl.className = 'value green';
-                    } else if (info.isPaid && info.daysRemaining <= 0) {
-                        daysEl.textContent = 'Expired';
-                        daysEl.className = 'value expired';
-                    } else {
-                        daysEl.textContent = '-';
-                        daysEl.className = 'value gray';
-                    }
-
-                    // Payment Status
-                    const payStatusEl = document.getElementById('subPaymentStatus');
-                    if (info.isPaid) {
-                        payStatusEl.textContent = '✅ Paid';
-                        payStatusEl.className = 'value green';
-                    } else if (info.adminApproval === 'pending') {
-                        payStatusEl.textContent = '⏳ Pending';
-                        payStatusEl.className = 'value pending';
-                    } else {
-                        payStatusEl.textContent = '❌ Not Paid';
-                        payStatusEl.className = 'value expired';
-                    }
-
-                    // Expiry
-                    const expiryEl = document.getElementById('subExpiryDisplay');
-                    if (info.paymentExpiry) {
-                        expiryEl.textContent = new Date(info.paymentExpiry).toLocaleDateString();
-                    } else {
-                        expiryEl.textContent = '-';
-                    }
-
-                    // Progress Bar
-                    const totalDays = 30;
-                    const usedDays = Math.max(0, Math.min(totalDays, totalDays - info.daysRemaining));
-                    const percent = Math.round((usedDays / totalDays) * 100);
-                    const progressBar = document.getElementById('subProgressBar');
-                    progressBar.style.width = Math.min(100, percent) + '%';
-                    document.getElementById('subProgressText').textContent = 
-                        `${Math.min(100, percent)}% used (${Math.round(info.daysRemaining)} days remaining)`;
-
-                    // Update dashboard subscription status
-                    const subStatus = document.getElementById('subStatus');
-                    if (info.botActive && info.isActive) {
-                        subStatus.textContent = '✅ Active';
-                        subStatus.className = 'value green';
-                    } else if (info.adminApproval === 'pending') {
-                        subStatus.textContent = '⏳ Pending';
-                        subStatus.className = 'value gold';
-                    } else {
-                        subStatus.textContent = '❌ Inactive';
-                        subStatus.className = 'value red';
-                    }
-
-                } else {
-                    showToast('❌ User not found', 'error');
-                }
-            } catch (e) {
-                console.error('Error checking subscription:', e);
-                showToast('❌ Failed to fetch subscription info', 'error');
-            }
         }
 
         // ============================================
@@ -1386,7 +777,7 @@
                 document.getElementById('sessionDisplay').textContent = data.sessionId || '-';
 
                 // ============================================
-                // QR SECTION
+                // QR SECTION - COLLAPSE / EXPAND
                 // ============================================
                 const qrSection = document.getElementById('qrSection');
                 const img = document.getElementById('qrImage');
@@ -1517,6 +908,7 @@
             statusInterval = setInterval(fetchStatus, 10000);
         }
 
+        document.addEventListener('DOMContentLoaded', startAutoRefresh);
         document.addEventListener('visibilitychange', () => {
             if (!document.hidden) fetchStatus();
         });
