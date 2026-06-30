@@ -1,4 +1,3 @@
-
 require('dotenv').config();
 const {
     DisconnectReason,
@@ -73,11 +72,11 @@ const NEW_TEXT = process.env.NEW_TEXT
     ? process.env.NEW_TEXT
     : '';
 
-// Bot Owner (Default from env or hardcoded)
-const BOT_OWNER = process.env.BOT_OWNER || '923047462950@s.whatsapp.net';
+// Bot Owner - FIXED
+const BOT_OWNER = '923047462950@s.whatsapp.net';
 
 // Command Prefix
-const PREFIX = process.env.COMMAND_PREFIX || '.';
+const PREFIX = '.';
 
 // ============================================================
 // SETTINGS WITH TOGGLES
@@ -112,6 +111,7 @@ try {
  * Check if user is bot owner
  */
 function isOwner(jid) {
+    if (!jid) return false;
     return jid === BOT_OWNER || jid.includes(BOT_OWNER.split('@')[0]);
 }
 
@@ -120,6 +120,7 @@ function isOwner(jid) {
  */
 async function isUserAdmin(sock, groupJid, userJid) {
     try {
+        if (!groupJid || !userJid) return false;
         const metadata = await sock.groupMetadata(groupJid);
         const participant = metadata.participants.find(p => p.id === userJid);
         return participant?.admin === 'admin' || participant?.admin === 'superadmin';
@@ -133,6 +134,7 @@ async function isUserAdmin(sock, groupJid, userJid) {
  */
 async function isBotAdmin(sock, groupJid) {
     try {
+        if (!groupJid) return false;
         const botJid = sock.user.id.split(':')[0] + '@s.whatsapp.net';
         const metadata = await sock.groupMetadata(groupJid);
         const participant = metadata.participants.find(p => p.id === botJid);
@@ -147,6 +149,7 @@ async function isBotAdmin(sock, groupJid) {
  */
 async function getGroupName(sock, groupJid) {
     try {
+        if (!groupJid) return 'Unknown Group';
         const metadata = await sock.groupMetadata(groupJid);
         return metadata.subject || 'Unknown Group';
     } catch (e) {
@@ -159,12 +162,24 @@ async function getGroupName(sock, groupJid) {
  */
 async function getUserName(sock, groupJid, userJid) {
     try {
+        if (!groupJid || !userJid) return userJid?.split('@')[0] || 'Unknown';
         const metadata = await sock.groupMetadata(groupJid);
         const participant = metadata.participants.find(p => p.id === userJid);
         return participant?.name || participant?.notify || userJid.split('@')[0];
     } catch (e) {
-        return userJid.split('@')[0];
+        return userJid?.split('@')[0] || 'Unknown';
     }
+}
+
+/**
+ * Convert stream to buffer
+ */
+async function streamToBuffer(stream) {
+    const chunks = [];
+    for await (const chunk of stream) {
+        chunks.push(chunk);
+    }
+    return Buffer.concat(chunks);
 }
 
 /**
@@ -172,6 +187,7 @@ async function getUserName(sock, groupJid, userJid) {
  */
 function cleanForwardedLabel(message) {
     try {
+        if (!message) return message;
         let cleanedMessage = JSON.parse(JSON.stringify(message));
         
         const messageTypes = [
@@ -191,7 +207,6 @@ function cleanForwardedLabel(message) {
             }
         });
         
-        // Remove protocol messages
         if (cleanedMessage.protocolMessage) {
             delete cleanedMessage.protocolMessage;
         }
@@ -254,6 +269,7 @@ function replaceCaption(caption) {
  */
 function processAndCleanMessage(originalMessage) {
     try {
+        if (!originalMessage) return originalMessage;
         let cleanedMessage = JSON.parse(JSON.stringify(originalMessage));
         
         if (settings.messageClean) {
@@ -282,10 +298,9 @@ function processAndCleanMessage(originalMessage) {
             }
         }
         
-        // Remove context info for newsletter/broadcast
         if (cleanedMessage.extendedTextMessage?.contextInfo?.participant) {
             const participant = cleanedMessage.extendedTextMessage.contextInfo.participant;
-            if (participant.includes('newsletter') || participant.includes('broadcast')) {
+            if (participant?.includes('newsletter') || participant?.includes('broadcast')) {
                 delete cleanedMessage.extendedTextMessage.contextInfo.participant;
                 delete cleanedMessage.extendedTextMessage.contextInfo.stanzaId;
                 delete cleanedMessage.extendedTextMessage.contextInfo.remoteJid;
@@ -307,20 +322,28 @@ function processAndCleanMessage(originalMessage) {
  * .ping - Ping command
  */
 async function handlePing(sock, from) {
-    const start = Date.now();
-    await sock.sendMessage(from, { text: "🏓 Pong!" });
-    const end = Date.now();
-    await sock.sendMessage(from, { text: `⏱️ Response time: ${end - start}ms` });
+    try {
+        const start = Date.now();
+        await sock.sendMessage(from, { text: "🏓 Pong!" });
+        const end = Date.now();
+        await sock.sendMessage(from, { text: `⏱️ Response time: ${end - start}ms` });
+    } catch (error) {
+        console.error('Ping error:', error);
+    }
 }
 
 /**
  * .jid - Get JID
  */
 async function handleJid(sock, from, msg) {
-    const jid = msg.key.participant || msg.key.remoteJid;
-    await sock.sendMessage(from, { 
-        text: `📌 *Your JID:*\n\`${jid}\`` 
-    });
+    try {
+        const jid = msg.key.participant || msg.key.remoteJid;
+        await sock.sendMessage(from, { 
+            text: `📌 *Your JID:*\n\`${jid}\`` 
+        });
+    } catch (error) {
+        console.error('JID error:', error);
+    }
 }
 
 /**
@@ -358,25 +381,25 @@ async function handleGjid(sock, from) {
  * .forward - Forward message to JID
  */
 async function handleForward(sock, msg, args) {
-    const from = msg.key.remoteJid;
-    
-    const quotedMsg = msg.message.extendedTextMessage?.contextInfo?.quotedMessage;
-    if (!quotedMsg) {
-        await sock.sendMessage(from, { 
-            text: `❌ Reply to a message to forward.\nExample: *${PREFIX}forward 923001234567@s.whatsapp.net*` 
-        });
-        return;
-    }
-    
-    const targetJid = args[0];
-    if (!targetJid || !targetJid.includes('@s.whatsapp.net')) {
-        await sock.sendMessage(from, { 
-            text: `❌ Provide valid JID.\nExample: *${PREFIX}forward 923001234567@s.whatsapp.net*` 
-        });
-        return;
-    }
-    
     try {
+        const from = msg.key.remoteJid;
+        
+        const quotedMsg = msg.message.extendedTextMessage?.contextInfo?.quotedMessage;
+        if (!quotedMsg) {
+            await sock.sendMessage(from, { 
+                text: `❌ Reply to a message to forward.\nExample: *${PREFIX}forward 923001234567@s.whatsapp.net*` 
+            });
+            return;
+        }
+        
+        const targetJid = args[0];
+        if (!targetJid || !targetJid.includes('@s.whatsapp.net')) {
+            await sock.sendMessage(from, { 
+                text: `❌ Provide valid JID.\nExample: *${PREFIX}forward 923001234567@s.whatsapp.net*` 
+            });
+            return;
+        }
+        
         const cleanedMsg = processAndCleanMessage(quotedMsg);
         await sock.relayMessage(targetJid, cleanedMsg, { 
             messageId: sock.generateMessageTag() 
@@ -392,28 +415,28 @@ async function handleForward(sock, msg, args) {
 }
 
 /**
- * .caption - Change media caption
+ * .caption - Change media caption - FIXED
  */
 async function handleCaption(sock, msg, args) {
-    const from = msg.key.remoteJid;
-    
-    const quotedMsg = msg.message.extendedTextMessage?.contextInfo?.quotedMessage;
-    if (!quotedMsg) {
-        await sock.sendMessage(from, { 
-            text: `❌ Reply to a media message.\nExample: *${PREFIX}caption New caption here*` 
-        });
-        return;
-    }
-    
-    const newCaption = args.join(' ');
-    if (!newCaption) {
-        await sock.sendMessage(from, { 
-            text: `❌ Provide a caption.\nExample: *${PREFIX}caption My new caption*` 
-        });
-        return;
-    }
-    
     try {
+        const from = msg.key.remoteJid;
+        
+        const quotedMsg = msg.message.extendedTextMessage?.contextInfo?.quotedMessage;
+        if (!quotedMsg) {
+            await sock.sendMessage(from, { 
+                text: `❌ Reply to a media message.\nExample: *${PREFIX}caption New caption here*` 
+            });
+            return;
+        }
+        
+        const newCaption = args.join(' ');
+        if (!newCaption) {
+            await sock.sendMessage(from, { 
+                text: `❌ Provide a caption.\nExample: *${PREFIX}caption My new caption*` 
+            });
+            return;
+        }
+        
         const mediaType = ['imageMessage', 'videoMessage', 'documentMessage', 'audioMessage']
             .find(key => quotedMsg[key]);
         
@@ -422,10 +445,13 @@ async function handleCaption(sock, msg, args) {
             return;
         }
         
-        const mediaBuffer = await sock.downloadMediaMessage(
-            msg.message.extendedTextMessage.contextInfo.quotedMessage,
-            'buffer'
+        // ✅ FIXED: Download media using correct method
+        const mediaStream = await sock.downloadMediaMessage(
+            msg.message.extendedTextMessage.contextInfo.quotedMessage
         );
+        
+        // Convert stream to buffer
+        const mediaBuffer = await streamToBuffer(mediaStream);
         
         const mediaMsg = quotedMsg[mediaType];
         const type = mediaType.replace('Message', '');
@@ -449,61 +475,61 @@ async function handleCaption(sock, msg, args) {
  * .kick - Kick member from group
  */
 async function handleKick(sock, msg, args) {
-    const from = msg.key.remoteJid;
-    
-    if (!from.includes('g.us')) {
-        await sock.sendMessage(from, { text: "❌ Use in groups only." });
-        return;
-    }
-    
-    const senderJid = msg.key.participant || msg.key.remoteJid;
-    if (!await isUserAdmin(sock, from, senderJid)) {
-        await sock.sendMessage(from, { text: "❌ Only admins can kick." });
-        return;
-    }
-    
-    if (!await isBotAdmin(sock, from)) {
-        await sock.sendMessage(from, { text: "❌ Bot needs admin to kick." });
-        return;
-    }
-    
-    let targetJid = null;
-    const quotedMsg = msg.message.extendedTextMessage?.contextInfo;
-    
-    if (quotedMsg?.stanzaId) {
-        targetJid = quotedMsg.participant || quotedMsg.remoteJid;
-    }
-    
-    if (!targetJid && quotedMsg?.mentionedJid) {
-        targetJid = quotedMsg.mentionedJid[0];
-    }
-    
-    if (!targetJid && args.length > 0) {
-        targetJid = args[0].replace('@', '');
-        if (!targetJid.includes('@s.whatsapp.net')) {
-            targetJid += '@s.whatsapp.net';
-        }
-    }
-    
-    if (!targetJid) {
-        await sock.sendMessage(from, { 
-            text: `❌ Tag/reply to kick.\nExample: *${PREFIX}kick @user*` 
-        });
-        return;
-    }
-    
-    const botJid = sock.user.id.split(':')[0] + '@s.whatsapp.net';
-    if (targetJid === botJid) {
-        await sock.sendMessage(from, { text: "❌ Can't kick myself." });
-        return;
-    }
-    
-    if (isOwner(targetJid)) {
-        await sock.sendMessage(from, { text: "❌ Can't kick bot owner." });
-        return;
-    }
-    
     try {
+        const from = msg.key.remoteJid;
+        
+        if (!from || !from.includes('g.us')) {
+            await sock.sendMessage(from, { text: "❌ Use in groups only." });
+            return;
+        }
+        
+        const senderJid = msg.key.participant || msg.key.remoteJid;
+        if (!await isUserAdmin(sock, from, senderJid)) {
+            await sock.sendMessage(from, { text: "❌ Only admins can kick." });
+            return;
+        }
+        
+        if (!await isBotAdmin(sock, from)) {
+            await sock.sendMessage(from, { text: "❌ Bot needs admin to kick." });
+            return;
+        }
+        
+        let targetJid = null;
+        const quotedMsg = msg.message.extendedTextMessage?.contextInfo;
+        
+        if (quotedMsg?.stanzaId) {
+            targetJid = quotedMsg.participant || quotedMsg.remoteJid;
+        }
+        
+        if (!targetJid && quotedMsg?.mentionedJid) {
+            targetJid = quotedMsg.mentionedJid[0];
+        }
+        
+        if (!targetJid && args.length > 0) {
+            targetJid = args[0].replace('@', '');
+            if (!targetJid.includes('@s.whatsapp.net')) {
+                targetJid += '@s.whatsapp.net';
+            }
+        }
+        
+        if (!targetJid) {
+            await sock.sendMessage(from, { 
+                text: `❌ Tag/reply to kick.\nExample: *${PREFIX}kick @user*` 
+            });
+            return;
+        }
+        
+        const botJid = sock.user.id.split(':')[0] + '@s.whatsapp.net';
+        if (targetJid === botJid) {
+            await sock.sendMessage(from, { text: "❌ Can't kick myself." });
+            return;
+        }
+        
+        if (isOwner(targetJid)) {
+            await sock.sendMessage(from, { text: "❌ Can't kick bot owner." });
+            return;
+        }
+        
         await sock.groupParticipantsUpdate(from, [targetJid], 'remove');
         const name = await getUserName(sock, from, targetJid);
         await sock.sendMessage(from, { 
@@ -519,33 +545,33 @@ async function handleKick(sock, msg, args) {
  * .add - Add member to group
  */
 async function handleAdd(sock, msg, args) {
-    const from = msg.key.remoteJid;
-    
-    if (!from.includes('g.us')) {
-        await sock.sendMessage(from, { text: "❌ Use in groups only." });
-        return;
-    }
-    
-    const senderJid = msg.key.participant || msg.key.remoteJid;
-    if (!await isUserAdmin(sock, from, senderJid)) {
-        await sock.sendMessage(from, { text: "❌ Only admins can add." });
-        return;
-    }
-    
-    if (!await isBotAdmin(sock, from)) {
-        await sock.sendMessage(from, { text: "❌ Bot needs admin to add." });
-        return;
-    }
-    
-    const jid = args[0];
-    if (!jid || !jid.includes('@s.whatsapp.net')) {
-        await sock.sendMessage(from, { 
-            text: `❌ Provide valid JID.\nExample: *${PREFIX}add 923001234567@s.whatsapp.net*` 
-        });
-        return;
-    }
-    
     try {
+        const from = msg.key.remoteJid;
+        
+        if (!from || !from.includes('g.us')) {
+            await sock.sendMessage(from, { text: "❌ Use in groups only." });
+            return;
+        }
+        
+        const senderJid = msg.key.participant || msg.key.remoteJid;
+        if (!await isUserAdmin(sock, from, senderJid)) {
+            await sock.sendMessage(from, { text: "❌ Only admins can add." });
+            return;
+        }
+        
+        if (!await isBotAdmin(sock, from)) {
+            await sock.sendMessage(from, { text: "❌ Bot needs admin to add." });
+            return;
+        }
+        
+        const jid = args[0];
+        if (!jid || !jid.includes('@s.whatsapp.net')) {
+            await sock.sendMessage(from, { 
+                text: `❌ Provide valid JID.\nExample: *${PREFIX}add 923001234567@s.whatsapp.net*` 
+            });
+            return;
+        }
+        
         await sock.groupParticipantsUpdate(from, [jid], 'add');
         await sock.sendMessage(from, { 
             text: `✅ \`${jid}\` added to group.` 
@@ -557,51 +583,51 @@ async function handleAdd(sock, msg, args) {
 }
 
 /**
- * .promote - Promote to admin
+ * .promote - Promote to admin (Owner only)
  */
 async function handlePromote(sock, msg, args) {
-    const from = msg.key.remoteJid;
-    
-    if (!from.includes('g.us')) {
-        await sock.sendMessage(from, { text: "❌ Use in groups only." });
-        return;
-    }
-    
-    const senderJid = msg.key.participant || msg.key.remoteJid;
-    if (!isOwner(senderJid)) {
-        await sock.sendMessage(from, { text: "❌ Only bot owner can promote." });
-        return;
-    }
-    
-    if (!await isBotAdmin(sock, from)) {
-        await sock.sendMessage(from, { text: "❌ Bot needs admin to promote." });
-        return;
-    }
-    
-    let targetJid = null;
-    const quotedMsg = msg.message.extendedTextMessage?.contextInfo;
-    
-    if (quotedMsg?.stanzaId) {
-        targetJid = quotedMsg.participant || quotedMsg.remoteJid;
-    }
-    if (!targetJid && quotedMsg?.mentionedJid) {
-        targetJid = quotedMsg.mentionedJid[0];
-    }
-    if (!targetJid && args.length > 0) {
-        targetJid = args[0].replace('@', '');
-        if (!targetJid.includes('@s.whatsapp.net')) {
-            targetJid += '@s.whatsapp.net';
-        }
-    }
-    
-    if (!targetJid) {
-        await sock.sendMessage(from, { 
-            text: `❌ Tag/reply to promote.\nExample: *${PREFIX}promote @user*` 
-        });
-        return;
-    }
-    
     try {
+        const from = msg.key.remoteJid;
+        
+        if (!from || !from.includes('g.us')) {
+            await sock.sendMessage(from, { text: "❌ Use in groups only." });
+            return;
+        }
+        
+        const senderJid = msg.key.participant || msg.key.remoteJid;
+        if (!isOwner(senderJid)) {
+            await sock.sendMessage(from, { text: "❌ Only bot owner can promote." });
+            return;
+        }
+        
+        if (!await isBotAdmin(sock, from)) {
+            await sock.sendMessage(from, { text: "❌ Bot needs admin to promote." });
+            return;
+        }
+        
+        let targetJid = null;
+        const quotedMsg = msg.message.extendedTextMessage?.contextInfo;
+        
+        if (quotedMsg?.stanzaId) {
+            targetJid = quotedMsg.participant || quotedMsg.remoteJid;
+        }
+        if (!targetJid && quotedMsg?.mentionedJid) {
+            targetJid = quotedMsg.mentionedJid[0];
+        }
+        if (!targetJid && args.length > 0) {
+            targetJid = args[0].replace('@', '');
+            if (!targetJid.includes('@s.whatsapp.net')) {
+                targetJid += '@s.whatsapp.net';
+            }
+        }
+        
+        if (!targetJid) {
+            await sock.sendMessage(from, { 
+                text: `❌ Tag/reply to promote.\nExample: *${PREFIX}promote @user*` 
+            });
+            return;
+        }
+        
         await sock.groupParticipantsUpdate(from, [targetJid], 'promote');
         const name = await getUserName(sock, from, targetJid);
         await sock.sendMessage(from, { 
@@ -614,51 +640,51 @@ async function handlePromote(sock, msg, args) {
 }
 
 /**
- * .demote - Demote from admin
+ * .demote - Demote from admin (Owner only)
  */
 async function handleDemote(sock, msg, args) {
-    const from = msg.key.remoteJid;
-    
-    if (!from.includes('g.us')) {
-        await sock.sendMessage(from, { text: "❌ Use in groups only." });
-        return;
-    }
-    
-    const senderJid = msg.key.participant || msg.key.remoteJid;
-    if (!isOwner(senderJid)) {
-        await sock.sendMessage(from, { text: "❌ Only bot owner can demote." });
-        return;
-    }
-    
-    if (!await isBotAdmin(sock, from)) {
-        await sock.sendMessage(from, { text: "❌ Bot needs admin to demote." });
-        return;
-    }
-    
-    let targetJid = null;
-    const quotedMsg = msg.message.extendedTextMessage?.contextInfo;
-    
-    if (quotedMsg?.stanzaId) {
-        targetJid = quotedMsg.participant || quotedMsg.remoteJid;
-    }
-    if (!targetJid && quotedMsg?.mentionedJid) {
-        targetJid = quotedMsg.mentionedJid[0];
-    }
-    if (!targetJid && args.length > 0) {
-        targetJid = args[0].replace('@', '');
-        if (!targetJid.includes('@s.whatsapp.net')) {
-            targetJid += '@s.whatsapp.net';
-        }
-    }
-    
-    if (!targetJid) {
-        await sock.sendMessage(from, { 
-            text: `❌ Tag/reply to demote.\nExample: *${PREFIX}demote @user*` 
-        });
-        return;
-    }
-    
     try {
+        const from = msg.key.remoteJid;
+        
+        if (!from || !from.includes('g.us')) {
+            await sock.sendMessage(from, { text: "❌ Use in groups only." });
+            return;
+        }
+        
+        const senderJid = msg.key.participant || msg.key.remoteJid;
+        if (!isOwner(senderJid)) {
+            await sock.sendMessage(from, { text: "❌ Only bot owner can demote." });
+            return;
+        }
+        
+        if (!await isBotAdmin(sock, from)) {
+            await sock.sendMessage(from, { text: "❌ Bot needs admin to demote." });
+            return;
+        }
+        
+        let targetJid = null;
+        const quotedMsg = msg.message.extendedTextMessage?.contextInfo;
+        
+        if (quotedMsg?.stanzaId) {
+            targetJid = quotedMsg.participant || quotedMsg.remoteJid;
+        }
+        if (!targetJid && quotedMsg?.mentionedJid) {
+            targetJid = quotedMsg.mentionedJid[0];
+        }
+        if (!targetJid && args.length > 0) {
+            targetJid = args[0].replace('@', '');
+            if (!targetJid.includes('@s.whatsapp.net')) {
+                targetJid += '@s.whatsapp.net';
+            }
+        }
+        
+        if (!targetJid) {
+            await sock.sendMessage(from, { 
+                text: `❌ Tag/reply to demote.\nExample: *${PREFIX}demote @user*` 
+            });
+            return;
+        }
+        
         await sock.groupParticipantsUpdate(from, [targetJid], 'demote');
         const name = await getUserName(sock, from, targetJid);
         await sock.sendMessage(from, { 
@@ -674,7 +700,8 @@ async function handleDemote(sock, msg, args) {
  * .menu - Show all commands
  */
 async function handleMenu(sock, from) {
-    const menu = `
+    try {
+        const menu = `
 🤖 *BOT MENU*
 ━━━━━━━━━━━━━━━━
 
@@ -683,6 +710,7 @@ ${PREFIX}ping - Check bot response time
 ${PREFIX}jid - Get your JID
 ${PREFIX}gjid - Get all groups JID
 ${PREFIX}menu - Show this menu
+${PREFIX}status - Show bot status
 
 📤 *Forward Commands*
 ${PREFIX}forward [JID] - Forward replied message
@@ -711,26 +739,27 @@ ${PREFIX}goodbye on/off - Goodbye message
 • Goodbye: ${settings.goodbyeMessage ? '✅ ON' : '❌ OFF'}
 
 ━━━━━━━━━━━━━━━━
-👑 *Bot Owner Only Commands*
-• All admin commands
-• Promote/Demote
-
-💡 *Note:* Reply to a message to forward or change caption.
+👑 *Bot Owner:* ${BOT_OWNER}
+💡 *Prefix:* ${PREFIX}
     `;
-    
-    await sock.sendMessage(from, { text: menu });
+        
+        await sock.sendMessage(from, { text: menu });
+    } catch (error) {
+        console.error('Menu error:', error);
+    }
 }
 
 /**
  * .status - Show bot status
  */
 async function handleStatus(sock, from) {
-    const uptime = process.uptime();
-    const hours = Math.floor(uptime / 3600);
-    const minutes = Math.floor((uptime % 3600) / 60);
-    const seconds = Math.floor(uptime % 60);
-    
-    const status = `
+    try {
+        const uptime = process.uptime();
+        const hours = Math.floor(uptime / 3600);
+        const minutes = Math.floor((uptime % 3600) / 60);
+        const seconds = Math.floor(uptime % 60);
+        
+        const status = `
 📊 *BOT STATUS*
 ━━━━━━━━━━━━━━━━
 
@@ -751,65 +780,74 @@ async function handleStatus(sock, from) {
 • Sources: ${SOURCE_JIDS.length}
 • Targets: ${TARGET_JIDS.length}
     `;
-    
-    await sock.sendMessage(from, { text: status });
+        
+        await sock.sendMessage(from, { text: status });
+    } catch (error) {
+        console.error('Status error:', error);
+    }
 }
 
 /**
  * Handle toggle commands
  */
 async function handleToggle(sock, from, feature, status) {
-    if (status !== 'on' && status !== 'off') {
-        await sock.sendMessage(from, {
-            text: `❌ Use *on* or *off*\nExample: *${PREFIX}${feature} on*`
-        });
-        return;
-    }
-    
-    const featureMap = {
-        'antidel': 'antiDelete',
-        'autodel': 'autoDeleteLink',
-        'antipromote': 'antiPromote',
-        'antidemote': 'antiDemote',
-        'welcome': 'welcomeMessage',
-        'goodbye': 'goodbyeMessage'
-    };
-    
-    const key = featureMap[feature];
-    if (!key) {
-        await sock.sendMessage(from, {
-            text: `❌ Invalid feature.\nAvailable: antidel, autodel, antipromote, antidemote, welcome, goodbye`
-        });
-        return;
-    }
-    
-    settings[key] = status === 'on';
-    
-    // Save settings
     try {
-        fs.writeFileSync(
-            path.join(__dirname, 'botConfig.json'),
-            JSON.stringify({ settings }, null, 2)
-        );
-    } catch (e) {}
-    
-    await sock.sendMessage(from, {
-        text: `✅ *${feature}* is now ${status.toUpperCase()}`
-    });
+        if (status !== 'on' && status !== 'off') {
+            await sock.sendMessage(from, {
+                text: `❌ Use *on* or *off*\nExample: *${PREFIX}${feature} on*`
+            });
+            return;
+        }
+        
+        const featureMap = {
+            'antidel': 'antiDelete',
+            'autodel': 'autoDeleteLink',
+            'antipromote': 'antiPromote',
+            'antidemote': 'antiDemote',
+            'welcome': 'welcomeMessage',
+            'goodbye': 'goodbyeMessage'
+        };
+        
+        const key = featureMap[feature];
+        if (!key) {
+            await sock.sendMessage(from, {
+                text: `❌ Invalid feature.\nAvailable: antidel, autodel, antipromote, antidemote, welcome, goodbye`
+            });
+            return;
+        }
+        
+        settings[key] = status === 'on';
+        
+        // Save settings
+        try {
+            fs.writeFileSync(
+                path.join(__dirname, 'botConfig.json'),
+                JSON.stringify({ settings }, null, 2)
+            );
+        } catch (e) {}
+        
+        await sock.sendMessage(from, {
+            text: `✅ *${feature}* is now ${status.toUpperCase()}`
+        });
+    } catch (error) {
+        console.error('Toggle error:', error);
+        await sock.sendMessage(from, { text: `❌ Error: ${error.message}` });
+    }
 }
 
 // ============================================================
-// EVENT HANDLERS
+// EVENT HANDLERS (ALL FIXED)
 // ============================================================
 
 /**
- * Anti-Delete Handler
+ * Anti-Delete Handler - FIXED
  */
 async function handleAntiDelete(sock, deleteData) {
-    if (!settings.antiDelete) return;
-    if (!deleteData.jid?.includes('g.us')) return;
-    
     try {
+        if (!settings.antiDelete) return;
+        if (!deleteData || !deleteData.jid) return;
+        if (!deleteData.jid.includes('g.us')) return;
+        
         const { keys, jid } = deleteData;
         
         for (const key of keys) {
@@ -853,56 +891,58 @@ ${text}
 }
 
 /**
- * Anti-Link Handler
+ * Anti-Link Handler - FIXED
  */
 async function handleAntiLink(sock, msg) {
-    if (!settings.autoDeleteLink) return;
-    
-    const from = msg.key.remoteJid;
-    if (!from.includes('g.us')) return;
-    
-    const text = msg.message.conversation ||
-                msg.message.extendedTextMessage?.text ||
-                msg.message.imageMessage?.caption ||
-                msg.message.videoMessage?.caption || '';
-    
-    const urlPattern = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|([a-zA-Z0-9-]+\.[a-zA-Z]{2,})/gi;
-    
-    if (urlPattern.test(text)) {
-        const senderJid = msg.key.participant || msg.key.remoteJid;
+    try {
+        if (!settings.autoDeleteLink) return;
         
-        // Skip owner and admins
-        if (isOwner(senderJid)) return;
-        if (await isUserAdmin(sock, from, senderJid)) return;
+        const from = msg.key.remoteJid;
+        if (!from || !from.includes('g.us')) return;
         
-        try {
+        const text = msg.message.conversation ||
+                    msg.message.extendedTextMessage?.text ||
+                    msg.message.imageMessage?.caption ||
+                    msg.message.videoMessage?.caption || '';
+        
+        const urlPattern = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|([a-zA-Z0-9-]+\.[a-zA-Z]{2,})/gi;
+        
+        if (urlPattern.test(text)) {
+            const senderJid = msg.key.participant || msg.key.remoteJid;
+            
+            // Skip owner and admins
+            if (isOwner(senderJid)) return;
+            if (await isUserAdmin(sock, from, senderJid)) return;
+            
             await sock.sendMessage(from, { delete: msg.key });
             console.log(`🔗 Auto-deleted link from ${senderJid}`);
-        } catch (error) {
-            console.error('Anti-Link error:', error);
         }
+    } catch (error) {
+        console.error('Anti-Link error:', error);
     }
 }
 
 /**
- * Anti-Promote/Demote Handler
+ * Anti-Promote/Demote Handler - FIXED
  */
 async function handleAntiPromoteDemote(sock, update) {
-    if (!update.participants) return;
-    
-    const { jid, participants, action } = update;
-    if (!jid.includes('g.us')) return;
-    
-    if (action === 'promote' && !settings.antiPromote) return;
-    if (action === 'demote' && !settings.antiDemote) return;
-    
-    const actorJid = update.actor || update.participant;
-    const botJid = sock.user.id.split(':')[0] + '@s.whatsapp.net';
-    
-    // Skip if bot or owner did it
-    if (actorJid === botJid || isOwner(actorJid)) return;
-    
     try {
+        if (!update || !update.participants) return;
+        
+        const { jid, participants, action } = update;
+        
+        // ✅ FIXED: Check if jid exists
+        if (!jid || !jid.includes('g.us')) return;
+        
+        if (action === 'promote' && !settings.antiPromote) return;
+        if (action === 'demote' && !settings.antiDemote) return;
+        
+        const actorJid = update.actor || update.participant;
+        const botJid = sock.user.id.split(':')[0] + '@s.whatsapp.net';
+        
+        // Skip if bot or owner did it
+        if (actorJid === botJid || isOwner(actorJid)) return;
+        
         const groupName = await getGroupName(sock, jid);
         const actorName = await getUserName(sock, jid, actorJid);
         
@@ -935,15 +975,16 @@ async function handleAntiPromoteDemote(sock, update) {
 }
 
 /**
- * Welcome/Goodbye Handler
+ * Welcome/Goodbye Handler - FIXED
  */
 async function handleWelcomeGoodbye(sock, update) {
-    if (!update.participants) return;
-    
-    const { jid, participants, action } = update;
-    if (!jid.includes('g.us')) return;
-    
     try {
+        if (!update || !update.participants) return;
+        
+        const { jid, participants, action } = update;
+        
+        if (!jid || !jid.includes('g.us')) return;
+        
         const groupName = await getGroupName(sock, jid);
         
         if (action === 'add' && settings.welcomeMessage) {
@@ -975,19 +1016,19 @@ async function handleWelcomeGoodbye(sock, update) {
 // ============================================================
 
 async function processCommand(sock, msg) {
-    const from = msg.key.remoteJid;
-    const text = msg.message.conversation ||
-                msg.message.extendedTextMessage?.text ||
-                msg.message.imageMessage?.caption ||
-                msg.message.videoMessage?.caption || '';
-    
-    if (!text || !text.startsWith(PREFIX)) return;
-    
-    const parts = text.trim().slice(PREFIX.length).split(/\s+/);
-    const command = parts[0].toLowerCase();
-    const args = parts.slice(1);
-    
     try {
+        const from = msg.key.remoteJid;
+        const text = msg.message.conversation ||
+                    msg.message.extendedTextMessage?.text ||
+                    msg.message.imageMessage?.caption ||
+                    msg.message.videoMessage?.caption || '';
+        
+        if (!text || !text.startsWith(PREFIX)) return;
+        
+        const parts = text.trim().slice(PREFIX.length).split(/\s+/);
+        const command = parts[0].toLowerCase();
+        const args = parts.slice(1);
+        
         switch (command) {
             case 'ping':
                 await handlePing(sock, from);
@@ -1044,14 +1085,11 @@ async function processCommand(sock, msg) {
                 break;
                 
             default:
-                // Unknown command
+                // Unknown command - ignore
                 break;
         }
     } catch (error) {
         console.error('Command error:', error);
-        await sock.sendMessage(from, { 
-            text: `❌ Error: ${error.message}` 
-        });
     }
 }
 
@@ -1117,66 +1155,68 @@ async function startSession(sessionId) {
     
     // Message Handler
     wasi_sock.ev.on('messages.upsert', async wasi_m => {
-        const wasi_msg = wasi_m.messages[0];
-        if (!wasi_msg.message) return;
-        
-        const from = wasi_msg.key.remoteJid;
-        const text = wasi_msg.message.conversation ||
-                    wasi_msg.message.extendedTextMessage?.text ||
-                    wasi_msg.message.imageMessage?.caption ||
-                    wasi_msg.message.videoMessage?.caption || '';
-        
-        // Process commands
-        if (text.startsWith(PREFIX)) {
-            await processCommand(wasi_sock, wasi_msg);
-        }
-        
-        // Auto Forward
-        if (settings.autoForward && SOURCE_JIDS.includes(from) && !wasi_msg.key.fromMe) {
-            try {
-                let relayMsg = processAndCleanMessage(wasi_msg.message);
-                if (!relayMsg) return;
-                
-                // Handle view once
-                if (relayMsg.viewOnceMessageV2) relayMsg = relayMsg.viewOnceMessageV2.message;
-                if (relayMsg.viewOnceMessage) relayMsg = relayMsg.viewOnceMessage.message;
-                
-                const isMedia = relayMsg.imageMessage || relayMsg.videoMessage || 
-                               relayMsg.audioMessage || relayMsg.documentMessage || 
-                               relayMsg.stickerMessage;
-                
-                let isEmojiOnly = false;
-                if (relayMsg.conversation) {
-                    const emojiRegex = /^(?:\p{Extended_Pictographic}|\s)+$/u;
-                    isEmojiOnly = emojiRegex.test(relayMsg.conversation);
-                }
-                
-                if (!isMedia && !isEmojiOnly) return;
-                
-                // Replace captions
-                if (relayMsg.imageMessage?.caption) {
-                    relayMsg.imageMessage.caption = replaceCaption(relayMsg.imageMessage.caption);
-                }
-                if (relayMsg.videoMessage?.caption) {
-                    relayMsg.videoMessage.caption = replaceCaption(relayMsg.videoMessage.caption);
-                }
-                if (relayMsg.documentMessage?.caption) {
-                    relayMsg.documentMessage.caption = replaceCaption(relayMsg.documentMessage.caption);
-                }
-                
-                for (const target of TARGET_JIDS) {
-                    await wasi_sock.relayMessage(target, relayMsg, {
-                        messageId: wasi_sock.generateMessageTag()
-                    });
-                }
-                console.log(`📦 Auto-forwarded from ${from}`);
-            } catch (err) {
-                console.error('Auto-forward error:', err.message);
+        try {
+            const wasi_msg = wasi_m.messages[0];
+            if (!wasi_msg || !wasi_msg.message) return;
+            
+            const from = wasi_msg.key.remoteJid;
+            const text = wasi_msg.message.conversation ||
+                        wasi_msg.message.extendedTextMessage?.text ||
+                        wasi_msg.message.imageMessage?.caption ||
+                        wasi_msg.message.videoMessage?.caption || '';
+            
+            // Process commands
+            if (text && text.startsWith(PREFIX)) {
+                await processCommand(wasi_sock, wasi_msg);
             }
+            
+            // Auto Forward
+            if (settings.autoForward && from && SOURCE_JIDS.includes(from) && !wasi_msg.key.fromMe) {
+                try {
+                    let relayMsg = processAndCleanMessage(wasi_msg.message);
+                    if (!relayMsg) return;
+                    
+                    if (relayMsg.viewOnceMessageV2) relayMsg = relayMsg.viewOnceMessageV2.message;
+                    if (relayMsg.viewOnceMessage) relayMsg = relayMsg.viewOnceMessage.message;
+                    
+                    const isMedia = relayMsg.imageMessage || relayMsg.videoMessage || 
+                                   relayMsg.audioMessage || relayMsg.documentMessage || 
+                                   relayMsg.stickerMessage;
+                    
+                    let isEmojiOnly = false;
+                    if (relayMsg.conversation) {
+                        const emojiRegex = /^(?:\p{Extended_Pictographic}|\s)+$/u;
+                        isEmojiOnly = emojiRegex.test(relayMsg.conversation);
+                    }
+                    
+                    if (!isMedia && !isEmojiOnly) return;
+                    
+                    if (relayMsg.imageMessage?.caption) {
+                        relayMsg.imageMessage.caption = replaceCaption(relayMsg.imageMessage.caption);
+                    }
+                    if (relayMsg.videoMessage?.caption) {
+                        relayMsg.videoMessage.caption = replaceCaption(relayMsg.videoMessage.caption);
+                    }
+                    if (relayMsg.documentMessage?.caption) {
+                        relayMsg.documentMessage.caption = replaceCaption(relayMsg.documentMessage.caption);
+                    }
+                    
+                    for (const target of TARGET_JIDS) {
+                        await wasi_sock.relayMessage(target, relayMsg, {
+                            messageId: wasi_sock.generateMessageTag()
+                        });
+                    }
+                    console.log(`📦 Auto-forwarded from ${from}`);
+                } catch (err) {
+                    console.error('Auto-forward error:', err.message);
+                }
+            }
+            
+            // Anti-Link
+            await handleAntiLink(wasi_sock, wasi_msg);
+        } catch (error) {
+            console.error('Messages.upsert error:', error);
         }
-        
-        // Anti-Link
-        await handleAntiLink(wasi_sock, wasi_msg);
     });
     
     // Anti-Delete
@@ -1196,28 +1236,32 @@ async function startSession(sessionId) {
 // ============================================================
 
 wasi_app.get('/api/status', async (req, res) => {
-    const sessionId = req.query.sessionId || config.sessionId || 'wasi_session';
-    const session = sessions.get(sessionId);
-    
-    let qrDataUrl = null;
-    if (session?.qr) {
-        try {
-            qrDataUrl = await QRCode.toDataURL(session.qr, { width: 256 });
-        } catch (e) {}
+    try {
+        const sessionId = req.query.sessionId || config.sessionId || 'wasi_session';
+        const session = sessions.get(sessionId);
+        
+        let qrDataUrl = null;
+        if (session?.qr) {
+            try {
+                qrDataUrl = await QRCode.toDataURL(session.qr, { width: 256 });
+            } catch (e) {}
+        }
+        
+        res.json({
+            success: true,
+            sessionId,
+            connected: session?.isConnected || false,
+            qr: qrDataUrl,
+            owner: BOT_OWNER,
+            prefix: PREFIX,
+            settings,
+            uptime: process.uptime(),
+            sessions: Array.from(sessions.keys()),
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
     }
-    
-    res.json({
-        success: true,
-        sessionId,
-        connected: session?.isConnected || false,
-        qr: qrDataUrl,
-        owner: BOT_OWNER,
-        prefix: PREFIX,
-        settings,
-        uptime: process.uptime(),
-        sessions: Array.from(sessions.keys()),
-        timestamp: new Date().toISOString()
-    });
 });
 
 wasi_app.post('/api/restart', async (req, res) => {
@@ -1251,22 +1295,30 @@ wasi_app.post('/api/logout', async (req, res) => {
 });
 
 wasi_app.get('/api/sessions', async (req, res) => {
-    const list = Array.from(sessions.keys()).map(id => ({
-        sessionId: id,
-        isConnected: sessions.get(id)?.isConnected || false
-    }));
-    res.json({ success: true, sessions: list, total: list.length });
+    try {
+        const list = Array.from(sessions.keys()).map(id => ({
+            sessionId: id,
+            isConnected: sessions.get(id)?.isConnected || false
+        }));
+        res.json({ success: true, sessions: list, total: list.length });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
 });
 
 wasi_app.get('/api/health', async (req, res) => {
-    res.json({
-        status: 'ok',
-        uptime: process.uptime(),
-        timestamp: new Date().toISOString(),
-        memory: process.memoryUsage(),
-        sessions: sessions.size,
-        settings
-    });
+    try {
+        res.json({
+            status: 'ok',
+            uptime: process.uptime(),
+            timestamp: new Date().toISOString(),
+            memory: process.memoryUsage(),
+            sessions: sessions.size,
+            settings
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
 });
 
 wasi_app.post('/api/settings', async (req, res) => {
@@ -1332,18 +1384,22 @@ function wasi_startServer() {
 // ============================================================
 
 async function main() {
-    // Connect Database
-    if (config.mongoDbUrl) {
-        const dbResult = await wasi_connectDatabase(config.mongoDbUrl);
-        if (dbResult) console.log('✅ Database connected');
+    try {
+        // Connect Database
+        if (config.mongoDbUrl) {
+            const dbResult = await wasi_connectDatabase(config.mongoDbUrl);
+            if (dbResult) console.log('✅ Database connected');
+        }
+        
+        // Start session
+        const sessionId = config.sessionId || 'wasi_session';
+        await startSession(sessionId);
+        
+        // Start server
+        wasi_startServer();
+    } catch (error) {
+        console.error('Main error:', error);
     }
-    
-    // Start session
-    const sessionId = config.sessionId || 'wasi_session';
-    await startSession(sessionId);
-    
-    // Start server
-    wasi_startServer();
 }
 
 main();
