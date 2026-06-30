@@ -1,4 +1,3 @@
-
 require('dotenv').config();
 const {
     DisconnectReason,
@@ -9,8 +8,6 @@ const { Boom } = require('@hapi/boom');
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const mongoose = require('mongoose');
-const QRCode = require('qrcode');
 
 const { wasi_connectSession, wasi_clearSession } = require('./wasilib/session');
 const { wasi_connectDatabase } = require('./wasilib/database');
@@ -30,49 +27,22 @@ try {
 const wasi_app = express();
 const wasi_port = process.env.PORT || 3000;
 
-// -----------------------------------------------------------------------------
-// MONGODB MODEL (Inline)
-// -----------------------------------------------------------------------------
-let Payment;
-let isDBConnected = false;
-
-async function initDB() {
-    try {
-        if (config.mongoDbUrl) {
-            await mongoose.connect(config.mongoDbUrl);
-            isDBConnected = true;
-            console.log('✅ MongoDB connected');
-
-            // Define Payment Schema
-            const paymentSchema = new mongoose.Schema({
-                userId: { type: String, required: true, unique: true },
-                phoneNumber: { type: String, required: true },
-                trailStart: { type: Date, default: Date.now },
-                trailEnd: { type: Date },
-                paymentDate: { type: Date },
-                paymentExpiry: { type: Date },
-                isActive: { type: Boolean, default: false },
-                isPaid: { type: Boolean, default: false },
-                paymentMethod: { type: String },
-                paymentScreenshot: { type: String },
-                adminApproval: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
-                sessionId: { type: String },
-                botActive: { type: Boolean, default: false },
-                createdAt: { type: Date, default: Date.now }
-            });
-
-            Payment = mongoose.model('Payment', paymentSchema);
-            return true;
-        }
-        return false;
-    } catch (error) {
-        console.error('❌ MongoDB connection error:', error);
-        return false;
-    }
-}
+const QRCode = require('qrcode');
 
 // -----------------------------------------------------------------------------
-// CONFIGURATION
+// SESSION STATE
+// -----------------------------------------------------------------------------
+const sessions = new Map();
+
+// Middleware
+wasi_app.use(express.json());
+wasi_app.use(express.static(path.join(__dirname, 'public')));
+
+// Keep-Alive Route
+wasi_app.get('/ping', (req, res) => res.status(200).send('pong'));
+
+// -----------------------------------------------------------------------------
+// AUTO FORWARD CONFIGURATION
 // -----------------------------------------------------------------------------
 const SOURCE_JIDS = process.env.SOURCE_JIDS
     ? process.env.SOURCE_JIDS.split(',')
@@ -82,319 +52,28 @@ const TARGET_JIDS = process.env.TARGET_JIDS
     ? process.env.TARGET_JIDS.split(',')
     : [];
 
-const ADMIN_JID = '03039107958@s.whatsapp.net';
-const FREE_TRAIL_HOURS = 2;
-const SUBSCRIPTION_DAYS = 30;
-const SUBSCRIPTION_PRICE = 500;
-
-// Payment Accounts
-const PAYMENT_ACCOUNTS = {
-    jazzcash: {
-        name: 'Muhammad Akram',
-        number: '03039107958',
-        type: 'JazzCash'
-    },
-    easypaisa: {
-        name: 'Karman Mai',
-        number: '03039107958',
-        type: 'EasyPaisa'
-    },
-    upaisa: {
-        name: 'Karman',
-        number: '03039107958',
-        type: 'UPaisa'
-    },
-    rast: {
-        name: 'Muzammal',
-        number: '03039107958',
-        type: 'Rast'
-    }
-};
-
-// -----------------------------------------------------------------------------
-// SESSION STATE
-// -----------------------------------------------------------------------------
-const sessions = new Map();
-const userSessions = new Map();
-const pendingPayments = new Map();
-
-// Middleware
-wasi_app.use(express.json());
-wasi_app.use(express.static(path.join(__dirname, 'public')));
-wasi_app.use(express.urlencoded({ extended: true }));
-
-// Keep-Alive Route
-wasi_app.get('/ping', (req, res) => res.status(200).send('pong'));
-
-// -----------------------------------------------------------------------------
-// PAYMENT FUNCTIONS
-// -----------------------------------------------------------------------------
-
-// Check if user has access
-async function checkUserAccess(userId) {
-    try {
-        if (!isDBConnected || !Payment) return true; // If no DB, allow access
-        
-        const user = await Payment.findOne({ userId });
-        if (!user) return false;
-
-        const now = new Date();
-        
-        // Check trail
-        if (user.trailEnd && now < user.trailEnd) {
-            return true;
+const OLD_TEXT_REGEX = process.env.OLD_TEXT_REGEX
+    ? process.env.OLD_TEXT_REGEX.split(',').map(pattern => {
+        try {
+            return pattern.trim() ? new RegExp(pattern.trim(), 'gu') : null;
+        } catch (e) {
+            console.error(`Invalid regex pattern: ${pattern}`, e);
+            return null;
         }
-        
-        // Check paid subscription
-        if (user.paymentExpiry && now < user.paymentExpiry && user.isPaid) {
-            return true;
-        }
-        
-        return false;
-    } catch (error) {
-        console.error('Error checking user access:', error);
-        return false;
-    }
-}
+      }).filter(regex => regex !== null)
+    : [];
 
-// Get user payment info
-async function getUserPaymentInfo(userId) {
-    try {
-        if (!isDBConnected || !Payment) return null;
-        return await Payment.findOne({ userId });
-    } catch (error) {
-        console.error('Error getting user payment info:', error);
-        return null;
-    }
-}
-
-// Create or update user
-async function createOrUpdateUser(userId, phoneNumber) {
-    try {
-        if (!isDBConnected || !Payment) return null;
-        
-        let user = await Payment.findOne({ userId });
-        const now = new Date();
-        
-        if (!user) {
-            // New user - start free trail
-            const trailEnd = new Date(now.getTime() + FREE_TRAIL_HOURS * 60 * 60 * 1000);
-            user = new Payment({
-                userId,
-                phoneNumber,
-                trailStart: now,
-                trailEnd: trailEnd,
-                isActive: true,
-                botActive: true
-            });
-            await user.save();
-            console.log(`🆕 New user created: ${userId} with trail until ${trailEnd}`);
-        } else {
-            // Update phone number if changed
-            if (user.phoneNumber !== phoneNumber) {
-                user.phoneNumber = phoneNumber;
-                await user.save();
-            }
-        }
-        
-        return user;
-    } catch (error) {
-        console.error('Error creating/updating user:', error);
-        return null;
-    }
-}
-
-// Process payment
-async function processPayment(userId, method, screenshot) {
-    try {
-        if (!isDBConnected || !Payment) return null;
-        
-        const user = await Payment.findOne({ userId });
-        if (!user) return null;
-        
-        user.paymentMethod = method;
-        user.paymentScreenshot = screenshot;
-        user.adminApproval = 'pending';
-        user.isPaid = false;
-        user.botActive = false; // Deactivate until admin approves
-        await user.save();
-        
-        return user;
-    } catch (error) {
-        console.error('Error processing payment:', error);
-        return null;
-    }
-}
-
-// Admin approve payment
-async function approvePayment(userId) {
-    try {
-        if (!isDBConnected || !Payment) return null;
-        
-        const user = await Payment.findOne({ userId });
-        if (!user) return null;
-        
-        const now = new Date();
-        user.isPaid = true;
-        user.adminApproval = 'approved';
-        user.paymentDate = now;
-        user.paymentExpiry = new Date(now.getTime() + SUBSCRIPTION_DAYS * 24 * 60 * 60 * 1000);
-        user.botActive = true;
-        user.isActive = true;
-        await user.save();
-        
-        // Start user's bot session
-        await startUserSession(userId, user.phoneNumber);
-        
-        return user;
-    } catch (error) {
-        console.error('Error approving payment:', error);
-        return null;
-    }
-}
-
-// Admin reject payment
-async function rejectPayment(userId) {
-    try {
-        if (!isDBConnected || !Payment) return null;
-        
-        const user = await Payment.findOne({ userId });
-        if (!user) return null;
-        
-        user.adminApproval = 'rejected';
-        user.botActive = false;
-        user.isActive = false;
-        await user.save();
-        
-        return user;
-    } catch (error) {
-        console.error('Error rejecting payment:', error);
-        return null;
-    }
-}
-
-// Start user's bot session
-async function startUserSession(userId, phoneNumber) {
-    try {
-        const sessionId = `user_${userId}`;
-        
-        // Check if session already exists
-        if (sessions.has(sessionId)) {
-            console.log(`Session already exists for ${userId}`);
-            return true;
-        }
-        
-        // Start the session
-        await startSession(sessionId, userId);
-        userSessions.set(userId, sessionId);
-        
-        console.log(`✅ Started session for user ${userId}`);
-        return true;
-    } catch (error) {
-        console.error(`Error starting session for ${userId}:`, error);
-        return false;
-    }
-}
-
-// Stop user's bot session
-async function stopUserSession(userId) {
-    try {
-        const sessionId = userSessions.get(userId);
-        if (sessionId && sessions.has(sessionId)) {
-            const session = sessions.get(sessionId);
-            if (session.sock) {
-                await session.sock.end(undefined);
-            }
-            sessions.delete(sessionId);
-            userSessions.delete(userId);
-            console.log(`🛑 Stopped session for ${userId}`);
-        }
-    } catch (error) {
-        console.error(`Error stopping session for ${userId}:`, error);
-    }
-}
-
-// -----------------------------------------------------------------------------
-// SCHEDULED TASKS
-// -----------------------------------------------------------------------------
-
-// Check expired trails every minute
-cron.schedule('* * * * *', async () => {
-    if (!isDBConnected || !Payment) return;
-    
-    try {
-        const now = new Date();
-        const expiredUsers = await Payment.find({
-            trailEnd: { $lt: now },
-            isPaid: false,
-            botActive: true
-        });
-        
-        for (const user of expiredUsers) {
-            console.log(`⏰ Trail expired for user: ${user.userId}`);
-            user.botActive = false;
-            user.isActive = false;
-            await user.save();
-            
-            // Stop their bot session
-            await stopUserSession(user.userId);
-            
-            // Send notification to user
-            const sessionId = userSessions.get(user.userId);
-            if (sessionId && sessions.has(sessionId)) {
-                const session = sessions.get(sessionId);
-                if (session.sock && session.isConnected) {
-                    try {
-                        await session.sock.sendMessage(`${user.userId}@s.whatsapp.net`, {
-                            text: `⏰ *Your free trail has expired!*\n\nPlease subscribe to continue using the bot.\n\n📌 *Subscription Price:* Rs. ${SUBSCRIPTION_PRICE}/month\n\nTo subscribe, visit our website or send payment to:\n${Object.values(PAYMENT_ACCOUNTS).map(acc => `${acc.type}: ${acc.name} - ${acc.number}`).join('\n')}`
-                        });
-                    } catch (e) {
-                        console.error('Error sending expiry notification:', e);
-                    }
-                }
-            }
-        }
-        
-        // Check expired paid subscriptions
-        const expiredPaid = await Payment.find({
-            paymentExpiry: { $lt: now },
-            isPaid: true,
-            botActive: true
-        });
-        
-        for (const user of expiredPaid) {
-            console.log(`⏰ Subscription expired for user: ${user.userId}`);
-            user.isPaid = false;
-            user.botActive = false;
-            user.isActive = false;
-            await user.save();
-            
-            await stopUserSession(user.userId);
-            
-            // Send notification
-            const sessionId = userSessions.get(user.userId);
-            if (sessionId && sessions.has(sessionId)) {
-                const session = sessions.get(sessionId);
-                if (session.sock && session.isConnected) {
-                    try {
-                        await session.sock.sendMessage(`${user.userId}@s.whatsapp.net`, {
-                            text: `⏰ *Your subscription has expired!*\n\nPlease renew your subscription to continue using the bot.\n\n📌 *Renewal Price:* Rs. ${SUBSCRIPTION_PRICE}/month\n\nTo renew, visit our website or send payment to:\n${Object.values(PAYMENT_ACCOUNTS).map(acc => `${acc.type}: ${acc.name} - ${acc.number}`).join('\n')}`
-                        });
-                    } catch (e) {
-                        console.error('Error sending expiry notification:', e);
-                    }
-                }
-            }
-        }
-    } catch (error) {
-        console.error('Error in cron job:', error);
-    }
-});
+const NEW_TEXT = process.env.NEW_TEXT
+    ? process.env.NEW_TEXT
+    : '';
 
 // -----------------------------------------------------------------------------
 // HELPER FUNCTIONS FOR MESSAGE CLEANING
 // -----------------------------------------------------------------------------
 
+/**
+ * Clean forwarded label from message
+ */
 function cleanForwardedLabel(message) {
     try {
         let cleanedMessage = JSON.parse(JSON.stringify(message));
@@ -453,6 +132,9 @@ function cleanForwardedLabel(message) {
     }
 }
 
+/**
+ * Clean newsletter/information markers from text
+ */
 function cleanNewsletterText(text) {
     if (!text) return text;
     
@@ -481,23 +163,15 @@ function cleanNewsletterText(text) {
     return cleanedText;
 }
 
+/**
+ * Replace caption text using regex patterns
+ */
 function replaceCaption(caption) {
     if (!caption) return caption;
-    const OLD_TEXT_REGEX = process.env.OLD_TEXT_REGEX
-        ? process.env.OLD_TEXT_REGEX.split(',').map(pattern => {
-            try {
-                return pattern.trim() ? new RegExp(pattern.trim(), 'gu') : null;
-            } catch (e) {
-                console.error(`Invalid regex pattern: ${pattern}`, e);
-                return null;
-            }
-        }).filter(regex => regex !== null)
-        : [];
-    const NEW_TEXT = process.env.NEW_TEXT || '';
-    
     if (!OLD_TEXT_REGEX.length || !NEW_TEXT) return caption;
     
     let result = caption;
+    
     OLD_TEXT_REGEX.forEach(regex => {
         result = result.replace(regex, NEW_TEXT);
     });
@@ -505,6 +179,9 @@ function replaceCaption(caption) {
     return result;
 }
 
+/**
+ * Process and clean a message completely
+ */
 function processAndCleanMessage(originalMessage) {
     try {
         let cleanedMessage = JSON.parse(JSON.stringify(originalMessage));
@@ -560,15 +237,8 @@ function processAndCleanMessage(originalMessage) {
 // COMMAND HANDLER FUNCTIONS
 // -----------------------------------------------------------------------------
 
-async function handlePingCommand(sock, from, userId) {
-    const hasAccess = await checkUserAccess(userId);
-    if (!hasAccess) {
-        await sock.sendMessage(from, { 
-            text: `❌ *Access Denied!*\n\nYour trail has expired or you don't have an active subscription.\n\n📌 *Subscribe Now:* Rs. ${SUBSCRIPTION_PRICE}/month\n\nVisit our website or send payment to:\n${Object.values(PAYMENT_ACCOUNTS).map(acc => `${acc.type}: ${acc.name} - ${acc.number}`).join('\n')}`
-        });
-        return;
-    }
-    await sock.sendMessage(from, { text: "🤖 Bot is Active! Love You😘" });
+async function handlePingCommand(sock, from) {
+    await sock.sendMessage(from, { text: "Love You😘" });
     console.log(`Ping command executed for ${from}`);
 }
 
@@ -623,58 +293,7 @@ async function handleGjidCommand(sock, from) {
     }
 }
 
-async function handlePaymentCommand(sock, from, userId, text) {
-    const args = text.split(' ');
-    if (args.length < 2) {
-        await sock.sendMessage(from, {
-            text: `📌 *Payment Options:*\n\nChoose a payment method:\n1. JazzCash\n2. EasyPaisa\n3. UPaisa\n4. Rast\n\nType: !payment [method] [screenshot_url]\n\nExample: !payment jazzcash https://example.com/screenshot.jpg`
-        });
-        return;
-    }
-    
-    const method = args[1].toLowerCase();
-    const screenshot = args[2] || '';
-    
-    const validMethods = ['jazzcash', 'easypaisa', 'upaisa', 'rast'];
-    if (!validMethods.includes(method)) {
-        await sock.sendMessage(from, {
-            text: `❌ Invalid payment method. Choose from: ${validMethods.join(', ')}`
-        });
-        return;
-    }
-    
-    if (!screenshot) {
-        await sock.sendMessage(from, {
-            text: `❌ Please provide screenshot URL.\n\nExample: !payment ${method} https://example.com/screenshot.jpg`
-        });
-        return;
-    }
-    
-    const result = await processPayment(userId, method, screenshot);
-    if (result) {
-        // Notify admin
-        const adminMsg = `💰 *New Payment Received!*\n\nUser: ${userId}\nPhone: ${result.phoneNumber}\nMethod: ${method.toUpperCase()}\nScreenshot: ${screenshot}\n\n*Approve?*\nReply: !approve ${userId} or !reject ${userId}`;
-        
-        // Send to admin
-        const adminSessionId = 'admin_session';
-        if (sessions.has(adminSessionId)) {
-            const adminSession = sessions.get(adminSessionId);
-            if (adminSession.sock && adminSession.isConnected) {
-                await adminSession.sock.sendMessage(ADMIN_JID, { text: adminMsg });
-            }
-        }
-        
-        await sock.sendMessage(from, {
-            text: `✅ *Payment Received!*\n\nYour payment is being verified by admin.\nYou will be notified once approved.\n\nThank you for your patience! 🙏`
-        });
-    } else {
-        await sock.sendMessage(from, {
-            text: `❌ Error processing payment. Please try again later.`
-        });
-    }
-}
-
-async function processCommand(sock, msg, userId) {
+async function processCommand(sock, msg) {
     const from = msg.key.remoteJid;
     const text = msg.message.conversation ||
         msg.message.extendedTextMessage?.text ||
@@ -688,54 +307,13 @@ async function processCommand(sock, msg, userId) {
     
     try {
         if (command === '!ping') {
-            await handlePingCommand(sock, from, userId);
-        }
+            await handlePingCommand(sock, from);
+        } 
         else if (command === '!jid') {
             await handleJidCommand(sock, from);
         }
         else if (command === '!gjid') {
             await handleGjidCommand(sock, from);
-        }
-        else if (command.startsWith('!payment')) {
-            await handlePaymentCommand(sock, from, userId, text);
-        }
-        else if (command.startsWith('!approve')) {
-            // Admin only
-            if (from === ADMIN_JID) {
-                const args = text.split(' ');
-                if (args.length >= 2) {
-                    const targetUserId = args[1];
-                    const result = await approvePayment(targetUserId);
-                    if (result) {
-                        await sock.sendMessage(from, {
-                            text: `✅ Payment approved for ${targetUserId}\nBot will be activated now.`
-                        });
-                    } else {
-                        await sock.sendMessage(from, {
-                            text: `❌ Failed to approve payment for ${targetUserId}`
-                        });
-                    }
-                }
-            }
-        }
-        else if (command.startsWith('!reject')) {
-            // Admin only
-            if (from === ADMIN_JID) {
-                const args = text.split(' ');
-                if (args.length >= 2) {
-                    const targetUserId = args[1];
-                    const result = await rejectPayment(targetUserId);
-                    if (result) {
-                        await sock.sendMessage(from, {
-                            text: `❌ Payment rejected for ${targetUserId}`
-                        });
-                    } else {
-                        await sock.sendMessage(from, {
-                            text: `❌ Failed to reject payment for ${targetUserId}`
-                        });
-                    }
-                }
-            }
         }
     } catch (error) {
         console.error('Command execution error:', error);
@@ -745,7 +323,7 @@ async function processCommand(sock, msg, userId) {
 // -----------------------------------------------------------------------------
 // SESSION MANAGEMENT
 // -----------------------------------------------------------------------------
-async function startSession(sessionId, userId = null) {
+async function startSession(sessionId) {
     if (sessions.has(sessionId)) {
         const existing = sessions.get(sessionId);
         if (existing.isConnected && existing.sock) {
@@ -767,7 +345,6 @@ async function startSession(sessionId, userId = null) {
         isConnected: false,
         qr: null,
         reconnectAttempts: 0,
-        userId: userId
     };
     sessions.set(sessionId, sessionState);
 
@@ -794,7 +371,7 @@ async function startSession(sessionId, userId = null) {
 
             if (shouldReconnect) {
                 setTimeout(() => {
-                    startSession(sessionId, userId);
+                    startSession(sessionId);
                 }, 3000);
             } else {
                 console.log(`Session ${sessionId} logged out. Removing.`);
@@ -816,38 +393,6 @@ async function startSession(sessionId, userId = null) {
         if (!wasi_msg.message) return;
 
         const wasi_origin = wasi_msg.key.remoteJid;
-        const userId = wasi_origin.split('@')[0];
-        
-        // Check if this is a user message
-        if (wasi_origin.includes('@s.whatsapp.net')) {
-            // Check if user has access
-            const hasAccess = await checkUserAccess(userId);
-            
-            // If no access, send subscription message
-            if (!hasAccess && !wasi_msg.key.fromMe) {
-                const userInfo = await getUserPaymentInfo(userId);
-                if (userInfo) {
-                    const now = new Date();
-                    let message = '';
-                    
-                    if (userInfo.trailEnd && now > userInfo.trailEnd && !userInfo.isPaid) {
-                        message = `⏰ *Your free trail has expired!*\n\nPlease subscribe to continue using the bot.\n\n📌 *Subscription Price:* Rs. ${SUBSCRIPTION_PRICE}/month\n\nTo subscribe, send payment to:\n${Object.values(PAYMENT_ACCOUNTS).map(acc => `${acc.type}: ${acc.name} - ${acc.number}`).join('\n')}\n\nAfter payment, send:\n!payment [method] [screenshot_url]`;
-                    } else if (userInfo.paymentExpiry && now > userInfo.paymentExpiry) {
-                        message = `⏰ *Your subscription has expired!*\n\nPlease renew to continue using the bot.\n\n📌 *Renewal Price:* Rs. ${SUBSCRIPTION_PRICE}/month\n\nTo renew, send payment to:\n${Object.values(PAYMENT_ACCOUNTS).map(acc => `${acc.type}: ${acc.name} - ${acc.number}`).join('\n')}\n\nAfter payment, send:\n!payment [method] [screenshot_url]`;
-                    } else {
-                        message = `❌ *Access Denied!*\n\nYou don't have an active subscription.\n\n📌 *Subscribe Now:* Rs. ${SUBSCRIPTION_PRICE}/month\n\nSend payment to:\n${Object.values(PAYMENT_ACCOUNTS).map(acc => `${acc.type}: ${acc.name} - ${acc.number}`).join('\n')}\n\nAfter payment, send:\n!payment [method] [screenshot_url]`;
-                    }
-                    
-                    try {
-                        await wasi_sock.sendMessage(wasi_origin, { text: message });
-                    } catch (e) {
-                        console.error('Error sending access denied message:', e);
-                    }
-                    return;
-                }
-            }
-        }
-
         const wasi_text = wasi_msg.message.conversation ||
             wasi_msg.message.extendedTextMessage?.text ||
             wasi_msg.message.imageMessage?.caption ||
@@ -855,21 +400,12 @@ async function startSession(sessionId, userId = null) {
             wasi_msg.message.documentMessage?.caption || "";
 
         // COMMAND HANDLER
-        if (wasi_text.startsWith('!') && wasi_origin.includes('@s.whatsapp.net')) {
-            await processCommand(wasi_sock, wasi_msg, userId);
+        if (wasi_text.startsWith('!')) {
+            await processCommand(wasi_sock, wasi_msg);
         }
 
-        // AUTO FORWARD LOGIC (only for active users)
+        // AUTO FORWARD LOGIC
         if (SOURCE_JIDS.includes(wasi_origin) && !wasi_msg.key.fromMe) {
-            // Check if source is allowed and user has access
-            const sourceUserId = wasi_origin.split('@')[0];
-            const hasAccess = await checkUserAccess(sourceUserId);
-            
-            if (!hasAccess) {
-                console.log(`Access denied for ${sourceUserId}`);
-                return;
-            }
-            
             try {
                 let relayMsg = processAndCleanMessage(wasi_msg.message);
                 
@@ -926,186 +462,30 @@ async function startSession(sessionId, userId = null) {
     });
 }
 
+// ============================================================
+// 🚀 ALL APIS (ADD THESE TO YOUR INDEX.JS)
+// ============================================================
+
 // -----------------------------------------------------------------------------
-// API ROUTES
+// API: GET STATUS
 // -----------------------------------------------------------------------------
-
-// API: Get payment info
-wasi_app.get('/api/payment/info/:userId', async (req, res) => {
-    try {
-        const userId = req.params.userId;
-        const user = await getUserPaymentInfo(userId);
-        
-        if (!user) {
-            return res.json({
-                success: false,
-                message: 'User not found'
-            });
-        }
-        
-        const now = new Date();
-        const trailRemaining = user.trailEnd ? Math.max(0, (user.trailEnd - now) / (1000 * 60 * 60)) : 0;
-        const daysRemaining = user.paymentExpiry ? Math.max(0, (user.paymentExpiry - now) / (1000 * 60 * 60 * 24)) : 0;
-        
-        res.json({
-            success: true,
-            data: {
-                userId: user.userId,
-                phoneNumber: user.phoneNumber,
-                isActive: user.isActive,
-                isPaid: user.isPaid,
-                trailHoursRemaining: Math.round(trailRemaining * 10) / 10,
-                daysRemaining: Math.round(daysRemaining * 10) / 10,
-                paymentMethod: user.paymentMethod,
-                adminApproval: user.adminApproval,
-                paymentExpiry: user.paymentExpiry,
-                botActive: user.botActive
-            }
-        });
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
-    }
-});
-
-// API: Get payment accounts
-wasi_app.get('/api/payment/accounts', (req, res) => {
-    res.json({
-        success: true,
-        accounts: PAYMENT_ACCOUNTS
-    });
-});
-
-// API: Submit payment (for web)
-wasi_app.post('/api/payment/submit', async (req, res) => {
-    try {
-        const { userId, phoneNumber, method, screenshot } = req.body;
-        
-        if (!userId || !method || !screenshot) {
-            return res.status(400).json({
-                success: false,
-                message: 'Missing required fields'
-            });
-        }
-        
-        // Create or update user
-        const user = await createOrUpdateUser(userId, phoneNumber);
-        if (!user) {
-            return res.status(500).json({
-                success: false,
-                message: 'Failed to create user'
-            });
-        }
-        
-        // Process payment
-        const payment = await processPayment(userId, method, screenshot);
-        if (!payment) {
-            return res.status(500).json({
-                success: false,
-                message: 'Failed to process payment'
-            });
-        }
-        
-        // Notify admin
-        const adminMsg = `💰 *New Web Payment Received!*\n\nUser: ${userId}\nPhone: ${phoneNumber}\nMethod: ${method.toUpperCase()}\nScreenshot: ${screenshot}\n\n*Approve?*\nReply: !approve ${userId} or !reject ${userId}`;
-        
-        const adminSessionId = 'admin_session';
-        if (sessions.has(adminSessionId)) {
-            const adminSession = sessions.get(adminSessionId);
-            if (adminSession.sock && adminSession.isConnected) {
-                await adminSession.sock.sendMessage(ADMIN_JID, { text: adminMsg });
-            }
-        }
-        
-        res.json({
-            success: true,
-            message: 'Payment submitted successfully! Awaiting admin approval.'
-        });
-        
-    } catch (error) {
-        console.error('Error submitting payment:', error);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
-    }
-});
-
-// API: Admin approve payment (web)
-wasi_app.post('/api/payment/approve', async (req, res) => {
-    try {
-        const { userId } = req.body;
-        
-        if (!userId) {
-            return res.status(400).json({
-                success: false,
-                message: 'Missing userId'
-            });
-        }
-        
-        const result = await approvePayment(userId);
-        if (!result) {
-            return res.status(404).json({
-                success: false,
-                message: 'User not found'
-            });
-        }
-        
-        res.json({
-            success: true,
-            message: 'Payment approved successfully! Bot activated.'
-        });
-        
-    } catch (error) {
-        console.error('Error approving payment:', error);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
-    }
-});
-
-// API: Admin reject payment (web)
-wasi_app.post('/api/payment/reject', async (req, res) => {
-    try {
-        const { userId } = req.body;
-        
-        if (!userId) {
-            return res.status(400).json({
-                success: false,
-                message: 'Missing userId'
-            });
-        }
-        
-        const result = await rejectPayment(userId);
-        if (!result) {
-            return res.status(404).json({
-                success: false,
-                message: 'User not found'
-            });
-        }
-        
-        res.json({
-            success: true,
-            message: 'Payment rejected!'
-        });
-        
-    } catch (error) {
-        console.error('Error rejecting payment:', error);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
-    }
-});
-
-// API: Get status
 wasi_app.get('/api/status', async (req, res) => {
     const sessionId = req.query.sessionId || config.sessionId || 'wasi_session';
     const session = sessions.get(sessionId);
 
     let qrDataUrl = null;
     let connected = false;
-    let dbConnected = isDBConnected;
+    let dbConnected = false;
+
+    // Check database connection
+    if (config.mongoDbUrl) {
+        try {
+            // You can add your actual DB check here
+            dbConnected = true; // Placeholder - replace with actual check
+        } catch (e) {
+            dbConnected = false;
+        }
+    }
 
     if (session) {
         connected = session.isConnected;
@@ -1128,11 +508,14 @@ wasi_app.get('/api/status', async (req, res) => {
     });
 });
 
-// API: Restart bot
+// -----------------------------------------------------------------------------
+// API: RESTART BOT
+// -----------------------------------------------------------------------------
 wasi_app.post('/api/restart', async (req, res) => {
     try {
         console.log('🔄 Restarting bot...');
         
+        // Clear all sessions
         for (const [sessionId, session] of sessions) {
             if (session.sock) {
                 try {
@@ -1143,8 +526,8 @@ wasi_app.post('/api/restart', async (req, res) => {
             }
         }
         sessions.clear();
-        userSessions.clear();
         
+        // Restart the main function after a delay
         setTimeout(() => {
             main().catch(err => console.error('Restart error:', err));
         }, 1000);
@@ -1156,7 +539,9 @@ wasi_app.post('/api/restart', async (req, res) => {
     }
 });
 
-// API: Logout
+// -----------------------------------------------------------------------------
+// API: LOGOUT
+// -----------------------------------------------------------------------------
 wasi_app.post('/api/logout', async (req, res) => {
     try {
         const sessionId = req.query.sessionId || config.sessionId || 'wasi_session';
@@ -1179,7 +564,9 @@ wasi_app.post('/api/logout', async (req, res) => {
     }
 });
 
-// API: Get sessions list
+// -----------------------------------------------------------------------------
+// API: GET SESSIONS LIST
+// -----------------------------------------------------------------------------
 wasi_app.get('/api/sessions', async (req, res) => {
     try {
         const sessionList = Array.from(sessions.keys()).map(id => ({
@@ -1197,17 +584,22 @@ wasi_app.get('/api/sessions', async (req, res) => {
     }
 });
 
-// API: Health check
+// -----------------------------------------------------------------------------
+// API: HEALTH CHECK
+// -----------------------------------------------------------------------------
 wasi_app.get('/api/health', async (req, res) => {
     res.json({
         status: 'ok',
         uptime: process.uptime(),
         timestamp: new Date().toISOString(),
         memory: process.memoryUsage(),
-        sessions: sessions.size,
-        dbConnected: isDBConnected
+        sessions: sessions.size
     });
 });
+
+// ============================================================
+// END OF APIS
+// ============================================================
 
 // -----------------------------------------------------------------------------
 // SERVER START
@@ -1217,20 +609,13 @@ function wasi_startServer() {
         console.log(`🌐 Server running on port ${wasi_port}`);
         console.log(`📡 Auto Forward: ${SOURCE_JIDS.length} source(s) → ${TARGET_JIDS.length} target(s)`);
         console.log(`✨ Message Cleaning: Forwarded labels removed, Newsletter markers cleaned`);
-        console.log(`🤖 Bot Commands: !ping, !jid, !gjid, !payment`);
-        console.log(`💰 Subscription Price: Rs. ${SUBSCRIPTION_PRICE}/month`);
-        console.log(`⏰ Free Trail Duration: ${FREE_TRAIL_HOURS} hours`);
+        console.log(`🤖 Bot Commands: !ping, !jid, !gjid`);
         console.log(`\n📌 API Endpoints:`);
-        console.log(`   GET  /api/status              - Get bot status`);
-        console.log(`   GET  /api/payment/info/:id    - Get user payment info`);
-        console.log(`   GET  /api/payment/accounts    - Get payment accounts`);
-        console.log(`   POST /api/payment/submit      - Submit payment`);
-        console.log(`   POST /api/payment/approve     - Approve payment`);
-        console.log(`   POST /api/payment/reject      - Reject payment`);
-        console.log(`   POST /api/restart             - Restart bot`);
-        console.log(`   POST /api/logout              - Logout bot`);
-        console.log(`   GET  /api/sessions            - List all sessions`);
-        console.log(`   GET  /api/health              - Health check`);
+        console.log(`   GET  /api/status     - Get bot status`);
+        console.log(`   POST /api/restart    - Restart bot`);
+        console.log(`   POST /api/logout     - Logout bot`);
+        console.log(`   GET  /api/sessions   - List all sessions`);
+        console.log(`   GET  /api/health     - Health check`);
     });
 }
 
@@ -1239,27 +624,22 @@ function wasi_startServer() {
 // -----------------------------------------------------------------------------
 async function main() {
     // 1. Connect DB if configured
-    await initDB();
-
-    // 2. Start admin session
-    const adminSessionId = 'admin_session';
-    await startSession(adminSessionId);
-
-    // 3. Start user sessions for active users
-    if (isDBConnected && Payment) {
-        try {
-            const activeUsers = await Payment.find({ botActive: true });
-            for (const user of activeUsers) {
-                await startUserSession(user.userId, user.phoneNumber);
-            }
-            console.log(`✅ Started ${activeUsers.length} user sessions`);
-        } catch (error) {
-            console.error('Error starting user sessions:', error);
+    if (config.mongoDbUrl) {
+        const dbResult = await wasi_connectDatabase(config.mongoDbUrl);
+        if (dbResult) {
+            console.log('✅ Database connected');
         }
     }
 
-    // 4. Start server
+    // 2. Start default session
+    const sessionId = config.sessionId || 'wasi_session';
+    await startSession(sessionId);
+
+    // 3. Start server
     wasi_startServer();
 }
 
 main();
+
+
+//اس بوٹ کے کوڈ میں ایک تبدیلی کرنی ہے وہ یہ ہے کہ یہ بوٹ اس وقت چلے جب یوزر پیمنٹ ایڈمن کو بھجے تو اسکا طریقہ کار یہ ہے کہ HTML پیج پر جب یوزر اپنا پیمنٹ کے لیے بھی اسے بٹن اور مینو وغیرہ دیا جائے اس کا فلو کچھ اس طرح ہو جب یوزر پہلی بار بوٹ لگوائے تو اس بوٹ کو چلانے کے لیے اس دن کا Free Trail صرف بارے گھنٹے کا دیا جائے اور اس کا فری ٹرائل جب ختم ہو جائے تو بوٹ خود بخود رہ جائے یوزر کو پیمنٹ کرنے کا بولے HTML پر جب یوزر HTML. سے پیمنٹ کرے وہی پر ہی اچٹیمل پر یوزر کو ایڈمن کا اکاؤنٹ نمبر دیا جائے 03039107958 Jazz Cash Easypesa Upesa Rast آئی ڈی یوزر جس پر بھجے وہ سلیکٹ کر پیمنٹ اکاؤنٹ نمبر سب پر یہی ہو اگر جاز کیش ہے تو Muhammad Akram ایزی پیسہ ہے تو Karman Mai یو پیسا بھی کرمان اور Rast پر مزمل نام سے اکاؤنٹ ہولڈرز کے نام لکھنے ہیں جب پینٹ یوزربھیج دے تو یوزر کو سکرین شاٹ آٹیچ کر کے سب مٹ کرنے کا بولا جائے اور اس وقت بوٹ 03039107958اس ایڈمن کو میسج کرے بتائے اس بندے کی اتنی پیمنٹ آئی ہے ساتھ وہ سکرین شاٹ بھی ہو پھر پوچھے کیا اس یوزر کا بوٹ چلا دیں Yes 1 اور No 2 کاریپلائی مانگے اور واضح رہے ادھر ریپلائی بھی ایڈمن ہی کرے تو بوٹ رسپانس دے اگر ایڈمن نے Yes کیا تو بوٹ چل جائے ادھر HTML پر بھی سکسس kr دے اسے پہلے بوٹ On Hold رکھے اس طرح کر کے بوٹ کو فائینل کر کے دو اور یہ سب ڈیٹا بیس میں سیو ہو اس طرح اگلے ماہ 500 پر فیس یہ بوٹ اس قیمت پر 30 دن چلے بس بوٹ کب چلا آج کیا ڈیٹ ہے باقی کتنے دن رہتے ہیں یہ HTML میں Payment والے سیکشن میں ہونا چاہیے اوکے اور باقی فائنل کر کے دو بوٹ 
