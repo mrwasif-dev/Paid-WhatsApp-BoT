@@ -16,6 +16,8 @@ const fs = require('fs');
 const path = require('path');
 const P = require('pino');
 const QRCode = require('qrcode');
+const TelegramBot = require('node-telegram-bot-api');
+const axios = require('axios');
 
 const { wasi_connectSession, wasi_clearSession } = require('./wasilib/session');
 const { wasi_connectDatabase } = require('./wasilib/database');
@@ -35,11 +37,23 @@ const wasi_app = express();
 const wasi_port = process.env.PORT || 3000;
 
 // -----------------------------------------------------------------------------
+// TELEGRAM BOT CONFIG
+// -----------------------------------------------------------------------------
+const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
+const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
+let telegramBot = null;
+
+if (TELEGRAM_TOKEN) {
+    telegramBot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
+    console.log('✅ Telegram Bot initialized!');
+}
+
+// -----------------------------------------------------------------------------
 // SESSION STATE
 // -----------------------------------------------------------------------------
 const sessions = new Map();
 const qrTimeouts = new Map();
-const keepAliveIntervals = new Map(); // NEW: Keep-alive intervals
+const keepAliveIntervals = new Map();
 
 // Middleware
 wasi_app.use(express.json());
@@ -316,10 +330,71 @@ async function processCommand(sock, msg) {
 }
 
 // -----------------------------------------------------------------------------
-// KEEP-ALIVE MECHANISM - PREVENTS 50-MINUTE TIMEOUT
+// DOWNLOAD TELEGRAM MEDIA
+// -----------------------------------------------------------------------------
+async function downloadTelegramMedia(fileId) {
+    try {
+        const fileLink = await telegramBot.getFileLink(fileId);
+        const response = await axios({
+            method: 'get',
+            url: fileLink,
+            responseType: 'arraybuffer'
+        });
+        return Buffer.from(response.data);
+    } catch (error) {
+        console.error('Error downloading Telegram media:', error.message);
+        throw error;
+    }
+}
+
+// -----------------------------------------------------------------------------
+// FORWARD TELEGRAM MEDIA TO WHATSAPP
+// -----------------------------------------------------------------------------
+async function forwardTelegramMediaToWhatsApp(sock, mediaBuffer, mimeType, caption, fileName) {
+    if (!sock) {
+        console.log('❌ WhatsApp socket not available!');
+        return false;
+    }
+
+    const results = [];
+
+    for (const targetJid of TARGET_JIDS) {
+        try {
+            const message = {
+                caption: caption || '',
+                mimetype: mimeType,
+                fileName: fileName || 'media_file',
+            };
+
+            if (mimeType.startsWith('image/')) {
+                message.image = mediaBuffer;
+            } else if (mimeType.startsWith('video/')) {
+                message.video = mediaBuffer;
+            } else if (mimeType.startsWith('audio/')) {
+                message.audio = mediaBuffer;
+                message.ptt = false;
+                message.mimetype = mimeType;
+            } else {
+                message.document = mediaBuffer;
+                message.mimetype = mimeType;
+            }
+
+            await sock.sendMessage(targetJid, message);
+            console.log(`✅ Telegram media sent to ${targetJid}`);
+            results.push({ target: targetJid, success: true });
+        } catch (error) {
+            console.error(`❌ Failed to send to ${targetJid}:`, error.message);
+            results.push({ target: targetJid, success: false, error: error.message });
+        }
+    }
+
+    return results;
+}
+
+// -----------------------------------------------------------------------------
+// KEEP-ALIVE MECHANISM
 // -----------------------------------------------------------------------------
 function startKeepAlive(sessionId, sock) {
-    // Clear existing interval
     if (keepAliveIntervals.has(sessionId)) {
         clearInterval(keepAliveIntervals.get(sessionId));
         keepAliveIntervals.delete(sessionId);
@@ -327,7 +402,6 @@ function startKeepAlive(sessionId, sock) {
     
     console.log(`🔄 Starting keep-alive for session: ${sessionId}`);
     
-    // Send presence every 30 seconds to keep connection alive
     const interval = setInterval(async () => {
         try {
             const session = sessions.get(sessionId);
@@ -336,36 +410,27 @@ function startKeepAlive(sessionId, sock) {
                 keepAliveIntervals.delete(sessionId);
                 return;
             }
-            
-            // Send presence available
             await session.sock.sendPresenceAvailable();
-            
-            // Also send read receipt for any pending messages (optional)
-            // This keeps the WebSocket connection active
         } catch (error) {
-            // Silent fail - will try again next interval
             if (error.message?.includes('reconnecting')) {
-                // Connection is reconnecting, clear interval
                 clearInterval(interval);
                 keepAliveIntervals.delete(sessionId);
             }
         }
-    }, 30000); // Every 30 seconds
+    }, 30000);
     
     keepAliveIntervals.set(sessionId, interval);
 }
 
 // -----------------------------------------------------------------------------
-// SESSION MANAGEMENT WITH ENHANCED RECONNECTION
+// SESSION MANAGEMENT
 // -----------------------------------------------------------------------------
 async function startSession(sessionId) {
-    // Clear any existing QR timeout for this session
     if (qrTimeouts.has(sessionId)) {
         clearTimeout(qrTimeouts.get(sessionId));
         qrTimeouts.delete(sessionId);
     }
     
-    // Clear keep-alive if exists
     if (keepAliveIntervals.has(sessionId)) {
         clearInterval(keepAliveIntervals.get(sessionId));
         keepAliveIntervals.delete(sessionId);
@@ -375,7 +440,6 @@ async function startSession(sessionId) {
         const existing = sessions.get(sessionId);
         if (existing.isConnected && existing.sock) {
             console.log(`Session ${sessionId} is already connected.`);
-            // Ensure keep-alive is running
             startKeepAlive(sessionId, existing.sock);
             return;
         }
@@ -414,7 +478,15 @@ async function startSession(sessionId) {
                 sessionState.lastQRTime = Date.now();
                 console.log(`📱 QR generated for session: ${sessionId}`);
                 
-                // Set timeout to regenerate QR if not scanned within 2 minutes
+                // Send QR to Telegram if available
+                if (telegramBot && TELEGRAM_CHAT_ID) {
+                    try {
+                        await telegramBot.sendMessage(TELEGRAM_CHAT_ID, `📱 Scan this QR code to connect WhatsApp:\n\`${qr}\``);
+                    } catch (e) {
+                        console.error('Failed to send QR to Telegram:', e.message);
+                    }
+                }
+                
                 if (qrTimeouts.has(sessionId)) {
                     clearTimeout(qrTimeouts.get(sessionId));
                 }
@@ -437,13 +509,11 @@ async function startSession(sessionId) {
                 sessionState.isConnecting = false;
                 sessionState.lastConnectionTime = Date.now();
                 
-                // Clear keep-alive on disconnect
                 if (keepAliveIntervals.has(sessionId)) {
                     clearInterval(keepAliveIntervals.get(sessionId));
                     keepAliveIntervals.delete(sessionId);
                 }
                 
-                // Clear QR timeout
                 if (qrTimeouts.has(sessionId)) {
                     clearTimeout(qrTimeouts.get(sessionId));
                     qrTimeouts.delete(sessionId);
@@ -452,7 +522,6 @@ async function startSession(sessionId) {
                 const statusCode = (lastDisconnect?.error instanceof Boom) ?
                     lastDisconnect.error.output.statusCode : 500;
 
-                // Check if it's a logout or auth failure
                 const isLoggedOut = statusCode === DisconnectReason.loggedOut || 
                                    statusCode === 440 ||
                                    lastDisconnect?.error?.message?.includes('401');
@@ -461,10 +530,12 @@ async function startSession(sessionId) {
                     console.log(`❌ Session ${sessionId} logged out. Removing session.`);
                     sessions.delete(sessionId);
                     await wasi_clearSession(sessionId);
+                    if (telegramBot && TELEGRAM_CHAT_ID) {
+                        await telegramBot.sendMessage(TELEGRAM_CHAT_ID, `❌ WhatsApp session logged out!`);
+                    }
                     return;
                 }
 
-                // Regular reconnection with exponential backoff
                 const delay = Math.min(3000 * Math.pow(1.5, sessionState.reconnectAttempts), 30000);
                 sessionState.reconnectAttempts += 1;
 
@@ -483,7 +554,6 @@ async function startSession(sessionId) {
                 sessionState.reconnectAttempts = 0;
                 sessionState.lastConnectionTime = Date.now();
                 
-                // Clear QR timeout on successful connection
                 if (qrTimeouts.has(sessionId)) {
                     clearTimeout(qrTimeouts.get(sessionId));
                     qrTimeouts.delete(sessionId);
@@ -491,21 +561,21 @@ async function startSession(sessionId) {
                 
                 console.log(`✅ ${sessionId}: Connected to WhatsApp`);
                 
-                // START KEEP-ALIVE TO PREVENT TIMEOUT
+                if (telegramBot && TELEGRAM_CHAT_ID) {
+                    await telegramBot.sendMessage(TELEGRAM_CHAT_ID, `✅ WhatsApp connected successfully!`);
+                }
+                
                 startKeepAlive(sessionId, wasi_sock);
                 
-                // Send presence available
                 try {
                     await wasi_sock.sendPresenceAvailable();
-                } catch (e) {
-                    // Ignore presence errors
-                }
+                } catch (e) {}
             }
         });
 
         wasi_sock.ev.on('creds.update', saveCreds);
 
-        // AUTO FORWARD MESSAGE HANDLER
+        // AUTO FORWARD MESSAGE HANDLER (WhatsApp → WhatsApp)
         wasi_sock.ev.on('messages.upsert', async wasi_m => {
             const wasi_msg = wasi_m.messages[0];
             if (!wasi_msg.message) return;
@@ -517,12 +587,10 @@ async function startSession(sessionId) {
                 wasi_msg.message.videoMessage?.caption ||
                 wasi_msg.message.documentMessage?.caption || "";
 
-            // COMMAND HANDLER
             if (wasi_text.startsWith('!')) {
                 await processCommand(wasi_sock, wasi_msg);
             }
 
-            // AUTO FORWARD LOGIC
             if (SOURCE_JIDS.includes(wasi_origin) && !wasi_msg.key.fromMe) {
                 try {
                     let relayMsg = processAndCleanMessage(wasi_msg.message);
@@ -579,7 +647,6 @@ async function startSession(sessionId) {
             }
         });
 
-        // Handle socket errors
         wasi_sock.ev.on('error', (error) => {
             console.error(`Socket error for session ${sessionId}:`, error);
         });
@@ -595,10 +662,159 @@ async function startSession(sessionId) {
 }
 
 // -----------------------------------------------------------------------------
+// TELEGRAM MESSAGE HANDLER
+// -----------------------------------------------------------------------------
+if (telegramBot) {
+    telegramBot.on('message', async (msg) => {
+        try {
+            const chatId = msg.chat.id;
+            const from = msg.from?.username || msg.from?.first_name || 'Unknown';
+            
+            // Only process if from authorized chat
+            if (TELEGRAM_CHAT_ID && chatId.toString() !== TELEGRAM_CHAT_ID.toString()) {
+                return;
+            }
+
+            const session = sessions.get(config.sessionId || 'wasi_session');
+            if (!session || !session.isConnected || !session.sock) {
+                await telegramBot.sendMessage(chatId, '❌ WhatsApp is not connected!');
+                return;
+            }
+
+            // ==========================================
+            // 📷 IMAGE HANDLER
+            // ==========================================
+            if (msg.photo) {
+                console.log(`📷 Image received from Telegram: ${from}`);
+                
+                const fileId = msg.photo[msg.photo.length - 1].file_id;
+                const caption = msg.caption || '';
+                
+                const buffer = await downloadTelegramMedia(fileId);
+                await forwardTelegramMediaToWhatsApp(
+                    session.sock,
+                    buffer,
+                    'image/jpeg',
+                    caption,
+                    'image.jpg'
+                );
+                
+                await telegramBot.sendMessage(chatId, '✅ Image forwarded to WhatsApp!');
+            }
+
+            // ==========================================
+            // 🎬 VIDEO HANDLER
+            // ==========================================
+            else if (msg.video) {
+                console.log(`🎬 Video received from Telegram: ${from}`);
+                
+                const fileId = msg.video.file_id;
+                const caption = msg.caption || '';
+                const fileName = msg.video.file_name || 'video.mp4';
+                
+                if (msg.video.file_size > 2 * 1024 * 1024 * 1024) {
+                    await telegramBot.sendMessage(chatId, '❌ Video size exceeds 2GB!');
+                    return;
+                }
+                
+                const buffer = await downloadTelegramMedia(fileId);
+                await forwardTelegramMediaToWhatsApp(
+                    session.sock,
+                    buffer,
+                    msg.video.mime_type || 'video/mp4',
+                    caption,
+                    fileName
+                );
+                
+                await telegramBot.sendMessage(chatId, '✅ Video forwarded to WhatsApp!');
+            }
+
+            // ==========================================
+            // 📄 DOCUMENT HANDLER
+            // ==========================================
+            else if (msg.document) {
+                console.log(`📄 Document received from Telegram: ${from}`);
+                
+                const fileId = msg.document.file_id;
+                const caption = msg.caption || '';
+                const fileName = msg.document.file_name || 'document.pdf';
+                const mimeType = msg.document.mime_type || 'application/octet-stream';
+                
+                if (msg.document.file_size > 2 * 1024 * 1024 * 1024) {
+                    await telegramBot.sendMessage(chatId, '❌ File size exceeds 2GB!');
+                    return;
+                }
+                
+                const buffer = await downloadTelegramMedia(fileId);
+                await forwardTelegramMediaToWhatsApp(
+                    session.sock,
+                    buffer,
+                    mimeType,
+                    caption,
+                    fileName
+                );
+                
+                await telegramBot.sendMessage(chatId, '✅ Document forwarded to WhatsApp!');
+            }
+
+            // ==========================================
+            // 🎵 AUDIO HANDLER
+            // ==========================================
+            else if (msg.audio || msg.voice) {
+                console.log(`🎵 Audio received from Telegram: ${from}`);
+                
+                const fileId = msg.audio?.file_id || msg.voice?.file_id;
+                const caption = msg.caption || '';
+                const mimeType = msg.audio?.mime_type || msg.voice?.mime_type || 'audio/mpeg';
+                const fileName = msg.audio?.file_name || msg.voice?.file_name || 'audio.mp3';
+                
+                const buffer = await downloadTelegramMedia(fileId);
+                await forwardTelegramMediaToWhatsApp(
+                    session.sock,
+                    buffer,
+                    mimeType,
+                    caption,
+                    fileName
+                );
+                
+                await telegramBot.sendMessage(chatId, '✅ Audio forwarded to WhatsApp!');
+            }
+
+            // ==========================================
+            // 📝 TEXT MESSAGE HANDLER
+            // ==========================================
+            else if (msg.text) {
+                console.log(`📝 Text received from Telegram: ${from}`);
+                
+                for (const targetJid of TARGET_JIDS) {
+                    try {
+                        await session.sock.sendMessage(targetJid, {
+                            text: `📨 From Telegram (@${from}):\n\n${msg.text}`
+                        });
+                        console.log(`✅ Text sent to ${targetJid}`);
+                    } catch (error) {
+                        console.error(`❌ Failed to send text to ${targetJid}:`, error.message);
+                    }
+                }
+
+                await telegramBot.sendMessage(chatId, '✅ Text forwarded to WhatsApp!');
+            }
+
+        } catch (error) {
+            console.error('❌ Telegram handler error:', error);
+            if (msg?.chat?.id) {
+                await telegramBot.sendMessage(msg.chat.id, `❌ Error: ${error.message}`);
+            }
+        }
+    });
+
+    console.log('🤖 Telegram bot listening for messages...');
+}
+
+// -----------------------------------------------------------------------------
 // API ROUTES
 // -----------------------------------------------------------------------------
 
-// API: GET STATUS
 wasi_app.get('/api/status', async (req, res) => {
     const sessionId = req.query.sessionId || config.sessionId || 'wasi_session';
     const session = sessions.get(sessionId);
@@ -635,6 +851,7 @@ wasi_app.get('/api/status', async (req, res) => {
         qrAvailable: !!session?.qr,
         dbConnected,
         dbConfigured: !!config.mongoDbUrl,
+        telegramEnabled: !!TELEGRAM_TOKEN,
         phoneNumber: connected ? 'Connected ✅' : (isConnecting ? 'Connecting...' : 'Disconnected'),
         lastActive: new Date().toISOString(),
         keepAliveActive: hasKeepAlive,
@@ -648,13 +865,11 @@ wasi_app.get('/api/status', async (req, res) => {
     });
 });
 
-// API: GENERATE NEW QR
 wasi_app.post('/api/generate-qr', async (req, res) => {
     try {
         const sessionId = req.query.sessionId || config.sessionId || 'wasi_session';
         const session = sessions.get(sessionId);
         
-        // Clear keep-alive
         if (keepAliveIntervals.has(sessionId)) {
             clearInterval(keepAliveIntervals.get(sessionId));
             keepAliveIntervals.delete(sessionId);
@@ -676,24 +891,20 @@ wasi_app.post('/api/generate-qr', async (req, res) => {
     }
 });
 
-// API: RESTART BOT
 wasi_app.post('/api/restart', async (req, res) => {
     try {
         console.log('🔄 Restarting bot...');
         
-        // Clear all keep-alive intervals
         for (const [sessionId, interval] of keepAliveIntervals) {
             clearInterval(interval);
         }
         keepAliveIntervals.clear();
         
-        // Clear all QR timeouts
         for (const [sessionId, timeout] of qrTimeouts) {
             clearTimeout(timeout);
         }
         qrTimeouts.clear();
         
-        // Clear all sessions
         for (const [sessionId, session] of sessions) {
             if (session.sock) {
                 try {
@@ -716,19 +927,16 @@ wasi_app.post('/api/restart', async (req, res) => {
     }
 });
 
-// API: LOGOUT
 wasi_app.post('/api/logout', async (req, res) => {
     try {
         const sessionId = req.query.sessionId || config.sessionId || 'wasi_session';
         const session = sessions.get(sessionId);
         
-        // Clear keep-alive
         if (keepAliveIntervals.has(sessionId)) {
             clearInterval(keepAliveIntervals.get(sessionId));
             keepAliveIntervals.delete(sessionId);
         }
         
-        // Clear QR timeout
         if (qrTimeouts.has(sessionId)) {
             clearTimeout(qrTimeouts.get(sessionId));
             qrTimeouts.delete(sessionId);
@@ -751,7 +959,6 @@ wasi_app.post('/api/logout', async (req, res) => {
     }
 });
 
-// API: GET SESSIONS LIST
 wasi_app.get('/api/sessions', async (req, res) => {
     try {
         const sessionList = Array.from(sessions.keys()).map(id => ({
@@ -766,14 +973,14 @@ wasi_app.get('/api/sessions', async (req, res) => {
             success: true,
             sessions: sessionList,
             total: sessionList.length,
-            activeKeepAlives: keepAliveIntervals.size
+            activeKeepAlives: keepAliveIntervals.size,
+            telegramEnabled: !!TELEGRAM_TOKEN
         });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }
 });
 
-// API: HEALTH CHECK
 wasi_app.get('/api/health', async (req, res) => {
     res.json({
         status: 'ok',
@@ -782,7 +989,8 @@ wasi_app.get('/api/health', async (req, res) => {
         memory: process.memoryUsage(),
         sessions: sessions.size,
         qrTimeouts: qrTimeouts.size,
-        keepAliveCount: keepAliveIntervals.size
+        keepAliveCount: keepAliveIntervals.size,
+        telegramEnabled: !!TELEGRAM_TOKEN
     });
 });
 
@@ -795,6 +1003,7 @@ function wasi_startServer() {
         console.log(`📡 Auto Forward: ${SOURCE_JIDS.length} source(s) → ${TARGET_JIDS.length} target(s)`);
         console.log(`✨ Message Cleaning: Forwarded labels removed, Newsletter markers cleaned`);
         console.log(`🤖 Bot Commands: !ping, !jid, !gjid`);
+        console.log(`🤖 Telegram: ${TELEGRAM_TOKEN ? 'Enabled ✅' : 'Disabled ❌'}`);
         console.log(`🔄 Keep-Alive: Active (prevents 50-min timeout)`);
         console.log(`\n📌 API Endpoints:`);
         console.log(`   GET  /api/status      - Get bot status`);
@@ -803,6 +1012,9 @@ function wasi_startServer() {
         console.log(`   POST /api/logout      - Logout bot`);
         console.log(`   GET  /api/sessions    - List all sessions`);
         console.log(`   GET  /api/health      - Health check`);
+        console.log(`\n📌 Telegram Features:`);
+        console.log(`   Send any media (photo/video/document/audio) → Auto forwards to WhatsApp`);
+        console.log(`   Send text → Auto forwards to WhatsApp`);
     });
 }
 
@@ -810,7 +1022,6 @@ function wasi_startServer() {
 // MAIN STARTUP
 // -----------------------------------------------------------------------------
 async function main() {
-    // 1. Connect DB if configured
     if (config.mongoDbUrl) {
         const dbResult = await wasi_connectDatabase(config.mongoDbUrl);
         if (dbResult) {
@@ -818,11 +1029,9 @@ async function main() {
         }
     }
 
-    // 2. Start default session
     const sessionId = config.sessionId || 'wasi_session';
     await startSession(sessionId);
 
-    // 3. Start server
     wasi_startServer();
 }
 
