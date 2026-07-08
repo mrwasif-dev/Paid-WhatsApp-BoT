@@ -2,1091 +2,1157 @@ require('dotenv').config();
 const {
     DisconnectReason,
     jidNormalizedUser,
-    proto
+    proto,
+    fetchLatestBaileysVersion,
+    makeCacheableSignalKeyStore,
+    makeInMemoryStore,
+    useMultiFileAuthState,
+    makeWASocket,
+    Browsers
 } = require('@whiskeysockets/baileys');
 const { Boom } = require('@hapi/boom');
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const P = require('pino');
 const QRCode = require('qrcode');
 
 const { wasi_connectSession, wasi_clearSession } = require('./wasilib/session');
 const { wasi_connectDatabase } = require('./wasilib/database');
-
 const config = require('./wasi');
 
-// ============================================================================
-// CONFIGURATION CLASS - Better config management
-// ============================================================================
-class BotConfig {
-    constructor() {
-        this.filePath = path.join(__dirname, 'botConfig.json');
-        this.config = {};
-        this.loadFromEnv();
-        this.loadFromFile();
+// Load persistent config
+try {
+    if (fs.existsSync(path.join(__dirname, 'botConfig.json'))) {
+        const savedConfig = JSON.parse(fs.readFileSync(path.join(__dirname, 'botConfig.json')));
+        Object.assign(config, savedConfig);
     }
-
-    loadFromEnv() {
-        this.env = {
-            autoStatusView: process.env.AUTO_STATUS_VIEW?.toLowerCase() === 'true' || false,
-            autoStatusReact: process.env.AUTO_STATUS_REACT?.toLowerCase() === 'true' || false,
-            statusReactEmoji: process.env.STATUS_REACT_EMOJI || '👍,❤️,😂,😍,👏,🔥',
-            antiDeleteEnabled: process.env.ANTI_DELETE_ENABLED?.toLowerCase() === 'true' || false,
-            antiDeleteStatus: process.env.ANTI_DELETE_STATUS?.toLowerCase() === 'true' || false,
-            antiLinkEnabled: process.env.ANTI_LINK_ENABLED?.toLowerCase() === 'true' || false,
-            antiLinkAction: process.env.ANTI_LINK_ACTION || 'delete',
-            allowedLinks: process.env.ALLOWED_LINKS ? 
-                process.env.ALLOWED_LINKS.split(',').map(l => l.trim()) : [],
-            adminNumbers: process.env.ADMIN_NUMBERS ? 
-                process.env.ADMIN_NUMBERS.split(',').map(n => n.trim()) : ['03039107958']
-        };
-    }
-
-    loadFromFile() {
-        try {
-            if (fs.existsSync(this.filePath)) {
-                const fileData = JSON.parse(fs.readFileSync(this.filePath, 'utf-8'));
-                this.config = { ...this.env, ...fileData };
-                console.log('✅ Bot config loaded from file');
-            } else {
-                this.config = { ...this.env };
-            }
-        } catch (error) {
-            console.error('Failed to load botConfig.json:', error);
-            this.config = { ...this.env };
-        }
-    }
-
-    save() {
-        try {
-            const configToSave = {
-                autoStatusView: this.config.autoStatusView,
-                autoStatusReact: this.config.autoStatusReact,
-                statusReactEmoji: this.config.statusReactEmoji,
-                antiDeleteEnabled: this.config.antiDeleteEnabled,
-                antiDeleteStatus: this.config.antiDeleteStatus,
-                antiLinkEnabled: this.config.antiLinkEnabled,
-                antiLinkAction: this.config.antiLinkAction,
-                allowedLinks: this.config.allowedLinks,
-                adminNumbers: this.config.adminNumbers,
-                updatedAt: new Date().toISOString()
-            };
-            fs.writeFileSync(this.filePath, JSON.stringify(configToSave, null, 2));
-            return true;
-        } catch (error) {
-            console.error('Error saving bot config:', error);
-            return false;
-        }
-    }
-
-    get(key) {
-        return this.config[key] !== undefined ? this.config[key] : this.env[key];
-    }
-
-    set(key, value) {
-        this.config[key] = value;
-        this.save();
-    }
+} catch (e) {
+    console.error('Failed to load botConfig.json:', e);
 }
 
-// ============================================================================
-// CACHE MANAGER - Fixed memory leak
-// ============================================================================
-class CacheManager {
-    constructor(maxSize = 200) {
-        this.cache = new Map();
-        this.maxSize = maxSize;
-        this.ttl = 5 * 60 * 1000; // 5 minutes
-    }
+const wasi_app = express();
+const wasi_port = process.env.PORT || 3000;
 
-    set(key, value) {
-        // Prevent memory leak
-        if (this.cache.size >= this.maxSize) {
-            const oldestKey = this.cache.keys().next().value;
-            this.cache.delete(oldestKey);
+// -----------------------------------------------------------------------------
+// SESSION STATE
+// -----------------------------------------------------------------------------
+const sessions = new Map();
+const qrTimeouts = new Map();
+const keepAliveIntervals = new Map();
+
+// Status tracking
+const statusTracker = new Map();
+
+// Middleware
+wasi_app.use(express.json());
+wasi_app.use(express.static(path.join(__dirname, 'public')));
+
+// Keep-Alive Route
+wasi_app.get('/ping', (req, res) => res.status(200).send('pong'));
+
+// -----------------------------------------------------------------------------
+// STATUS MANAGEMENT SYSTEM
+// -----------------------------------------------------------------------------
+
+const STATUS_CONFIG = {
+    // Auto-reply settings
+    autoReply: {
+        enabled: true,
+        messages: {
+            view: "✅ Status viewed!",
+            reply: "💬 Status replied!",
+            react: "❤️ Status reacted!"
         }
-        
-        this.cache.set(key, {
-            value: value,
-            timestamp: Date.now()
-        });
+    },
+    // Auto-react settings
+    autoReact: {
+        enabled: true,
+        emojis: ['❤️', '🔥', '👏', '✨', '🌟', '💯', '😍', '🎉', '🙌', '💪']
+    },
+    // Auto-reply to status replies
+    autoReplyToStatusReply: {
+        enabled: true,
+        message: "📨 Thanks for your reply to my status!"
     }
+};
 
-    get(key) {
-        const entry = this.cache.get(key);
-        if (!entry) return null;
-        
-        // Check if expired
-        if (Date.now() - entry.timestamp > this.ttl) {
-            this.cache.delete(key);
-            return null;
-        }
-        
-        return entry.value;
-    }
+// Status message types
+const STATUS_TYPES = {
+    IMAGE: 'imageMessage',
+    VIDEO: 'videoMessage',
+    TEXT: 'conversation',
+    AUDIO: 'audioMessage',
+    DOCUMENT: 'documentMessage'
+};
 
-    delete(key) {
-        this.cache.delete(key);
-    }
-
-    size() {
-        return this.cache.size;
-    }
-
-    clear() {
-        this.cache.clear();
-    }
-
-    // Clean expired entries
-    clean() {
-        const now = Date.now();
-        for (const [key, entry] of this.cache.entries()) {
-            if (now - entry.timestamp > this.ttl) {
-                this.cache.delete(key);
-            }
-        }
-    }
-}
-
-// ============================================================================
-// MAIN BOT CLASS
-// ============================================================================
-class MuzammilBot {
+// Status tracking class
+class StatusTracker {
     constructor() {
-        // Initialize config
-        this.botConfig = new BotConfig();
-        
-        // Initialize caches with size limits
-        this.processedStatuses = new CacheManager(500);
-        this.deletedMessagesCache = new CacheManager(300);
-        
-        // Track current emoji index
-        this.currentEmojiIndex = 0;
-        this.statusReactionEmojis = this.botConfig.get('statusReactEmoji')
-            .split(',').map(e => e.trim());
-        
-        // Sessions
-        this.sessions = new Map();
-        
-        // Express app
-        this.app = express();
-        this.port = process.env.PORT || 3000;
-        
-        // Admin numbers
-        this.adminNumbers = this.botConfig.get('adminNumbers');
-        
-        // Setup routes
-        this.setupRoutes();
-        
-        // Start cleanup interval
-        setInterval(() => {
-            this.processedStatuses.clean();
-            this.deletedMessagesCache.clean();
-        }, 5 * 60 * 1000); // Every 5 minutes
+        this.statuses = new Map();
+        this.views = new Map();
+        this.reactions = new Map();
+        this.replies = new Map();
     }
 
-    // ========================================================================
-    // HELPER METHODS
-    // ========================================================================
-    
-    isAdmin(jid) {
-        const phoneNumber = jid.split('@')[0];
-        return this.adminNumbers.includes(phoneNumber);
-    }
-
-    async isGroupAdmin(sock, groupJid, participantJid) {
-        try {
-            const groupMetadata = await sock.groupMetadata(groupJid);
-            const admins = groupMetadata.participants
-                .filter(p => p.admin === 'admin' || p.admin === 'superadmin')
-                .map(p => p.id);
-            return admins.includes(participantJid);
-        } catch (error) {
-            console.error('Error checking group admin:', error);
-            return false;
+    trackStatus(statusId, from, type, caption = '') {
+        if (!this.statuses.has(statusId)) {
+            this.statuses.set(statusId, {
+                id: statusId,
+                from: from,
+                type: type,
+                caption: caption,
+                timestamp: Date.now(),
+                views: [],
+                reactions: [],
+                replies: [],
+                viewedCount: 0,
+                repliedCount: 0,
+                reactedCount: 0
+            });
         }
+        return this.statuses.get(statusId);
     }
 
-    isGroup(jid) {
-        return jid.endsWith('@g.us');
-    }
-
-    extractLinks(text) {
-        if (!text) return [];
-        const urlRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|([a-zA-Z0-9-]+\.(com|org|net|gov|edu|pk|in|uk|au|ca|de|fr|jp|cn|br|ru|app|io|xyz|tech|online|site|club|pk)[^\s]*)/gi;
-        return text.match(urlRegex) || [];
-    }
-
-    isLinkAllowed(link) {
-        const allowedLinks = this.botConfig.get('allowedLinks');
-        if (!allowedLinks || allowedLinks.length === 0) return false;
-        return allowedLinks.some(allowed => link.includes(allowed));
-    }
-
-    isBotMessage(msg) {
-        // Check if message is from bot itself
-        return msg.key?.fromMe === true;
-    }
-
-    async sendWithRetry(sock, to, content, retries = 3) {
-        for (let i = 0; i < retries; i++) {
-            try {
-                return await sock.sendMessage(to, content);
-            } catch (error) {
-                if (i === retries - 1) throw error;
-                await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+    addView(statusId, viewerJid, viewerName = 'Unknown') {
+        if (this.statuses.has(statusId)) {
+            const status = this.statuses.get(statusId);
+            if (!status.views.some(v => v.jid === viewerJid)) {
+                status.views.push({
+                    jid: viewerJid,
+                    name: viewerName,
+                    timestamp: Date.now()
+                });
+                status.viewedCount = status.views.length;
+                return true;
             }
         }
+        return false;
     }
 
-    getMessageText(msg) {
-        return msg.message?.conversation ||
-            msg.message?.extendedTextMessage?.text ||
-            msg.message?.imageMessage?.caption ||
-            msg.message?.videoMessage?.caption ||
-            "";
-    }
-
-    // ========================================================================
-    // STATUS HANDLER - Fixed with proper checks
-    // ========================================================================
-    
-    async handleStatus(sock, statusMessage) {
-        try {
-            const autoStatusView = this.botConfig.get('autoStatusView');
-            const autoStatusReact = this.botConfig.get('autoStatusReact');
-            
-            if (!autoStatusView && !autoStatusReact) return;
-            
-            const statusKey = statusMessage.key;
-            const statusId = statusKey.id;
-            const statusSender = statusKey.participant || statusKey.remoteJid;
-            
-            // Check if already processed
-            if (this.processedStatuses.get(statusId)) {
-                return;
-            }
-            
-            this.processedStatuses.set(statusId, true);
-            console.log(`📱 New status from: ${statusSender}`);
-            
-            // Auto view
-            if (autoStatusView) {
-                try {
-                    await sock.readMessages([statusKey]);
-                    console.log(`👁️ Viewed status from: ${statusSender}`);
-                } catch (error) {
-                    console.error('Error viewing status:', error);
-                }
-            }
-            
-            // Auto react
-            if (autoStatusReact && this.statusReactionEmojis.length > 0) {
-                try {
-                    const selectedEmoji = this.statusReactionEmojis[this.currentEmojiIndex];
-                    this.currentEmojiIndex = (this.currentEmojiIndex + 1) % this.statusReactionEmojis.length;
-                    
-                    await sock.sendMessage(statusSender, {
-                        react: {
-                            text: selectedEmoji,
-                            key: statusKey
-                        }
-                    });
-                    console.log(`❤️ Reacted to status with ${selectedEmoji}`);
-                } catch (error) {
-                    console.error('Error reacting:', error);
-                }
-            }
-            
-        } catch (error) {
-            console.error('Error in status handler:', error);
-        }
-    }
-
-    // ========================================================================
-    // ANTI DELETE HANDLER - Fixed with proper message caching
-    // ========================================================================
-    
-    cacheMessage(msg) {
-        try {
-            const antiDeleteEnabled = this.botConfig.get('antiDeleteEnabled');
-            if (!antiDeleteEnabled) return;
-            
-            const msgId = msg.key.id;
-            
-            // Don't cache bot's own messages
-            if (this.isBotMessage(msg)) return;
-            
-            const msgText = this.getMessageText(msg);
-            
-            // Only cache text messages to save memory
-            if (!msgText) return;
-            
-            this.deletedMessagesCache.set(msgId, {
-                text: msgText,
-                sender: msg.key.participant || msg.key.remoteJid,
+    addReaction(statusId, reactorJid, emoji, reactorName = 'Unknown') {
+        if (this.statuses.has(statusId)) {
+            const status = this.statuses.get(statusId);
+            // Remove existing reaction from same user
+            status.reactions = status.reactions.filter(r => r.jid !== reactorJid);
+            status.reactions.push({
+                jid: reactorJid,
+                name: reactorName,
+                emoji: emoji,
                 timestamp: Date.now()
             });
-            
-        } catch (error) {
-            console.error('Error caching message:', error);
+            status.reactedCount = status.reactions.length;
+            return true;
         }
+        return false;
     }
 
-    async handleAntiDelete(sock, msg) {
-        try {
-            const antiDeleteEnabled = this.botConfig.get('antiDeleteEnabled');
-            if (!antiDeleteEnabled) return;
-            
-            // Check for deleted messages
-            if (msg.message?.protocolMessage?.type === 0) { // Revoke/Delete
-                const protocolMsg = msg.message.protocolMessage;
-                const deletedMsgId = protocolMsg.key.id;
-                
-                // Get cached message
-                const cachedMsg = this.deletedMessagesCache.get(deletedMsgId);
-                if (cachedMsg) {
-                    const deletedBy = msg.key.participant || msg.key.remoteJid;
-                    const deletedByName = msg.pushName || 'Unknown';
-                    
-                    let caption = `🚫 *MESSAGE DELETED*\n\n`;
-                    caption += `• Deleted by: ${deletedByName} (${deletedBy.split('@')[0]})\n`;
-                    caption += `• Time: ${new Date().toLocaleString()}\n\n`;
-                    caption += `*Message Content:*\n${cachedMsg.text}`;
-                    
-                    await this.sendWithRetry(sock, msg.key.remoteJid, { text: caption });
-                    
-                    console.log(`🚫 Captured deleted message from ${deletedBy}`);
-                    this.deletedMessagesCache.delete(deletedMsgId);
-                }
-            }
-            
-        } catch (error) {
-            console.error('Error in anti-delete handler:', error);
-        }
-    }
-
-    // ========================================================================
-    // ANTI LINK HANDLER - Fixed with proper checks
-    // ========================================================================
-    
-    async handleAntiLink(sock, msg) {
-        try {
-            const antiLinkEnabled = this.botConfig.get('antiLinkEnabled');
-            if (!antiLinkEnabled) return;
-            
-            const from = msg.key.remoteJid;
-            if (!this.isGroup(from)) return;
-            
-            // Don't process bot's own messages
-            if (this.isBotMessage(msg)) return;
-            
-            const sender = msg.key.participant || msg.key.remoteJid;
-            
-            // Check if sender is admin (skip admins)
-            if (await this.isGroupAdmin(sock, from, sender)) return;
-            if (this.isAdmin(sender)) return;
-            
-            const text = this.getMessageText(msg);
-            const links = this.extractLinks(text);
-            
-            if (links.length === 0) return;
-            
-            // Check if any link is not allowed
-            const hasDisallowedLink = links.some(link => !this.isLinkAllowed(link));
-            
-            if (hasDisallowedLink) {
-                console.log(`🔗 Link detected in ${from} from ${sender}: ${links.join(', ')}`);
-                
-                const action = this.botConfig.get('antiLinkAction');
-                
-                // Delete the message
-                if (action === 'delete' || action === 'warn') {
-                    try {
-                        await sock.sendMessage(from, { delete: msg.key });
-                        console.log(`🗑️ Deleted link message from ${sender}`);
-                    } catch (error) {
-                        console.error('Error deleting message:', error);
-                    }
-                }
-                
-                // Send warning
-                if (action === 'warn' || action === 'kick') {
-                    const warnMsg = `⚠️ *Anti-Link System*\n\n@${sender.split('@')[0]}, links are not allowed in this group.`;
-                    await this.sendWithRetry(sock, from, { 
-                        text: warnMsg,
-                        mentions: [sender]
-                    });
-                }
-                
-                // Kick member
-                if (action === 'kick') {
-                    try {
-                        await sock.groupParticipantsUpdate(from, [sender], 'remove');
-                        console.log(`👢 Kicked ${sender} for sending link`);
-                    } catch (error) {
-                        console.error('Error kicking member:', error);
-                    }
-                }
-            }
-            
-        } catch (error) {
-            console.error('Error in anti-link handler:', error);
-        }
-    }
-
-    // ========================================================================
-    // COMMAND HANDLERS - All commands fixed
-    // ========================================================================
-    
-    async handleMenuCommand(sock, from) {
-        const menuText = `╔════════════════════╗
-║   *MUZAMMIL MD BOT*   ║
-╚════════════════════╝
-
-*Bot:* Muzammil MD
-*Version:* 3.0.0
-
-╔════════════════════╗
-║   *BASIC COMMANDS*   ║
-╚════════════════════╝
-
-• !ping - Check bot response
-• !menu - Show this menu
-• !help - Show help
-
-╔════════════════════╗
-║   *STATUS COMMANDS*   ║
-╚════════════════════╝
-
-• !status - Show settings
-• !statusview on/off - Toggle auto view
-• !statusreact on/off - Toggle auto react
-• !setemojis 👍,❤️,😂 - Set reaction emojis
-
-╔════════════════════╗
-║  *ANTI-DELETE COMMANDS*  ║
-╚════════════════════╝
-
-• !antidelete on/off - Toggle anti-delete
-• !deletedcache - Show cache size
-
-╔════════════════════╗
-║   *ANTI-LINK COMMANDS*   ║
-╚════════════════════╝
-
-• !antilink on/off - Toggle anti-link
-• !antilink action delete/warn/kick - Set action
-• !allowlink domain.com - Add allowed domain
-• !removelink domain.com - Remove allowed domain
-• !listlinks - List allowed domains
-
-╔════════════════════╗
-║   *CURRENT STATUS*   ║
-╚════════════════════╝
-
-• Status View: ${this.botConfig.get('autoStatusView') ? '✅' : '❌'}
-• Status React: ${this.botConfig.get('autoStatusReact') ? '✅' : '❌'}
-• Anti-Delete: ${this.botConfig.get('antiDeleteEnabled') ? '✅' : '❌'}
-• Anti-Link: ${this.botConfig.get('antiLinkEnabled') ? '✅' : '❌'}
-• Action: ${this.botConfig.get('antiLinkAction')}
-
-_Muzammil MD Bot_`;
-
-        await this.sendWithRetry(sock, from, { text: menuText });
-    }
-
-    async handleHelpCommand(sock, from) {
-        const helpText = `╔════════════════════╗
-║   *MUZAMMIL MD HELP*   ║
-╚════════════════════╝
-
-*BASIC COMMANDS*
-!ping - Check bot
-!menu - Main menu
-!help - This help
-
-*STATUS FEATURES*
-!statusview on/off - Auto view status
-!statusreact on/off - Auto react to status
-!setemojis 👍,❤️,😂 - Set reaction emojis
-
-*ANTI-DELETE FEATURES*
-Captures deleted messages and shows who deleted
-!antidelete on/off - Enable/disable
-
-*ANTI-LINK FEATURES*
-Blocks links in groups
-!antilink on/off - Enable/disable
-!antilink action delete/warn/kick - Set action
-!allowlink domain.com - Add allowed domain
-!removelink domain.com - Remove domain
-!listlinks - Show allowed domains
-
-*Note: Some commands are admin only*`;
-
-        await this.sendWithRetry(sock, from, { text: helpText });
-    }
-
-    async handlePingCommand(sock, from) {
-        await this.sendWithRetry(sock, from, { text: "❤️ Love You 😘" });
-    }
-
-    // Status Commands
-    async handleStatusCommand(sock, from) {
-        const statusText = `*Current Status Settings*
-
-Auto View: ${this.botConfig.get('autoStatusView') ? '✅ ON' : '❌ OFF'}
-Auto React: ${this.botConfig.get('autoStatusReact') ? '✅ ON' : '❌ OFF'}
-
-Reaction Emojis:
-${this.statusReactionEmojis.map((e, i) => `${i+1}. ${e}`).join('\n')}
-
-Next Emoji: ${this.statusReactionEmojis[this.currentEmojiIndex]}
-
-Processed Statuses: ${this.processedStatuses.size()}`;
-
-        await this.sendWithRetry(sock, from, { text: statusText });
-    }
-
-    async handleStatusViewCommand(sock, from, args, sender) {
-        if (!this.isAdmin(sender)) {
-            await this.sendWithRetry(sock, from, { text: "❌ Admin only command!" });
-            return;
-        }
-        
-        if (!args || args.length === 0) {
-            await this.sendWithRetry(sock, from, { 
-                text: `Auto Status View is currently ${this.botConfig.get('autoStatusView') ? '✅ ON' : '❌ OFF'}\n\nUse: !statusview on/off` 
+    addReply(statusId, replierJid, replyText, replierName = 'Unknown') {
+        if (this.statuses.has(statusId)) {
+            const status = this.statuses.get(statusId);
+            status.replies.push({
+                jid: replierJid,
+                name: replierName,
+                text: replyText,
+                timestamp: Date.now()
             });
-            return;
+            status.repliedCount = status.replies.length;
+            return true;
         }
-        
-        const option = args[0].toLowerCase();
-        
-        if (option === 'on') {
-            this.botConfig.set('autoStatusView', true);
-            await this.sendWithRetry(sock, from, { text: "✅ Auto Status View is now *ON*" });
-        } else if (option === 'off') {
-            this.botConfig.set('autoStatusView', false);
-            await this.sendWithRetry(sock, from, { text: "❌ Auto Status View is now *OFF*" });
-        } else {
-            await this.sendWithRetry(sock, from, { text: "Usage: !statusview on/off" });
-        }
+        return false;
     }
 
-    async handleStatusReactCommand(sock, from, args, sender) {
-        if (!this.isAdmin(sender)) {
-            await this.sendWithRetry(sock, from, { text: "❌ Admin only command!" });
-            return;
+    getStatusStats(statusId) {
+        if (this.statuses.has(statusId)) {
+            const status = this.statuses.get(statusId);
+            return {
+                id: status.id,
+                from: status.from,
+                type: status.type,
+                caption: status.caption,
+                timestamp: status.timestamp,
+                views: status.views,
+                reactions: status.reactions,
+                replies: status.replies,
+                viewedCount: status.viewedCount,
+                reactedCount: status.reactedCount,
+                repliedCount: status.repliedCount,
+                totalEngagement: status.viewedCount + status.reactedCount + status.repliedCount,
+                age: Math.floor((Date.now() - status.timestamp) / 1000 / 60) // minutes ago
+            };
         }
-        
-        if (!args || args.length === 0) {
-            await this.sendWithRetry(sock, from, { 
-                text: `Auto Status React is currently ${this.botConfig.get('autoStatusReact') ? '✅ ON' : '❌ OFF'}\n\nUse: !statusreact on/off` 
-            });
-            return;
-        }
-        
-        const option = args[0].toLowerCase();
-        
-        if (option === 'on') {
-            this.botConfig.set('autoStatusReact', true);
-            await this.sendWithRetry(sock, from, { text: "✅ Auto Status React is now *ON*" });
-        } else if (option === 'off') {
-            this.botConfig.set('autoStatusReact', false);
-            await this.sendWithRetry(sock, from, { text: "❌ Auto Status React is now *OFF*" });
-        } else {
-            await this.sendWithRetry(sock, from, { text: "Usage: !statusreact on/off" });
-        }
+        return null;
     }
 
-    async handleSetEmojisCommand(sock, from, args, sender) {
-        if (!this.isAdmin(sender)) {
-            await this.sendWithRetry(sock, from, { text: "❌ Admin only command!" });
-            return;
+    getAllStatusStats() {
+        const stats = [];
+        for (const [id, status] of this.statuses) {
+            stats.push(this.getStatusStats(id));
         }
-        
-        if (!args || args.length === 0) {
-            await this.sendWithRetry(sock, from, { 
-                text: `Current emojis: ${this.statusReactionEmojis.join(' ')}\n\nUsage: !setemojis 👍,❤️,😂` 
-            });
-            return;
-        }
-        
-        const emojiString = args.join(' ');
-        const newEmojis = emojiString.split(',').map(e => e.trim());
-        
-        if (newEmojis.length === 0) {
-            await this.sendWithRetry(sock, from, { text: "❌ No emojis provided!" });
-            return;
-        }
-        
-        this.statusReactionEmojis = newEmojis;
-        this.currentEmojiIndex = 0;
-        this.botConfig.set('statusReactEmoji', newEmojis.join(','));
-        
-        await this.sendWithRetry(sock, from, { 
-            text: `✅ Reaction emojis updated to: ${newEmojis.join(' ')}` 
-        });
+        return stats.sort((a, b) => b.timestamp - a.timestamp);
     }
 
-    // Anti-Delete Commands
-    async handleAntiDeleteCommand(sock, from, args, sender) {
-        if (!this.isAdmin(sender)) {
-            await this.sendWithRetry(sock, from, { text: "❌ Admin only command!" });
-            return;
-        }
-        
-        if (!args || args.length === 0) {
-            await this.sendWithRetry(sock, from, { 
-                text: `Anti-Delete is currently ${this.botConfig.get('antiDeleteEnabled') ? '✅ ON' : '❌ OFF'}\n\nUse: !antidelete on/off` 
-            });
-            return;
-        }
-        
-        const option = args[0].toLowerCase();
-        
-        if (option === 'on') {
-            this.botConfig.set('antiDeleteEnabled', true);
-            await this.sendWithRetry(sock, from, { text: "✅ Anti-Delete is now *ON*" });
-        } else if (option === 'off') {
-            this.botConfig.set('antiDeleteEnabled', false);
-            await this.sendWithRetry(sock, from, { text: "❌ Anti-Delete is now *OFF*" });
-        } else {
-            await this.sendWithRetry(sock, from, { text: "Usage: !antidelete on/off" });
-        }
-    }
+    getDailyStats() {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const todayTimestamp = today.getTime();
 
-    async handleDeletedCacheCommand(sock, from, sender) {
-        if (!this.isAdmin(sender)) {
-            await this.sendWithRetry(sock, from, { text: "❌ Admin only command!" });
-            return;
-        }
-        
-        await this.sendWithRetry(sock, from, { 
-            text: `📦 Deleted Messages Cache: ${this.deletedMessagesCache.size()} messages` 
-        });
-    }
+        let totalStatuses = 0;
+        let totalViews = 0;
+        let totalReactions = 0;
+        let totalReplies = 0;
 
-    // Anti-Link Commands
-    async handleAntiLinkCommand(sock, from, args, sender) {
-        if (!this.isAdmin(sender)) {
-            await this.sendWithRetry(sock, from, { text: "❌ Admin only command!" });
-            return;
-        }
-        
-        if (!args || args.length === 0) {
-            await this.sendWithRetry(sock, from, { 
-                text: `Anti-Link is currently ${this.botConfig.get('antiLinkEnabled') ? '✅ ON' : '❌ OFF'}\nAction: ${this.botConfig.get('antiLinkAction')}\n\nUse: !antilink on/off` 
-            });
-            return;
-        }
-        
-        const option = args[0].toLowerCase();
-        
-        if (option === 'on') {
-            this.botConfig.set('antiLinkEnabled', true);
-            await this.sendWithRetry(sock, from, { text: "✅ Anti-Link is now *ON*" });
-        } else if (option === 'off') {
-            this.botConfig.set('antiLinkEnabled', false);
-            await this.sendWithRetry(sock, from, { text: "❌ Anti-Link is now *OFF*" });
-        } else if (option === 'action' && args[1]) {
-            const action = args[1].toLowerCase();
-            if (['delete', 'warn', 'kick'].includes(action)) {
-                this.botConfig.set('antiLinkAction', action);
-                await this.sendWithRetry(sock, from, { text: `✅ Anti-Link action set to: *${action}*` });
-            } else {
-                await this.sendWithRetry(sock, from, { text: "❌ Invalid action! Use: delete/warn/kick" });
-            }
-        } else {
-            await this.sendWithRetry(sock, from, { text: "Usage: !antilink on/off\n!antilink action delete/warn/kick" });
-        }
-    }
-
-    async handleAllowLinkCommand(sock, from, args, sender) {
-        if (!this.isAdmin(sender)) {
-            await this.sendWithRetry(sock, from, { text: "❌ Admin only command!" });
-            return;
-        }
-        
-        if (!args || args.length === 0) {
-            await this.sendWithRetry(sock, from, { text: `Usage: !allowlink domain.com` });
-            return;
-        }
-        
-        const domain = args[0].toLowerCase();
-        const allowedLinks = this.botConfig.get('allowedLinks') || [];
-        
-        if (allowedLinks.includes(domain)) {
-            await this.sendWithRetry(sock, from, { text: `❌ ${domain} is already allowed` });
-            return;
-        }
-        
-        allowedLinks.push(domain);
-        this.botConfig.set('allowedLinks', allowedLinks);
-        await this.sendWithRetry(sock, from, { text: `✅ Added ${domain} to allowed links` });
-    }
-
-    async handleRemoveLinkCommand(sock, from, args, sender) {
-        if (!this.isAdmin(sender)) {
-            await this.sendWithRetry(sock, from, { text: "❌ Admin only command!" });
-            return;
-        }
-        
-        if (!args || args.length === 0) {
-            await this.sendWithRetry(sock, from, { text: `Usage: !removelink domain.com` });
-            return;
-        }
-        
-        const domain = args[0].toLowerCase();
-        const allowedLinks = this.botConfig.get('allowedLinks') || [];
-        const index = allowedLinks.indexOf(domain);
-        
-        if (index === -1) {
-            await this.sendWithRetry(sock, from, { text: `❌ ${domain} not found in allowed links` });
-            return;
-        }
-        
-        allowedLinks.splice(index, 1);
-        this.botConfig.set('allowedLinks', allowedLinks);
-        await this.sendWithRetry(sock, from, { text: `✅ Removed ${domain} from allowed links` });
-    }
-
-    async handleListLinksCommand(sock, from, sender) {
-        if (!this.isAdmin(sender)) {
-            await this.sendWithRetry(sock, from, { text: "❌ Admin only command!" });
-            return;
-        }
-        
-        const allowedLinks = this.botConfig.get('allowedLinks') || [];
-        
-        if (allowedLinks.length === 0) {
-            await this.sendWithRetry(sock, from, { text: "📋 No allowed links configured" });
-            return;
-        }
-        
-        let response = "📋 *Allowed Links:*\n\n";
-        allowedLinks.forEach((link, index) => {
-            response += `${index + 1}. ${link}\n`;
-        });
-        
-        await this.sendWithRetry(sock, from, { text: response });
-    }
-
-    // ========================================================================
-    // COMMAND PROCESSOR - Fixed with better handling
-    // ========================================================================
-    
-    async processCommand(sock, msg) {
-        const from = msg.key.remoteJid;
-        const sender = msg.key.participant || msg.key.remoteJid;
-        const text = this.getMessageText(msg);
-        
-        if (!text || !text.startsWith('!')) return;
-        
-        // Don't process bot's own commands
-        if (this.isBotMessage(msg)) return;
-        
-        const commandParts = text.trim().toLowerCase().split(/\s+/);
-        const command = commandParts[0];
-        const args = commandParts.slice(1);
-        
-        try {
-            switch (command) {
-                case '!ping': 
-                    await this.handlePingCommand(sock, from); 
-                    break;
-                case '!menu': 
-                    await this.handleMenuCommand(sock, from); 
-                    break;
-                case '!help': 
-                    await this.handleHelpCommand(sock, from); 
-                    break;
-                
-                // Status commands
-                case '!status': 
-                    await this.handleStatusCommand(sock, from); 
-                    break;
-                case '!statusview': 
-                    await this.handleStatusViewCommand(sock, from, args, sender); 
-                    break;
-                case '!statusreact': 
-                    await this.handleStatusReactCommand(sock, from, args, sender); 
-                    break;
-                case '!setemojis': 
-                    await this.handleSetEmojisCommand(sock, from, args, sender); 
-                    break;
-                
-                // Anti-Delete commands
-                case '!antidelete': 
-                    await this.handleAntiDeleteCommand(sock, from, args, sender); 
-                    break;
-                case '!deletedcache': 
-                    await this.handleDeletedCacheCommand(sock, from, sender); 
-                    break;
-                
-                // Anti-Link commands
-                case '!antilink': 
-                    await this.handleAntiLinkCommand(sock, from, args, sender); 
-                    break;
-                case '!allowlink': 
-                    await this.handleAllowLinkCommand(sock, from, args, sender); 
-                    break;
-                case '!removelink': 
-                    await this.handleRemoveLinkCommand(sock, from, args, sender); 
-                    break;
-                case '!listlinks': 
-                    await this.handleListLinksCommand(sock, from, sender); 
-                    break;
-                
-                default: 
-                    break;
-            }
-        } catch (error) {
-            console.error('Command execution error:', error);
-            await this.sendWithRetry(sock, from, { 
-                text: "❌ Error executing command. Please try again." 
-            });
-        }
-    }
-
-    // ========================================================================
-    // SESSION MANAGEMENT - Fixed with better connection handling
-    // ========================================================================
-    
-    async startSession(sessionId) {
-        // Check if session already exists and is connected
-        if (this.sessions.has(sessionId)) {
-            const existing = this.sessions.get(sessionId);
-            if (existing.isConnected && existing.sock) {
-                console.log(`📡 Session ${sessionId} already connected`);
-                return;
-            }
-            if (existing.sock) {
-                try {
-                    existing.sock.ev.removeAllListeners('connection.update');
-                    existing.sock.end(undefined);
-                } catch (e) {}
-                this.sessions.delete(sessionId);
+        for (const [id, status] of this.statuses) {
+            if (status.timestamp >= todayTimestamp) {
+                totalStatuses++;
+                totalViews += status.viewedCount;
+                totalReactions += status.reactedCount;
+                totalReplies += status.repliedCount;
             }
         }
 
-        console.log(`🚀 Starting session: ${sessionId}`);
-
-        const sessionState = { 
-            sock: null, 
-            isConnected: false, 
-            qr: null,
-            reconnectAttempts: 0,
-            maxReconnectAttempts: 5
+        return {
+            date: today.toISOString().split('T')[0],
+            totalStatuses,
+            totalViews,
+            totalReactions,
+            totalReplies,
+            totalEngagement: totalViews + totalReactions + totalReplies
         };
-        this.sessions.set(sessionId, sessionState);
-
-        try {
-            const { wasi_sock, saveCreds } = await wasi_connectSession(false, sessionId);
-            sessionState.sock = wasi_sock;
-
-            wasi_sock.ev.on('connection.update', async (update) => {
-                const { connection, lastDisconnect, qr } = update;
-
-                if (qr) {
-                    sessionState.qr = qr;
-                    sessionState.isConnected = false;
-                    console.log(`📱 QR generated for session: ${sessionId}`);
-                }
-
-                if (connection === 'close') {
-                    sessionState.isConnected = false;
-                    const statusCode = (lastDisconnect?.error instanceof Boom) ?
-                        lastDisconnect.error.output.statusCode : 500;
-                    
-                    if (statusCode === DisconnectReason.loggedOut || statusCode === 440) {
-                        console.log(`🚫 Session ${sessionId} logged out`);
-                        this.sessions.delete(sessionId);
-                        await wasi_clearSession(sessionId);
-                    } else if (sessionState.reconnectAttempts < sessionState.maxReconnectAttempts) {
-                        sessionState.reconnectAttempts++;
-                        console.log(`🔄 Reconnecting ${sessionId} (attempt ${sessionState.reconnectAttempts})`);
-                        setTimeout(() => this.startSession(sessionId), 3000 * sessionState.reconnectAttempts);
-                    } else {
-                        console.log(`❌ Failed to reconnect ${sessionId} after ${sessionState.maxReconnectAttempts} attempts`);
-                    }
-                } else if (connection === 'open') {
-                    sessionState.isConnected = true;
-                    sessionState.qr = null;
-                    sessionState.reconnectAttempts = 0;
-                    console.log(`✅ ${sessionId}: Connected successfully`);
-                    this.logStatus();
-                }
-            });
-
-            wasi_sock.ev.on('creds.update', saveCreds);
-
-            // Message Handler with proper error handling
-            wasi_sock.ev.on('messages.upsert', async (wasi_m) => {
-                try {
-                    const wasi_msg = wasi_m.messages[0];
-                    if (!wasi_msg.message) return;
-
-                    // Cache messages for anti-delete
-                    this.cacheMessage(wasi_msg);
-
-                    // Handle status messages
-                    if (wasi_msg.key.remoteJid === 'status@broadcast') {
-                        await this.handleStatus(wasi_sock, wasi_msg);
-                    }
-
-                    // Handle anti-delete
-                    await this.handleAntiDelete(wasi_sock, wasi_msg);
-
-                    // Handle anti-link
-                    await this.handleAntiLink(wasi_sock, wasi_msg);
-
-                    // Handle commands
-                    const text = this.getMessageText(wasi_msg);
-                    if (text.startsWith('!')) {
-                        await this.processCommand(wasi_sock, wasi_msg);
-                    }
-                } catch (error) {
-                    console.error('Error processing message:', error);
-                }
-            });
-
-        } catch (error) {
-            console.error(`Error starting session ${sessionId}:`, error);
-        }
-    }
-
-    logStatus() {
-        console.log(`\n📱 STATUS FEATURES:`);
-        console.log(`   View: ${this.botConfig.get('autoStatusView') ? 'ON' : 'OFF'}`);
-        console.log(`   React: ${this.botConfig.get('autoStatusReact') ? 'ON' : 'OFF'}`);
-        console.log(`   Emojis: ${this.statusReactionEmojis.join(' ')}`);
-        console.log(`\n🛡️ ANTI-DELETE: ${this.botConfig.get('antiDeleteEnabled') ? 'ON' : 'OFF'}`);
-        console.log(`\n🔗 ANTI-LINK: ${this.botConfig.get('antiLinkEnabled') ? 'ON' : 'OFF'}`);
-        console.log(`   Action: ${this.botConfig.get('antiLinkAction')}`);
-        console.log(`   Allowed: ${this.botConfig.get('allowedLinks').join(', ') || 'None'}`);
-    }
-
-    // ========================================================================
-    // ROUTES
-    // ========================================================================
-    
-    setupRoutes() {
-        this.app.get('/api/status', async (req, res) => {
-            try {
-                const sessionId = req.query.sessionId || config.sessionId || 'wasi_session';
-                const session = this.sessions.get(sessionId);
-
-                let qrDataUrl = null;
-                let connected = false;
-
-                if (session) {
-                    connected = session.isConnected;
-                    if (session.qr) {
-                        try {
-                            qrDataUrl = await QRCode.toDataURL(session.qr, { width: 256 });
-                        } catch (e) {}
-                    }
-                }
-
-                res.json({
-                    success: true,
-                    sessionId,
-                    connected,
-                    qr: qrDataUrl,
-                    activeSessions: Array.from(this.sessions.keys()),
-                    admins: this.adminNumbers,
-                    features: {
-                        status: {
-                            view: this.botConfig.get('autoStatusView'),
-                            react: this.botConfig.get('autoStatusReact'),
-                            emojis: this.statusReactionEmojis
-                        },
-                        antiDelete: {
-                            enabled: this.botConfig.get('antiDeleteEnabled'),
-                            cacheSize: this.deletedMessagesCache.size()
-                        },
-                        antiLink: {
-                            enabled: this.botConfig.get('antiLinkEnabled'),
-                            action: this.botConfig.get('antiLinkAction'),
-                            allowedLinks: this.botConfig.get('allowedLinks')
-                        }
-                    }
-                });
-            } catch (error) {
-                res.status(500).json({
-                    success: false,
-                    error: error.message
-                });
-            }
-        });
-
-        this.app.get('/', (req, res) => {
-            try {
-                res.sendFile(path.join(__dirname, 'public', 'index.html'));
-            } catch (error) {
-                res.send('Muzammil MD Bot is running!');
-            }
-        });
-
-        // Health check endpoint
-        this.app.get('/health', (req, res) => {
-            res.json({
-                status: 'ok',
-                uptime: process.uptime(),
-                timestamp: new Date().toISOString()
-            });
-        });
-    }
-
-    // ========================================================================
-    // SERVER START
-    // ========================================================================
-    
-    startServer() {
-        this.app.listen(this.port, () => {
-            console.log(`\n🌐 Server running on port ${this.port}`);
-            console.log(`🤖 Bot Name: Muzammil MD`);
-            console.log(`👑 Admins: ${this.adminNumbers.join(', ')}`);
-            this.logStatus();
-            console.log(`\n📋 Commands: !menu for all commands\n`);
-        });
-    }
-
-    // ========================================================================
-    // MAIN
-    // ========================================================================
-    
-    async main() {
-        try {
-            // Connect to database if configured
-            if (config.mongoDbUrl) {
-                const dbResult = await wasi_connectDatabase(config.mongoDbUrl);
-                if (dbResult) console.log('✅ Database connected');
-            }
-
-            const sessionId = config.sessionId || 'wasi_session';
-            await this.startSession(sessionId);
-            this.startServer();
-
-            // Graceful shutdown
-            process.on('SIGINT', () => {
-                console.log('\n🛑 Shutting down gracefully...');
-                process.exit(0);
-            });
-
-        } catch (error) {
-            console.error('Fatal error:', error);
-            process.exit(1);
-        }
     }
 }
 
-// ============================================================================
-// START THE BOT
-// ============================================================================
+// Initialize status tracker
+const statusTrackerInstance = new StatusTracker();
 
-const bot = new MuzammilBot();
-bot.main();
+// Helper: Get contact name
+async function getContactName(sock, jid) {
+    try {
+        const contact = await sock.contacts[jid];
+        if (contact) {
+            return contact.notify || contact.name || jid.split('@')[0];
+        }
+        return jid.split('@')[0];
+    } catch (e) {
+        return jid.split('@')[0];
+    }
+}
+
+// Helper: Send auto-reply
+async function sendAutoReply(sock, to, message) {
+    try {
+        await sock.sendMessage(to, { text: message });
+        return true;
+    } catch (e) {
+        console.error('Auto-reply error:', e);
+        return false;
+    }
+}
+
+// Helper: Send auto-reaction
+async function sendAutoReaction(sock, to, messageId, emoji) {
+    try {
+        await sock.sendMessage(to, {
+            react: {
+                text: emoji,
+                key: {
+                    remoteJid: to,
+                    fromMe: false,
+                    id: messageId,
+                    participant: to
+                }
+            }
+        });
+        return true;
+    } catch (e) {
+        console.error('Auto-reaction error:', e);
+        return false;
+    }
+}
+
+// Helper: Get random emoji
+function getRandomEmoji() {
+    const emojis = STATUS_CONFIG.autoReact.emojis;
+    return emojis[Math.floor(Math.random() * emojis.length)];
+}
+
+// -----------------------------------------------------------------------------
+// STATUS HANDLER FUNCTIONS
+// -----------------------------------------------------------------------------
+
+async function handleStatusView(sock, statusId, from, statusData) {
+    try {
+        const name = await getContactName(sock, from);
+        const tracked = statusTrackerInstance.trackStatus(
+            statusId,
+            statusData.from || from,
+            statusData.type || 'unknown',
+            statusData.caption || ''
+        );
+        
+        const viewed = statusTrackerInstance.addView(statusId, from, name);
+        
+        if (viewed) {
+            console.log(`👁️ ${name} viewed status ${statusId}`);
+            
+            // Auto-reply on view if enabled
+            if (STATUS_CONFIG.autoReply.enabled) {
+                await sendAutoReply(sock, from, STATUS_CONFIG.autoReply.messages.view);
+            }
+        }
+        
+        return tracked;
+    } catch (error) {
+        console.error('Status view handler error:', error);
+    }
+}
+
+async function handleStatusReaction(sock, statusId, from, emoji, statusData) {
+    try {
+        const name = await getContactName(sock, from);
+        const tracked = statusTrackerInstance.trackStatus(
+            statusId,
+            statusData.from || from,
+            statusData.type || 'unknown',
+            statusData.caption || ''
+        );
+        
+        const reacted = statusTrackerInstance.addReaction(statusId, from, emoji, name);
+        
+        if (reacted) {
+            console.log(`😊 ${name} reacted ${emoji} to status ${statusId}`);
+            
+            // Auto-reply on reaction if enabled
+            if (STATUS_CONFIG.autoReply.enabled) {
+                await sendAutoReply(sock, from, STATUS_CONFIG.autoReply.messages.react);
+            }
+        }
+        
+        return tracked;
+    } catch (error) {
+        console.error('Status reaction handler error:', error);
+    }
+}
+
+async function handleStatusReply(sock, statusId, from, replyText, statusData) {
+    try {
+        const name = await getContactName(sock, from);
+        const tracked = statusTrackerInstance.trackStatus(
+            statusId,
+            statusData.from || from,
+            statusData.type || 'unknown',
+            statusData.caption || ''
+        );
+        
+        const replied = statusTrackerInstance.addReply(statusId, from, replyText, name);
+        
+        if (replied) {
+            console.log(`💬 ${name} replied to status ${statusId}: ${replyText}`);
+            
+            // Auto-reply on status reply if enabled
+            if (STATUS_CONFIG.autoReplyToStatusReply.enabled) {
+                await sendAutoReply(sock, from, STATUS_CONFIG.autoReplyToStatusReply.message);
+            }
+        }
+        
+        return tracked;
+    } catch (error) {
+        console.error('Status reply handler error:', error);
+    }
+}
+
+// -----------------------------------------------------------------------------
+// COMMAND HANDLER FUNCTIONS - STATUS COMMANDS
+// -----------------------------------------------------------------------------
+
+async function handleStatusStatsCommand(sock, from) {
+    try {
+        const stats = statusTrackerInstance.getAllStatusStats();
+        const dailyStats = statusTrackerInstance.getDailyStats();
+        
+        if (stats.length === 0) {
+            await sock.sendMessage(from, {
+                text: "📊 *Status Statistics*\n\n" +
+                      "No status activity tracked yet.\n" +
+                      "Share statuses and interact with others to see stats here!"
+            });
+            return;
+        }
+
+        let response = "📊 *📱 Status Statistics Dashboard*\n";
+        response += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+        
+        // Daily stats
+        response += "📅 *Today's Stats*\n";
+        response += `   📸 Statuses: ${dailyStats.totalStatuses}\n`;
+        response += `   👁️ Views: ${dailyStats.totalViews}\n`;
+        response += `   ❤️ Reactions: ${dailyStats.totalReactions}\n`;
+        response += `   💬 Replies: ${dailyStats.totalReplies}\n`;
+        response += `   🔥 Engagement: ${dailyStats.totalEngagement}\n\n`;
+        
+        // Recent statuses
+        response += "🔄 *Recent Status Activity*\n";
+        const recent = stats.slice(0, 5);
+        recent.forEach((status, index) => {
+            const timeAgo = status.age < 60 ? `${status.age}m ago` : 
+                           `${Math.floor(status.age/60)}h ${status.age%60}m ago`;
+            response += `   ${index + 1}. ${status.type.toUpperCase()}\n`;
+            response += `      👁️ ${status.viewedCount} views`;
+            if (status.reactedCount > 0) response += ` | ❤️ ${status.reactedCount}`;
+            if (status.repliedCount > 0) response += ` | 💬 ${status.repliedCount}`;
+            response += `\n      ⏰ ${timeAgo}\n\n`;
+        });
+        
+        response += "━━━━━━━━━━━━━━━━━━━━━━\n";
+        response += `📌 Total Statuses Tracked: ${stats.length}\n`;
+        response += "💡 Use !statusstats for detailed view";
+        
+        await sock.sendMessage(from, { text: response });
+        console.log(`Status stats sent to ${from}`);
+        
+    } catch (error) {
+        console.error('Status stats command error:', error);
+        await sock.sendMessage(from, {
+            text: "❌ Error fetching status statistics. Please try again."
+        });
+    }
+}
+
+async function handleMyStatusStatsCommand(sock, from) {
+    try {
+        const allStats = statusTrackerInstance.getAllStatusStats();
+        const myStatuses = allStats.filter(s => s.from === from);
+        
+        if (myStatuses.length === 0) {
+            await sock.sendMessage(from, {
+                text: "📊 *My Status Stats*\n\n" +
+                      "You haven't posted any statuses yet, or no one has interacted with them.\n" +
+                      "Share a status to start tracking engagement!"
+            });
+            return;
+        }
+
+        let response = "📊 *👤 My Status Analytics*\n";
+        response += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+        
+        let totalViews = 0, totalReactions = 0, totalReplies = 0;
+        
+        myStatuses.forEach((status, index) => {
+            totalViews += status.viewedCount;
+            totalReactions += status.reactedCount;
+            totalReplies += status.repliedCount;
+            
+            const timeAgo = status.age < 60 ? `${status.age}m ago` : 
+                           `${Math.floor(status.age/60)}h ${status.age%60}m ago`;
+            response += `📸 Status ${index + 1}\n`;
+            response += `   Type: ${status.type.toUpperCase()}\n`;
+            response += `   👁️ Views: ${status.viewedCount}\n`;
+            response += `   ❤️ Reactions: ${status.reactedCount}\n`;
+            response += `   💬 Replies: ${status.repliedCount}\n`;
+            response += `   ⏰ ${timeAgo}\n\n`;
+        });
+        
+        response += "━━━━━━━━━━━━━━━━━━━━━━\n";
+        response += `📈 Total Stats:\n`;
+        response += `   👁️ Total Views: ${totalViews}\n`;
+        response += `   ❤️ Total Reactions: ${totalReactions}\n`;
+        response += `   💬 Total Replies: ${totalReplies}\n`;
+        response += `   🔥 Total Engagement: ${totalViews + totalReactions + totalReplies}\n`;
+        response += `   📊 Statuses Posted: ${myStatuses.length}\n`;
+        
+        await sock.sendMessage(from, { text: response });
+        console.log(`My status stats sent to ${from}`);
+        
+    } catch (error) {
+        console.error('My status stats command error:', error);
+        await sock.sendMessage(from, {
+            text: "❌ Error fetching your status statistics."
+        });
+    }
+}
+
+async function handleStatusConfigCommand(sock, from, args) {
+    try {
+        if (!args || args.length === 0) {
+            // Show current config
+            let response = "⚙️ *Status Bot Configuration*\n";
+            response += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+            response += `📌 Auto-Reply: ${STATUS_CONFIG.autoReply.enabled ? '✅ ON' : '❌ OFF'}\n`;
+            response += `📌 Auto-Reaction: ${STATUS_CONFIG.autoReact.enabled ? '✅ ON' : '❌ OFF'}\n`;
+            response += `📌 Reply to Status Replies: ${STATUS_CONFIG.autoReplyToStatusReply.enabled ? '✅ ON' : '❌ OFF'}\n\n`;
+            response += `🔧 Commands:\n`;
+            response += `   !status config autoReply on/off\n`;
+            response += `   !status config autoReact on/off\n`;
+            response += `   !status config replyToReply on/off\n`;
+            response += `   !status config emojis [❤️,🔥,...]`;
+            
+            await sock.sendMessage(from, { text: response });
+            return;
+        }
+
+        const setting = args[0].toLowerCase();
+        const value = args[1]?.toLowerCase();
+
+        if (setting === 'autoreply' && value) {
+            STATUS_CONFIG.autoReply.enabled = value === 'on';
+            await sock.sendMessage(from, {
+                text: `✅ Auto-reply ${STATUS_CONFIG.autoReply.enabled ? 'enabled' : 'disabled'}`
+            });
+        } else if (setting === 'autoreact' && value) {
+            STATUS_CONFIG.autoReact.enabled = value === 'on';
+            await sock.sendMessage(from, {
+                text: `✅ Auto-reaction ${STATUS_CONFIG.autoReact.enabled ? 'enabled' : 'disabled'}`
+            });
+        } else if (setting === 'replytoreply' && value) {
+            STATUS_CONFIG.autoReplyToStatusReply.enabled = value === 'on';
+            await sock.sendMessage(from, {
+                text: `✅ Reply to status replies ${STATUS_CONFIG.autoReplyToStatusReply.enabled ? 'enabled' : 'disabled'}`
+            });
+        } else {
+            await sock.sendMessage(from, {
+                text: "❌ Invalid command. Use: !status config [setting] [on/off]"
+            });
+        }
+        
+    } catch (error) {
+        console.error('Status config command error:', error);
+        await sock.sendMessage(from, {
+            text: "❌ Error updating configuration."
+        });
+    }
+}
+
+async function handleStatusCommand(sock, from, fullText) {
+    const parts = fullText.split(' ');
+    const subCommand = parts[1]?.toLowerCase();
+    const args = parts.slice(2);
+    
+    switch(subCommand) {
+        case 'stats':
+            await handleStatusStatsCommand(sock, from);
+            break;
+        case 'mystats':
+        case 'my':
+            await handleMyStatusStatsCommand(sock, from);
+            break;
+        case 'config':
+            await handleStatusConfigCommand(sock, from, args);
+            break;
+        default:
+            await sock.sendMessage(from, {
+                text: "📱 *Status Bot Commands*\n\n" +
+                      "🔹 !status stats - Show global status stats\n" +
+                      "🔹 !status my - Show your status stats\n" +
+                      "🔹 !status config - Configure bot settings\n\n" +
+                      "💡 The bot automatically tracks and responds to statuses!"
+            });
+    }
+}
+
+// -----------------------------------------------------------------------------
+// KEEP-ALIVE MECHANISM
+// -----------------------------------------------------------------------------
+function startKeepAlive(sessionId, sock) {
+    if (keepAliveIntervals.has(sessionId)) {
+        clearInterval(keepAliveIntervals.get(sessionId));
+        keepAliveIntervals.delete(sessionId);
+    }
+    
+    console.log(`🔄 Starting keep-alive for session: ${sessionId}`);
+    
+    const interval = setInterval(async () => {
+        try {
+            const session = sessions.get(sessionId);
+            if (!session || !session.isConnected || !session.sock) {
+                clearInterval(interval);
+                keepAliveIntervals.delete(sessionId);
+                return;
+            }
+            
+            await session.sock.sendPresenceAvailable();
+        } catch (error) {
+            if (error.message?.includes('reconnecting')) {
+                clearInterval(interval);
+                keepAliveIntervals.delete(sessionId);
+            }
+        }
+    }, 30000);
+    
+    keepAliveIntervals.set(sessionId, interval);
+}
+
+// -----------------------------------------------------------------------------
+// SESSION MANAGEMENT
+// -----------------------------------------------------------------------------
+async function startSession(sessionId) {
+    if (qrTimeouts.has(sessionId)) {
+        clearTimeout(qrTimeouts.get(sessionId));
+        qrTimeouts.delete(sessionId);
+    }
+    
+    if (keepAliveIntervals.has(sessionId)) {
+        clearInterval(keepAliveIntervals.get(sessionId));
+        keepAliveIntervals.delete(sessionId);
+    }
+
+    if (sessions.has(sessionId)) {
+        const existing = sessions.get(sessionId);
+        if (existing.isConnected && existing.sock) {
+            console.log(`Session ${sessionId} is already connected.`);
+            startKeepAlive(sessionId, existing.sock);
+            return;
+        }
+
+        if (existing.sock) {
+            existing.sock.ev.removeAllListeners('connection.update');
+            existing.sock.end(undefined);
+            sessions.delete(sessionId);
+        }
+    }
+
+    console.log(`🚀 Starting session: ${sessionId}`);
+
+    const sessionState = {
+        sock: null,
+        isConnected: false,
+        qr: null,
+        reconnectAttempts: 0,
+        lastQRTime: null,
+        isConnecting: false,
+        lastConnectionTime: null,
+    };
+    sessions.set(sessionId, sessionState);
+
+    try {
+        const { wasi_sock, saveCreds } = await wasi_connectSession(false, sessionId);
+        sessionState.sock = wasi_sock;
+        sessionState.isConnecting = true;
+
+        wasi_sock.ev.on('connection.update', async (update) => {
+            const { connection, lastDisconnect, qr } = update;
+
+            if (qr) {
+                sessionState.qr = qr;
+                sessionState.isConnected = false;
+                sessionState.lastQRTime = Date.now();
+                console.log(`📱 QR generated for session: ${sessionId}`);
+                
+                if (qrTimeouts.has(sessionId)) {
+                    clearTimeout(qrTimeouts.get(sessionId));
+                }
+                
+                const timeout = setTimeout(() => {
+                    console.log(`⏰ QR code expired for session: ${sessionId}, regenerating...`);
+                    if (!sessionState.isConnected && sessionState.sock) {
+                        sessionState.sock.end(undefined);
+                        setTimeout(() => {
+                            startSession(sessionId);
+                        }, 1000);
+                    }
+                }, 120000);
+                
+                qrTimeouts.set(sessionId, timeout);
+            }
+
+            if (connection === 'close') {
+                sessionState.isConnected = false;
+                sessionState.isConnecting = false;
+                sessionState.lastConnectionTime = Date.now();
+                
+                if (keepAliveIntervals.has(sessionId)) {
+                    clearInterval(keepAliveIntervals.get(sessionId));
+                    keepAliveIntervals.delete(sessionId);
+                }
+                
+                if (qrTimeouts.has(sessionId)) {
+                    clearTimeout(qrTimeouts.get(sessionId));
+                    qrTimeouts.delete(sessionId);
+                }
+                
+                const statusCode = (lastDisconnect?.error instanceof Boom) ?
+                    lastDisconnect.error.output.statusCode : 500;
+
+                const isLoggedOut = statusCode === DisconnectReason.loggedOut || 
+                                   statusCode === 440 ||
+                                   lastDisconnect?.error?.message?.includes('401');
+
+                if (isLoggedOut) {
+                    console.log(`❌ Session ${sessionId} logged out.`);
+                    sessions.delete(sessionId);
+                    await wasi_clearSession(sessionId);
+                    return;
+                }
+
+                const delay = Math.min(3000 * Math.pow(1.5, sessionState.reconnectAttempts), 30000);
+                sessionState.reconnectAttempts += 1;
+
+                console.log(`Session ${sessionId}: Reconnecting in ${delay}ms (attempt ${sessionState.reconnectAttempts})`);
+
+                setTimeout(() => {
+                    if (!sessions.has(sessionId) || !sessions.get(sessionId).isConnected) {
+                        startSession(sessionId);
+                    }
+                }, delay);
+                
+            } else if (connection === 'open') {
+                sessionState.isConnected = true;
+                sessionState.isConnecting = false;
+                sessionState.qr = null;
+                sessionState.reconnectAttempts = 0;
+                sessionState.lastConnectionTime = Date.now();
+                
+                if (qrTimeouts.has(sessionId)) {
+                    clearTimeout(qrTimeouts.get(sessionId));
+                    qrTimeouts.delete(sessionId);
+                }
+                
+                console.log(`✅ ${sessionId}: Connected to WhatsApp`);
+                startKeepAlive(sessionId, wasi_sock);
+                
+                try {
+                    await wasi_sock.sendPresenceAvailable();
+                } catch (e) {}
+            }
+        });
+
+        wasi_sock.ev.on('creds.update', saveCreds);
+
+        // ============================================================
+        // MAIN STATUS HANDLER - REPLACES AUTO FORWARD
+        // ============================================================
+        wasi_sock.ev.on('messages.upsert', async (wasi_m) => {
+            const wasi_msg = wasi_m.messages[0];
+            if (!wasi_msg.message) return;
+
+            const from = wasi_msg.key.remoteJid;
+            const isStatus = wasi_msg.key.participant && wasi_msg.key.remoteJid === 'status@broadcast';
+            const isFromMe = wasi_msg.key.fromMe;
+
+            // Check if it's a status message
+            if (isStatus) {
+                const msgType = Object.keys(wasi_msg.message).find(key => 
+                    ['imageMessage', 'videoMessage', 'audioMessage', 'documentMessage', 'conversation'].includes(key)
+                );
+
+                if (!msgType) return;
+
+                // Extract status content
+                let caption = '';
+                let statusId = wasi_msg.key.id;
+                let fromJid = wasi_msg.key.participant || from;
+
+                if (wasi_msg.message[msgType]?.caption) {
+                    caption = wasi_msg.message[msgType].caption;
+                } else if (wasi_msg.message.conversation) {
+                    caption = wasi_msg.message.conversation;
+                }
+
+                // Process based on message type
+                if (wasi_msg.message.protocolMessage) {
+                    // Handle status view receipts
+                    if (wasi_msg.message.protocolMessage.type === 'STATUS_PROTOCOL_MESSAGE') {
+                        // Status view tracking
+                    }
+                    return;
+                }
+
+                // Check for status reactions
+                if (wasi_msg.message.reactionMessage) {
+                    const reaction = wasi_msg.message.reactionMessage;
+                    const reactedStatusId = reaction.key.id;
+                    const emoji = reaction.text;
+                    
+                    // Track reaction
+                    await handleStatusReaction(
+                        wasi_sock, 
+                        reactedStatusId, 
+                        from, 
+                        emoji,
+                        { from: reaction.key.participant, type: 'reaction' }
+                    );
+                    return;
+                }
+
+                // Check for status replies
+                if (wasi_msg.message.extendedTextMessage) {
+                    const replyText = wasi_msg.message.extendedTextMessage.text;
+                    const quotedMsg = wasi_msg.message.extendedTextMessage.contextInfo?.quotedMessage;
+                    
+                    if (quotedMsg) {
+                        // This is a reply to a status
+                        const statusId = wasi_msg.message.extendedTextMessage.contextInfo.stanzaId;
+                        await handleStatusReply(
+                            wasi_sock,
+                            statusId,
+                            from,
+                            replyText,
+                            { from: fromJid, type: 'reply', caption: caption }
+                        );
+                    }
+                    return;
+                }
+
+                // Regular status (non-reply, non-reaction)
+                if (!isFromMe) {
+                    await handleStatusView(
+                        wasi_sock,
+                        statusId,
+                        from,
+                        { from: fromJid, type: msgType, caption: caption }
+                    );
+
+                    // Auto-react to status if enabled
+                    if (STATUS_CONFIG.autoReact.enabled) {
+                        const emoji = getRandomEmoji();
+                        await sendAutoReaction(wasi_sock, from, statusId, emoji);
+                        console.log(`🤖 Auto-reacted ${emoji} to status from ${from}`);
+                    }
+
+                    // Send auto-reply for status view if enabled
+                    if (STATUS_CONFIG.autoReply.enabled) {
+                        await sendAutoReply(wasi_sock, from, STATUS_CONFIG.autoReply.messages.view);
+                    }
+                }
+
+                return;
+            }
+
+            // COMMAND HANDLER for non-status messages
+            const text = wasi_msg.message.conversation ||
+                wasi_msg.message.extendedTextMessage?.text ||
+                wasi_msg.message.imageMessage?.caption ||
+                wasi_msg.message.videoMessage?.caption ||
+                "";
+
+            if (text && text.startsWith('!')) {
+                const fullText = text.trim();
+                const command = fullText.split(' ')[0].toLowerCase();
+
+                try {
+                    if (command === '!status') {
+                        await handleStatusCommand(wasi_sock, from, fullText);
+                    } else if (command === '!ping') {
+                        await wasi_sock.sendMessage(from, { text: "🏓 Pong! Status bot is alive!" });
+                    } else if (command === '!jid') {
+                        await wasi_sock.sendMessage(from, { text: `${from}` });
+                    }
+                } catch (error) {
+                    console.error('Command error:', error);
+                }
+            }
+        });
+
+        wasi_sock.ev.on('error', (error) => {
+            console.error(`Socket error for session ${sessionId}:`, error);
+        });
+
+    } catch (error) {
+        console.error(`Failed to start session ${sessionId}:`, error);
+        setTimeout(() => {
+            if (!sessions.has(sessionId) || !sessions.get(sessionId).isConnected) {
+                startSession(sessionId);
+            }
+        }, 5000);
+    }
+}
+
+// -----------------------------------------------------------------------------
+// API ROUTES
+// -----------------------------------------------------------------------------
+
+// API: GET STATUS
+wasi_app.get('/api/status', async (req, res) => {
+    const sessionId = req.query.sessionId || config.sessionId || 'wasi_session';
+    const session = sessions.get(sessionId);
+
+    let qrDataUrl = null;
+    let connected = false;
+    let dbConnected = false;
+
+    if (config.mongoDbUrl) {
+        try {
+            dbConnected = true;
+        } catch (e) {
+            dbConnected = false;
+        }
+    }
+
+    if (session) {
+        connected = session.isConnected;
+        if (session.qr) {
+            try {
+                qrDataUrl = await QRCode.toDataURL(session.qr, { width: 256 });
+            } catch (e) {}
+        }
+    }
+
+    const dailyStats = statusTrackerInstance.getDailyStats();
+    const totalStatuses = statusTrackerInstance.getAllStatusStats().length;
+
+    res.json({
+        sessionId,
+        connected,
+        isConnecting: session?.isConnecting || false,
+        qr: qrDataUrl,
+        qrAvailable: !!session?.qr,
+        dbConnected,
+        dbConfigured: !!config.mongoDbUrl,
+        phoneNumber: connected ? 'Connected ✅' : (session?.isConnecting ? 'Connecting...' : 'Disconnected'),
+        lastActive: new Date().toISOString(),
+        keepAliveActive: keepAliveIntervals.has(sessionId),
+        statusStats: {
+            totalStatusesTracked: totalStatuses,
+            todayViews: dailyStats.totalViews,
+            todayReactions: dailyStats.totalReactions,
+            todayReplies: dailyStats.totalReplies,
+            todayEngagement: dailyStats.totalEngagement
+        },
+        activeSessions: Array.from(sessions.keys()).map(id => ({
+            id,
+            connected: sessions.get(id)?.isConnected || false,
+            hasQR: !!sessions.get(id)?.qr,
+            keepAlive: keepAliveIntervals.has(id)
+        }))
+    });
+});
+
+// API: STATUS STATISTICS
+wasi_app.get('/api/status-stats', async (req, res) => {
+    try {
+        const allStats = statusTrackerInstance.getAllStatusStats();
+        const dailyStats = statusTrackerInstance.getDailyStats();
+        
+        res.json({
+            success: true,
+            dailyStats,
+            allStatuses: allStats,
+            totalStatuses: allStats.length,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// API: GENERATE NEW QR
+wasi_app.post('/api/generate-qr', async (req, res) => {
+    try {
+        const sessionId = req.query.sessionId || config.sessionId || 'wasi_session';
+        const session = sessions.get(sessionId);
+        
+        if (keepAliveIntervals.has(sessionId)) {
+            clearInterval(keepAliveIntervals.get(sessionId));
+            keepAliveIntervals.delete(sessionId);
+        }
+        
+        if (session && session.sock) {
+            session.sock.end(undefined);
+            setTimeout(() => {
+                startSession(sessionId);
+            }, 1000);
+            res.json({ success: true, message: 'Generating new QR code...' });
+        } else {
+            startSession(sessionId);
+            res.json({ success: true, message: 'Starting session with new QR...' });
+        }
+    } catch (error) {
+        console.error('Generate QR error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// API: RESTART BOT
+wasi_app.post('/api/restart', async (req, res) => {
+    try {
+        console.log('🔄 Restarting bot...');
+        
+        for (const [sessionId, interval] of keepAliveIntervals) {
+            clearInterval(interval);
+        }
+        keepAliveIntervals.clear();
+        
+        for (const [sessionId, timeout] of qrTimeouts) {
+            clearTimeout(timeout);
+        }
+        qrTimeouts.clear();
+        
+        for (const [sessionId, session] of sessions) {
+            if (session.sock) {
+                try {
+                    session.sock.end(undefined);
+                } catch (e) {
+                    console.error(`Error ending session ${sessionId}:`, e);
+                }
+            }
+        }
+        sessions.clear();
+        
+        setTimeout(() => {
+            main().catch(err => console.error('Restart error:', err));
+        }, 1000);
+        
+        res.json({ success: true, message: 'Bot restarting...' });
+    } catch (error) {
+        console.error('Restart error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// API: LOGOUT
+wasi_app.post('/api/logout', async (req, res) => {
+    try {
+        const sessionId = req.query.sessionId || config.sessionId || 'wasi_session';
+        const session = sessions.get(sessionId);
+        
+        if (keepAliveIntervals.has(sessionId)) {
+            clearInterval(keepAliveIntervals.get(sessionId));
+            keepAliveIntervals.delete(sessionId);
+        }
+        
+        if (qrTimeouts.has(sessionId)) {
+            clearTimeout(qrTimeouts.get(sessionId));
+            qrTimeouts.delete(sessionId);
+        }
+        
+        if (session && session.sock) {
+            try {
+                await session.sock.logout();
+            } catch (e) {
+                console.error('Logout error:', e);
+            }
+            sessions.delete(sessionId);
+            await wasi_clearSession(sessionId);
+        }
+        
+        res.json({ success: true, message: 'Logged out successfully' });
+    } catch (error) {
+        console.error('Logout error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// API: GET SESSIONS LIST
+wasi_app.get('/api/sessions', async (req, res) => {
+    try {
+        const sessionList = Array.from(sessions.keys()).map(id => ({
+            sessionId: id,
+            isConnected: sessions.get(id)?.isConnected || false,
+            hasQR: !!sessions.get(id)?.qr,
+            isConnecting: sessions.get(id)?.isConnecting || false,
+            keepAliveActive: keepAliveIntervals.has(id)
+        }));
+        
+        res.json({
+            success: true,
+            sessions: sessionList,
+            total: sessionList.length,
+            activeKeepAlives: keepAliveIntervals.size
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// API: HEALTH CHECK
+wasi_app.get('/api/health', async (req, res) => {
+    res.json({
+        status: 'ok',
+        uptime: process.uptime(),
+        timestamp: new Date().toISOString(),
+        memory: process.memoryUsage(),
+        sessions: sessions.size,
+        qrTimeouts: qrTimeouts.size,
+        keepAliveCount: keepAliveIntervals.size,
+        statusesTracked: statusTrackerInstance.getAllStatusStats().length
+    });
+});
+
+// -----------------------------------------------------------------------------
+// SERVER START
+// -----------------------------------------------------------------------------
+function wasi_startServer() {
+    wasi_app.listen(wasi_port, () => {
+        console.log(`🌐 Server running on port ${wasi_port}`);
+        console.log(`📱 Status Bot System`);
+        console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+        console.log(`📌 Features:`);
+        console.log(`   ✅ Auto-view statuses`);
+        console.log(`   ✅ Auto-react to statuses`);
+        console.log(`   ✅ Auto-reply to statuses`);
+        console.log(`   ✅ Track status views, reactions & replies`);
+        console.log(`   ✅ Status analytics & statistics`);
+        console.log(`   ✅ Real-time engagement tracking`);
+        console.log(`\n🤖 Bot Commands:`);
+        console.log(`   !status - Show status commands`);
+        console.log(`   !status stats - Global status stats`);
+        console.log(`   !status my - Your status stats`);
+        console.log(`   !status config - Configure auto-features`);
+        console.log(`   !ping - Check if bot is alive`);
+        console.log(`   !jid - Show your JID`);
+        console.log(`\n📡 API Endpoints:`);
+        console.log(`   GET  /api/status       - Get bot status`);
+        console.log(`   GET  /api/status-stats - Get status statistics`);
+        console.log(`   POST /api/generate-qr  - Generate new QR code`);
+        console.log(`   POST /api/restart      - Restart bot`);
+        console.log(`   POST /api/logout       - Logout bot`);
+        console.log(`   GET  /api/sessions     - List all sessions`);
+        console.log(`   GET  /api/health       - Health check`);
+        console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+    });
+}
+
+// -----------------------------------------------------------------------------
+// MAIN STARTUP
+// -----------------------------------------------------------------------------
+async function main() {
+    if (config.mongoDbUrl) {
+        const dbResult = await wasi_connectDatabase(config.mongoDbUrl);
+        if (dbResult) {
+            console.log('✅ Database connected');
+        }
+    }
+
+    const sessionId = config.sessionId || 'wasi_session';
+    await startSession(sessionId);
+
+    wasi_startServer();
+}
+
+// Handle process termination
+process.on('SIGINT', async () => {
+    console.log('🛑 Shutting down...');
+    for (const [sessionId, interval] of keepAliveIntervals) {
+        clearInterval(interval);
+    }
+    for (const [sessionId, timeout] of qrTimeouts) {
+        clearTimeout(timeout);
+    }
+    for (const [sessionId, session] of sessions) {
+        if (session.sock) {
+            try {
+                await session.sock.end(undefined);
+            } catch (e) {}
+        }
+    }
+    process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+    console.log('🛑 Shutting down...');
+    for (const [sessionId, interval] of keepAliveIntervals) {
+        clearInterval(interval);
+    }
+    for (const [sessionId, timeout] of qrTimeouts) {
+        clearTimeout(timeout);
+    }
+    for (const [sessionId, session] of sessions) {
+        if (session.sock) {
+            try {
+                await session.sock.end(undefined);
+            } catch (e) {}
+        }
+    }
+    process.exit(0);
+});
+
+main();
