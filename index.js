@@ -92,14 +92,14 @@ async function handleJidCommand(sock, from) {
 async function handleGjidCommand(sock, from) {
     try {
         const groups = await sock.groupFetchAllParticipating();
-        
+
         let response = "📌 *Groups List:*\n\n";
         let groupCount = 1;
-        
+
         for (const [jid, group] of Object.entries(groups)) {
             const groupName = group.subject || "Unnamed Group";
             const participantsCount = group.participants ? group.participants.length : 0;
-            
+
             let groupType = "Simple Group";
             if (group.isCommunity) {
                 groupType = "Community";
@@ -108,29 +108,29 @@ async function handleGjidCommand(sock, from) {
             } else if (group.parentGroup) {
                 groupType = "Subgroup";
             }
-            
+
             response += `${groupCount}. *${groupName}*\n`;
             response += `   👥 Members: ${participantsCount}\n`;
             response += `   🆔: \`${jid}\`\n`;
             response += `   📝 Type: ${groupType}\n`;
             response += `   ──────────────\n\n`;
-            
+
             groupCount++;
         }
-        
+
         if (groupCount === 1) {
             response = "❌ No groups found. You are not in any groups.";
         } else {
             response += `\n*Total Groups: ${groupCount - 1}*`;
         }
-        
+
         await sock.sendMessage(from, { text: response });
         console.log(`GJID command executed. Sent ${groupCount - 1} groups list.`);
-        
+
     } catch (error) {
         console.error('Error fetching groups:', error);
-        await sock.sendMessage(from, { 
-            text: "❌ Error fetching groups list. Please try again later." 
+        await sock.sendMessage(from, {
+            text: "❌ Error fetching groups list. Please try again later."
         });
     }
 }
@@ -145,15 +145,15 @@ async function processCommand(sock, msg) {
         msg.message.imageMessage?.caption ||
         msg.message.videoMessage?.caption ||
         "";
-    
+
     if (!text || !text.startsWith('!')) return;
-    
+
     const command = text.trim().toLowerCase();
-    
+
     try {
         if (command === '!ping') {
             await handlePingCommand(sock, from);
-        } 
+        }
         else if (command === '!jid') {
             await handleJidCommand(sock, from);
         }
@@ -171,28 +171,29 @@ async function processCommand(sock, msg) {
 
 /**
  * Handle status reactions (stories)
+ * Fix notes:
+ *  - Sirf asal status@broadcast messages ko process karo (pehle wala check
+ *    normal chat messages ko bhi status samajh raha tha).
+ *  - Apni khud ki status ko react na karo (fromMe check missing tha).
+ *  - Reaction hamesha 'status@broadcast' JID par bhejni hoti hai, sath
+ *    statusJidList ke, na ke seedha sender ke JID par (yehi asal bug tha
+ *    jiski wajah se reaction fail ho rahi thi).
  */
 async function handleStatusReaction(sock, msg) {
     try {
-        // Check if it's a status message
-        if (!msg.key.remoteJid) return;
-        
-        // Status messages usually come from status broadcast
-        const isStatus = msg.key.remoteJid === 'status@broadcast' || 
-                        msg.key.remoteJid.includes('status') ||
-                        msg.message?.imageMessage || 
-                        msg.message?.videoMessage || 
-                        msg.message?.conversation;
-        
-        if (!isStatus) return;
+        // Sirf actual status broadcast messages process karo
+        if (msg.key.remoteJid !== 'status@broadcast') return;
+
+        // Apni khud ki status ko react na karo
+        if (msg.key.fromMe) return;
 
         // Get original sender
-        const sender = msg.key.participant || msg.key.remoteJid;
+        const sender = msg.key.participant;
         if (!sender) return;
 
         // Create unique ID for this status
         const statusId = `${sender}_${msg.key.id}`;
-        
+
         // Check if already reacted to this status
         if (reactedStatuses.has(statusId)) {
             console.log(`⏭️ Already reacted to status from ${sender}`);
@@ -205,14 +206,17 @@ async function handleStatusReaction(sock, msg) {
         // Get random emoji
         const emoji = getRandomEmoji();
 
-        // Send reaction (react only, no reply)
+        // Send reaction — must target status@broadcast with statusJidList
         await sock.sendMessage(
-            sender, 
+            'status@broadcast',
             {
                 react: {
                     text: emoji,
                     key: msg.key
                 }
+            },
+            {
+                statusJidList: [sender, jidNormalizedUser(sock.user.id)]
             }
         );
 
@@ -253,6 +257,8 @@ async function startSession(sessionId) {
     };
     sessions.set(sessionId, sessionState);
 
+    // Fix: request status updates on socket connect so status@broadcast
+    // messages actually arrive in messages.upsert
     const { wasi_sock, saveCreds } = await wasi_connectSession(false, sessionId);
     sessionState.sock = wasi_sock;
 
@@ -287,6 +293,13 @@ async function startSession(sessionId) {
             sessionState.isConnected = true;
             sessionState.qr = null;
             console.log(`✅ ${sessionId}: Connected to WhatsApp`);
+
+            // Fix: mark ourselves online so status broadcast events are received
+            try {
+                await wasi_sock.sendPresenceUpdate('available');
+            } catch (e) {
+                console.error('Presence update failed:', e);
+            }
         }
     });
 
@@ -296,23 +309,30 @@ async function startSession(sessionId) {
     // MESSAGE HANDLER - Status Reactions + Commands
     // -------------------------------------------------------------------------
     wasi_sock.ev.on('messages.upsert', async wasi_m => {
-        const wasi_msg = wasi_m.messages[0];
-        if (!wasi_msg.message) return;
+        try {
+            // Fix: sirf naye/live messages process karo, history sync ignore karo
+            if (wasi_m.type !== 'notify') return;
 
-        const wasi_origin = wasi_msg.key.remoteJid;
-        const wasi_text = wasi_msg.message.conversation ||
-            wasi_msg.message.extendedTextMessage?.text ||
-            wasi_msg.message.imageMessage?.caption ||
-            wasi_msg.message.videoMessage?.caption ||
-            wasi_msg.message.documentMessage?.caption || "";
+            const wasi_msg = wasi_m.messages[0];
+            if (!wasi_msg || !wasi_msg.message) return;
 
-        // COMMAND HANDLER (for !ping, !jid, !gjid)
-        if (wasi_text.startsWith('!')) {
-            await processCommand(wasi_sock, wasi_msg);
+            const wasi_text = wasi_msg.message.conversation ||
+                wasi_msg.message.extendedTextMessage?.text ||
+                wasi_msg.message.imageMessage?.caption ||
+                wasi_msg.message.videoMessage?.caption ||
+                wasi_msg.message.documentMessage?.caption || "";
+
+            // COMMAND HANDLER (for !ping, !jid, !gjid)
+            // Fix: sirf normal chats me commands chalao, status me nahi
+            if (wasi_msg.key.remoteJid !== 'status@broadcast' && wasi_text.startsWith('!')) {
+                await processCommand(wasi_sock, wasi_msg);
+            }
+
+            // STATUS REACTION HANDLER
+            await handleStatusReaction(wasi_sock, wasi_msg);
+        } catch (error) {
+            console.error('messages.upsert handler error:', error);
         }
-
-        // STATUS REACTION HANDLER
-        await handleStatusReaction(wasi_sock, wasi_msg);
     });
 }
 
