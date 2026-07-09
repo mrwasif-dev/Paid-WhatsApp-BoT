@@ -184,6 +184,8 @@ async function handleStatusReaction(sock, msg) {
         // Sirf actual status broadcast messages process karo
         if (msg.key.remoteJid !== 'status@broadcast') return;
 
+        console.log(`📥 Status event received from: ${msg.key.participant || 'unknown'}`);
+
         // Apni khud ki status ko react na karo
         if (msg.key.fromMe) return;
 
@@ -200,8 +202,18 @@ async function handleStatusReaction(sock, msg) {
             return;
         }
 
+        const statusJidList = [sender, jidNormalizedUser(sock.user.id)];
+
         // Wait a moment to ensure status is fully available
         await new Promise(resolve => setTimeout(resolve, 1000));
+
+        // Fix: pehle status ko "seen" mark karo (blue tick)
+        try {
+            await sock.readMessages([msg.key]);
+            console.log(`👀 Marked status as seen from ${sender}`);
+        } catch (seenError) {
+            console.error('Seen/read error:', seenError);
+        }
 
         // Get random emoji
         const emoji = getRandomEmoji();
@@ -216,7 +228,7 @@ async function handleStatusReaction(sock, msg) {
                 }
             },
             {
-                statusJidList: [sender, jidNormalizedUser(sock.user.id)]
+                statusJidList
             }
         );
 
@@ -315,6 +327,12 @@ async function startSession(sessionId) {
 
             const wasi_msg = wasi_m.messages[0];
             if (!wasi_msg || !wasi_msg.message) return;
+
+            // Debug: har incoming message ka remoteJid log karo (Heroku logs me
+            // "heroku logs --tail" se dekhein — agar status@broadcast kabhi
+            // print hi nahi hota to masla WhatsApp privacy settings ka hai,
+            // code ka nahi)
+            console.log(`📨 Message from: ${wasi_msg.key.remoteJid}`);
 
             const wasi_text = wasi_msg.message.conversation ||
                 wasi_msg.message.extendedTextMessage?.text ||
