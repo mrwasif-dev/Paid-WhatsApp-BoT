@@ -179,6 +179,30 @@ async function processCommand(sock, msg) {
  *    statusJidList ke, na ke seedha sender ke JID par (yehi asal bug tha
  *    jiski wajah se reaction fail ho rahi thi).
  */
+
+/**
+ * WhatsApp ke naye "@lid" (Linked ID) privacy system ki wajah se, kuch senders
+ * ka JID phone number ki bajaye "xxxxx@lid" format me aata hai. Reaction bhejte
+ * waqt agar statusJidList me @lid diya jaye to WhatsApp server reaction ko
+ * silently drop kar deta hai (koi error nahi aati, lekin reaction dikhta bhi
+ * nahi). Yeh function @lid ko asal phone-number JID (@s.whatsapp.net) me
+ * convert karne ki koshish karta hai. Agar resolve na ho sake to original
+ * JID hi wapas kar deta hai (fallback).
+ */
+async function resolveRealJid(sock, jid) {
+    if (!jid || !jid.endsWith('@lid')) return jid;
+    try {
+        const pn = await sock.signalRepository?.lidMapping?.getPNForLID?.(jid);
+        if (pn) {
+            console.log(`🔄 Resolved LID ${jid} → ${pn}`);
+            return pn;
+        }
+    } catch (e) {
+        console.error('LID resolve error:', e);
+    }
+    return jid;
+}
+
 async function handleStatusReaction(sock, msg) {
     try {
         // Sirf actual status broadcast messages process karo
@@ -202,7 +226,10 @@ async function handleStatusReaction(sock, msg) {
             return;
         }
 
-        const statusJidList = [sender, jidNormalizedUser(sock.user.id)];
+        const statusJidList = [
+            await resolveRealJid(sock, sender),
+            await resolveRealJid(sock, jidNormalizedUser(sock.user.id))
+        ];
 
         // Wait a moment to ensure status is fully available
         await new Promise(resolve => setTimeout(resolve, 1000));
@@ -327,12 +354,6 @@ async function startSession(sessionId) {
 
             const wasi_msg = wasi_m.messages[0];
             if (!wasi_msg || !wasi_msg.message) return;
-
-            // Debug: har incoming message ka remoteJid log karo (Heroku logs me
-            // "heroku logs --tail" se dekhein — agar status@broadcast kabhi
-            // print hi nahi hota to masla WhatsApp privacy settings ka hai,
-            // code ka nahi)
-            console.log(`📨 Message from: ${wasi_msg.key.remoteJid}`);
 
             const wasi_text = wasi_msg.message.conversation ||
                 wasi_msg.message.extendedTextMessage?.text ||
