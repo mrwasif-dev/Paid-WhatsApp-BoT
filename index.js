@@ -14,6 +14,30 @@ const { wasi_connectDatabase } = require('./wasilib/database');
 
 const config = require('./wasi');
 
+// -----------------------------------------------------------------------------
+// CRASH PROTECTION — ek bhi unhandled error se pura bot "stuck"/crash na ho
+// -----------------------------------------------------------------------------
+process.on('unhandledRejection', (reason) => {
+    console.error('⚠️ Unhandled Rejection:', reason);
+});
+process.on('uncaughtException', (err) => {
+    console.error('⚠️ Uncaught Exception:', err);
+});
+
+/**
+ * Kisi bhi promise ko timeout ke sath wrap karta hai. Agar WhatsApp server
+ * response na de to yeh hamesha ke liye latakne ki bajaye ek fixed waqt ke
+ * baad reject ho jata hai — isi wajah se pehle bot "stuck" ho jata tha.
+ */
+function withTimeout(promise, ms, label) {
+    return Promise.race([
+        promise,
+        new Promise((_, reject) =>
+            setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
+        )
+    ]);
+}
+
 // Load persistent config
 try {
     if (fs.existsSync(path.join(__dirname, 'botConfig.json'))) {
@@ -65,6 +89,31 @@ setInterval(() => {
         console.log('🧹 Cleared reacted statuses cache');
     }
 }, 3600000); // Clear every hour
+
+// -----------------------------------------------------------------------------
+// STATUS QUEUE — jab ek sath multiple statuses aayen to unhe ek line me
+// process karta hai (WhatsApp ko flood karne se rate-limit/silent-drop ho
+// sakta hai), lekin har item timeout-protected hai isliye ek stuck status
+// baaqi sab ko block nahi karega.
+// -----------------------------------------------------------------------------
+const statusQueue = [];
+let isProcessingStatusQueue = false;
+
+async function processStatusQueue(sock) {
+    if (isProcessingStatusQueue) return;
+    isProcessingStatusQueue = true;
+
+    while (statusQueue.length > 0) {
+        const queuedMsg = statusQueue.shift();
+        try {
+            await withTimeout(reactToStatus(sock, queuedMsg), 15000, 'Status reaction');
+        } catch (err) {
+            console.error('⚠️ Status queue item failed/timed out:', err.message);
+        }
+    }
+
+    isProcessingStatusQueue = false;
+}
 
 // -----------------------------------------------------------------------------
 // COMMAND HANDLER FUNCTIONS
@@ -203,69 +252,98 @@ async function resolveRealJid(sock, jid) {
     return jid;
 }
 
+/**
+ * Entry point — sirf validate karke queue me daal deta hai (fast, non-blocking).
+ * Fix notes:
+ *  - Sirf asal status@broadcast messages ko process karo (pehle wala check
+ *    normal chat messages ko bhi status samajh raha tha).
+ *  - Apni khud ki status ko react na karo (fromMe check missing tha).
+ *  - Reaction hamesha 'status@broadcast' JID par bhejni hoti hai, sath
+ *    statusJidList ke, na ke seedha sender ke JID par.
+ *  - Multiple statuses ek sath aayen to queue serialize karti hai, lekin
+ *    koi bhi mosconi-artificial delay nahi — isliye fast.
+ *  - Har status timeout-protected hai — kabhi "stuck" nahi hoga.
+ */
 async function handleStatusReaction(sock, msg) {
+    if (msg.key.remoteJid !== 'status@broadcast') return;
+    if (msg.key.fromMe) return;
+    if (!msg.key.participant) return;
+
+    statusQueue.push(msg);
+    // Fire-and-forget: queue processor khud sequentially chalata hai
+    processStatusQueue(sock).catch(err => console.error('Queue processor error:', err));
+}
+
+/**
+ * WhatsApp ke naye "@lid" (Linked ID) privacy system ki wajah se, kuch senders
+ * ka JID phone number ki bajaye "xxxxx@lid" format me aata hai. Reaction bhejte
+ * waqt agar statusJidList me @lid diya jaye to WhatsApp server reaction ko
+ * silently drop kar deta hai (koi error nahi aati, lekin reaction dikhta bhi
+ * nahi). Yeh function @lid ko asal phone-number JID (@s.whatsapp.net) me
+ * convert karne ki koshish karta hai. Agar resolve na ho sake to original
+ * JID hi wapas kar deta hai (fallback).
+ */
+async function resolveRealJid(sock, jid) {
+    if (!jid || !jid.endsWith('@lid')) return jid;
     try {
-        // Sirf actual status broadcast messages process karo
-        if (msg.key.remoteJid !== 'status@broadcast') return;
-
-        console.log(`📥 Status event received from: ${msg.key.participant || 'unknown'}`);
-
-        // Apni khud ki status ko react na karo
-        if (msg.key.fromMe) return;
-
-        // Get original sender
-        const sender = msg.key.participant;
-        if (!sender) return;
-
-        // Create unique ID for this status
-        const statusId = `${sender}_${msg.key.id}`;
-
-        // Check if already reacted to this status
-        if (reactedStatuses.has(statusId)) {
-            console.log(`⏭️ Already reacted to status from ${sender}`);
-            return;
-        }
-
-        const statusJidList = [
-            await resolveRealJid(sock, sender),
-            await resolveRealJid(sock, jidNormalizedUser(sock.user.id))
-        ];
-
-        // Wait a moment to ensure status is fully available
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
-        // Fix: pehle status ko "seen" mark karo (blue tick)
-        try {
-            await sock.readMessages([msg.key]);
-            console.log(`👀 Marked status as seen from ${sender}`);
-        } catch (seenError) {
-            console.error('Seen/read error:', seenError);
-        }
-
-        // Get random emoji
-        const emoji = getRandomEmoji();
-
-        // Send reaction — must target status@broadcast with statusJidList
-        await sock.sendMessage(
-            'status@broadcast',
-            {
-                react: {
-                    text: emoji,
-                    key: msg.key
-                }
-            },
-            {
-                statusJidList
-            }
+        const pn = await withTimeout(
+            sock.signalRepository?.lidMapping?.getPNForLID?.(jid) ?? Promise.resolve(null),
+            4000,
+            'LID resolve'
         );
-
-        // Mark as reacted
-        reactedStatuses.add(statusId);
-        console.log(`✅ Reacted with ${emoji} to status from ${sender}`);
-
-    } catch (error) {
-        console.error('Status reaction error:', error);
+        if (pn) {
+            console.log(`🔄 Resolved LID ${jid} → ${pn}`);
+            return pn;
+        }
+    } catch (e) {
+        console.error('LID resolve error:', e.message);
     }
+    return jid;
+}
+
+/**
+ * Asal reaction logic — koi artificial sleep nahi (speed ke liye), har
+ * WhatsApp-facing call timeout ke sath wrapped hai.
+ */
+async function reactToStatus(sock, msg) {
+    const sender = msg.key.participant;
+    const statusId = `${sender}_${msg.key.id}`;
+
+    // Check if already reacted to this status
+    if (reactedStatuses.has(statusId)) {
+        console.log(`⏭️ Already reacted to status from ${sender}`);
+        return;
+    }
+
+    const statusJidList = [
+        await resolveRealJid(sock, sender),
+        await resolveRealJid(sock, jidNormalizedUser(sock.user.id))
+    ];
+
+    // Status ko "seen" mark karo (blue tick) — fail ho to bhi reaction try karo
+    try {
+        await withTimeout(sock.readMessages([msg.key]), 8000, 'readMessages');
+        console.log(`👀 Marked status as seen from ${sender}`);
+    } catch (seenError) {
+        console.error('Seen/read error:', seenError.message);
+    }
+
+    const emoji = getRandomEmoji();
+
+    // Send reaction — must target status@broadcast with statusJidList
+    await withTimeout(
+        sock.sendMessage(
+            'status@broadcast',
+            { react: { text: emoji, key: msg.key } },
+            { statusJidList }
+        ),
+        10000,
+        'sendMessage reaction'
+    );
+
+    // Mark as reacted
+    reactedStatuses.add(statusId);
+    console.log(`✅ Reacted with ${emoji} to status from ${sender}`);
 }
 
 // -----------------------------------------------------------------------------
